@@ -1,0 +1,8 @@
+import{describe,expect,it}from"vitest";import{readFileSync}from"node:fs";import{resolve}from"node:path";import{calculateEarningSplit,SPLIT_INCOME_TYPES}from"@/lib/server/earning-split-service";import{calculateWithdrawal,getWithdrawalConfig}from"@/lib/server/withdrawal-service";
+describe("financial correction arithmetic",()=>{
+ it("splits capped gross exactly 10/90",()=>expect(calculateEarningSplit(1_000_000n)).toEqual({magic:100_000n,income:900_000n}));
+ it("calculates the $1 withdrawal fee exactly",()=>expect(calculateWithdrawal(1_000_000n)).toEqual({gross:1_000_000n,fee:100_000n,net:900_000n}));
+ it("defaults broadcasting disabled and threshold to $1",()=>{const old=process.env.AUTO_WITHDRAW_ENABLED;delete process.env.AUTO_WITHDRAW_ENABLED;expect(getWithdrawalConfig().enabled).toBe(false);expect(getWithdrawalConfig().minimum).toBe(1_000_000n);if(old)process.env.AUTO_WITHDRAW_ENABLED=old});
+ it("routes every earning category through the shared service",()=>{const files=["registration-service.ts","distribution-service.ts","x3-service.ts","x4-service.ts","booster-service.ts","autopool-service.ts","dividend-service.ts"],text=files.map(f=>readFileSync(resolve("lib/server",f),"utf8")).join("\n");for(const type of SPLIT_INCOME_TYPES)expect(text).toContain(type);expect(text.split("./income-cap-service").length-1).toBe(0)});
+ it("does not split Booster Wallet movements",()=>{const text=readFileSync(resolve("lib/server/booster-service.ts"),"utf8");for(const reason of["PACKAGE_CREDIT","MANUAL_TOP_UP","C_POSITION_REFUND","ENTRY_DEDUCTION"])expect(text).not.toContain(`incomeType:"${reason}"`)});
+});

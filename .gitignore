@@ -1,0 +1,16 @@
+.env
+.env.*
+!.env.example
+
+node_modules/
+.next/
+artifacts/
+cache/
+evidence/
+deployments/*.json
+
+*.log
+*.tsbuildinfo
+
+.DS_Store
+Thumbs.db

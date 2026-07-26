@@ -1,0 +1,72 @@
+{
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run contract:test && npm run app:test && npm run typecheck",
+    "contract:compile": "hardhat compile",
+    "contract:test": "hardhat test",
+    "app:test": "vitest run",
+    "deploy:unified:testnet": "hardhat run scripts/deploy-contract.cjs --network bscTestnet",
+    "migrate": "tsx scripts/migrate.ts",
+    "seed:genesis": "tsx scripts/seed-genesis.ts",
+    "indexer": "tsx scripts/indexer.ts",
+    "x3:backfill": "tsx scripts/backfill-x3.ts",
+    "x3:recovery": "tsx scripts/x3-recovery.ts",
+    "x3:recovery-audit": "tsx scripts/x3-recovery-audit.ts",
+    "booster:worker": "tsx scripts/booster-worker.ts",
+    "dividend:worker": "tsx scripts/dividend-worker.ts",
+    "withdrawal:worker": "tsx scripts/withdrawal-worker.ts",
+    "magic-funding:worker": "tsx scripts/magic-funding-worker.ts",
+    "financial:audit": "tsx scripts/financial-correction-audit.ts",
+    "operations:check": "tsx scripts/operations-check.ts",
+    "operations:testnet-smoke": "tsx scripts/operations-testnet-smoke.ts",
+    "frontend:audit": "tsx scripts/frontend-browser-audit.ts"
+    ,"local:e2e": "node scripts/local-e2e.cjs"
+    ,"local:e2e:verify": "node scripts/local-e2e.cjs --verify-only"
+  },
+  "dependencies": {
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "autoprefixer": "latest",
+    "ethers": "^6.17.0",
+    "framer-motion": "latest",
+    "jose": "^6.2.4",
+    "lucide-react": "latest",
+    "next": "^16.2.11",
+    "pg": "^8.22.0",
+    "postcss": "^8.5.12",
+    "react": "latest",
+    "react-dom": "latest",
+    "sharp": "^0.35.0",
+    "tailwindcss": "^3.4.17",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-chai-matchers": "^2.1.0",
+    "@nomicfoundation/hardhat-ethers": "^3.1.0",
+    "@openzeppelin/contracts": "^5.6.1",
+    "@testing-library/jest-dom": "^7.0.0",
+    "@testing-library/react": "^16.3.2",
+    "@types/chai": "^4.3.20",
+    "@types/mocha": "^10.0.10",
+    "@types/pg": "^8.15.5",
+    "@vitejs/plugin-react": "^6.0.1",
+    "chai": "^4.5.0",
+    "hardhat": "^2.26.3",
+    "jsdom": "^29.1.1",
+    "mocha": "^11.7.6",
+    "playwright-core": "^1.62.0",
+    "tsx": "^4.23.1",
+    "typescript": "5.9.3",
+    "vitest": "^4.1.10"
+  },
+  "overrides": {
+    "next": {
+      "postcss": "8.5.12",
+      "sharp": "0.35.0"
+    }
+  }
+}

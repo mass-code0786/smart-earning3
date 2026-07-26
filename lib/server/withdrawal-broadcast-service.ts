@@ -1,0 +1,38 @@
+import{Contract,Wallet,getAddress,id,verifyTypedData,zeroPadValue}from"ethers";
+import{ERC20_ABI,SMART_EARNING_ABI}from"@/lib/blockchain/abi";
+import{getProvider}from"@/lib/blockchain/provider";
+import{CHAIN_ID,getServerConfig}from"./config";
+import{query,transaction}from"./db";
+import{assertModuleActive}from"./module-control-service";
+function chainWithdrawalId(id:string){return zeroPadValue(`0x${id.replaceAll("-","")}`,32)}
+export async function processUnifiedWithdrawalQueue(){
+ await assertModuleActive("AUTO_WITHDRAW_WORKER");await assertModuleActive("WITHDRAWAL_BROADCAST");
+ const config=getServerConfig(),key=process.env.AUTO_WITHDRAW_PRIVATE_KEY,authorizerUrl=process.env.WITHDRAWAL_AUTHORIZER_URL,authorizerAddress=process.env.WITHDRAWAL_AUTHORIZER_ADDRESS;if(!key)return{status:"SIGNER_NOT_CONFIGURED"as const,processed:0};if(!authorizerUrl||!authorizerAddress)return{status:"AUTHORIZER_NOT_CONFIGURED"as const,processed:0};
+ const provider=getProvider(),network=await provider.getNetwork();if(Number(network.chainId)!==CHAIN_ID)return{status:"WRONG_CHAIN"as const,processed:0};
+ if(await provider.getCode(config.SMART_EARNING_CONTRACT_ADDRESS)==="0x")return{status:"CONTRACT_BYTECODE_MISSING"as const,processed:0};
+ const signer=new Wallet(key,provider),contract=new Contract(config.SMART_EARNING_CONTRACT_ADDRESS,SMART_EARNING_ABI,signer),tokenAddress=String(await contract.usdt());
+ if(tokenAddress.toLowerCase()!==config.BSC_TESTNET_USDT_ADDRESS.toLowerCase())return{status:"WRONG_TOKEN"as const,processed:0};
+ const token=new Contract(tokenAddress,ERC20_ABI,provider);if(Number(await token.decimals())!==Number(process.env.NEXT_PUBLIC_USDT_DECIMALS||6))return{status:"WRONG_TOKEN_DECIMALS"as const,processed:0};
+ const role=await contract.WITHDRAWAL_EXECUTOR_ROLE();if(!await contract.hasRole(role,signer.address))return{status:"EXECUTOR_ROLE_MISSING"as const,processed:0};
+ const authorizerRole=await contract.AUTHORIZER_ROLE();if(!await contract.hasRole(authorizerRole,getAddress(authorizerAddress)))return{status:"AUTHORIZER_ROLE_MISSING"as const,processed:0};
+ if(getAddress(authorizerAddress)===signer.address)return{status:"SIGNER_DOMAINS_NOT_SEPARATED"as const,processed:0};
+ if(await contract.withdrawalsPaused())return{status:"PAUSED"as const,processed:0};
+ const row=(await query<{id:string;user_id:string;payout_address:string;gross_reserved:string;fee_amount:string;net_payout:string;status:string;tx_hash:string|null;attempt_count:number;created_at:Date}>(`SELECT id,user_id,payout_address,gross_reserved::text,fee_amount::text,net_payout::text,status,tx_hash,attempt_count,created_at FROM auto_withdrawals WHERE status IN('RESERVED','FAILED_RETRYABLE','BROADCASTED') ORDER BY created_at LIMIT 1`)).rows[0];
+ if(!row)return{status:"IDLE"as const,processed:0};
+ const reservation={payoutType:id("LEDGER_WITHDRAWAL"),reservationId:chainWithdrawalId(row.id),earningSource:id(`AUTO_WITHDRAWAL:${row.id}`),user:row.payout_address,chainId:BigInt(CHAIN_ID),verifyingContract:config.SMART_EARNING_CONTRACT_ADDRESS,grossAmount:BigInt(row.gross_reserved),feeAmount:BigInt(row.fee_amount),netAmount:BigInt(row.net_payout),destination:row.payout_address,issuedAt:BigInt(Math.floor(new Date(row.created_at).getTime()/1000)),nonce:0n,deadline:BigInt(Math.floor(new Date(row.created_at).getTime()/1000)+30*24*60*60)};
+ const domain={name:"SmartEarning",version:"1",chainId:CHAIN_ID,verifyingContract:config.SMART_EARNING_CONTRACT_ADDRESS};
+ const types={WithdrawalAuthorization:[{name:"payoutType",type:"bytes32"},{name:"reservationId",type:"bytes32"},{name:"earningSource",type:"bytes32"},{name:"user",type:"address"},{name:"chainId",type:"uint256"},{name:"verifyingContract",type:"address"},{name:"grossAmount",type:"uint256"},{name:"feeAmount",type:"uint256"},{name:"netAmount",type:"uint256"},{name:"destination",type:"address"},{name:"issuedAt",type:"uint256"},{name:"nonce",type:"uint256"},{name:"deadline",type:"uint256"}]};
+ const reservationHash=await contract.withdrawalAuthorizationHash(reservation);
+ if(row.tx_hash){
+  const receipt=await provider.getTransactionReceipt(row.tx_hash);if(!receipt)return{status:"MONITORING"as const,processed:0};
+  if(receipt.status!==1){await query(`UPDATE auto_withdrawals SET status='FAILED_FINAL',updated_at=now() WHERE id=$1 AND tx_hash=$2`,[row.id,row.tx_hash]);return{status:"REVERTED_REVIEW"as const,processed:0}}
+  const confirmations=(await provider.getBlockNumber())-receipt.blockNumber+1;if(confirmations<config.CONFIRMATIONS_REQUIRED)return{status:"MONITORING"as const,processed:0};
+  await transaction(async c=>{await c.query(`UPDATE auto_withdrawals SET status='CONFIRMED',updated_at=now() WHERE id=$1 AND tx_hash=$2`,[row.id,row.tx_hash]);await c.query(`INSERT INTO auto_withdrawal_audit_logs(withdrawal_id,user_id,event_type,idempotency_key,metadata) VALUES($1,$2,'CONFIRMED',$3,$4) ON CONFLICT(idempotency_key) DO NOTHING`,[row.id,row.user_id,`auto-withdraw:${row.id}:confirmed`,JSON.stringify({txHash:row.tx_hash,confirmations})])});return{status:"CONFIRMED"as const,processed:1}
+ }
+ if(await contract.processedWithdrawals(reservationHash))return{status:"CHAIN_PROCESSED_RECONCILIATION_REQUIRED"as const,processed:0};
+ if(BigInt(await token.balanceOf(config.SMART_EARNING_CONTRACT_ADDRESS))<BigInt(row.net_payout))return{status:"LIQUIDITY_REQUIRED"as const,processed:0};
+ const nonce=await signer.getNonce("pending"),attempt=row.attempt_count+1;
+ await transaction(async c=>{await c.query(`UPDATE auto_withdrawals SET status='BROADCASTING',attempt_count=$2,updated_at=now() WHERE id=$1 AND tx_hash IS NULL`,[row.id,attempt]);await c.query(`INSERT INTO auto_withdrawal_audit_logs(withdrawal_id,user_id,event_type,idempotency_key,metadata) VALUES($1,$2,'BROADCAST_PREPARED',$3,$4)`,[row.id,row.user_id,`auto-withdraw:${row.id}:prepared:${attempt}`,JSON.stringify({nonce,chainId:CHAIN_ID,contract:config.SMART_EARNING_CONTRACT_ADDRESS})])});
+ try{await assertModuleActive("WITHDRAWAL_BROADCAST");const response=await fetch(authorizerUrl,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({domain,types,reservation:Object.fromEntries(Object.entries(reservation).map(([name,value])=>[name,typeof value==="bigint"?value.toString():value])),reservationHash})});if(!response.ok)throw new Error(`Withdrawal authorizer rejected reservation (${response.status})`);const body=await response.json()as{signature?:string};if(!body.signature)throw new Error("Withdrawal authorizer returned no signature");const recovered=getAddress(verifyTypedData(domain,types,reservation,body.signature));if(recovered!==getAddress(authorizerAddress))throw new Error("Withdrawal authorizer signature mismatch");const sent=await contract.executeWithdrawal(reservation,body.signature,{nonce});await transaction(async c=>{await c.query(`UPDATE auto_withdrawals SET status='BROADCASTED',tx_hash=$2,updated_at=now() WHERE id=$1 AND tx_hash IS NULL`,[row.id,sent.hash]);await c.query(`INSERT INTO auto_withdrawal_attempts(withdrawal_id,attempt_number,status,tx_hash,idempotency_key) VALUES($1,$2,'BROADCASTED',$3,$4)`,[row.id,attempt,sent.hash,`auto-withdraw:${row.id}:attempt:${attempt}`]);await c.query(`INSERT INTO auto_withdrawal_audit_logs(withdrawal_id,user_id,event_type,idempotency_key,metadata) VALUES($1,$2,'BROADCASTED',$3,$4)`,[row.id,row.user_id,`auto-withdraw:${row.id}:broadcasted:${attempt}`,JSON.stringify({txHash:sent.hash,nonce,reservationHash})])});return{status:"BROADCASTED"as const,processed:1,txHash:sent.hash}}
+ catch(error){await query(`UPDATE auto_withdrawals SET status='FAILED_RETRYABLE',next_attempt_at=now()+interval '5 minutes',updated_at=now() WHERE id=$1 AND tx_hash IS NULL`,[row.id]);throw error}
+}

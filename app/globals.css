@@ -1,0 +1,104 @@
+@tailwind base;@tailwind components;@tailwind utilities;
+:root{color-scheme:dark}*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:#050505;color:#f7f4ed;overflow-x:hidden}.glass{background:rgba(4,5,8,.20);border:1px solid rgba(245,190,45,.22);box-shadow:inset 0 1px 0 rgba(255,255,255,.04);-webkit-backdrop-filter:blur(8px) saturate(115%);backdrop-filter:blur(8px) saturate(115%)}.glass:hover{border-color:rgba(245,190,45,.28);box-shadow:inset 0 1px 0 rgba(255,255,255,.055),0 8px 26px rgba(186,136,42,.055)}.metaverse-art{background-image:url('/images/smart-earning-nft-bg-mobile.webp');background-position:center top;background-size:cover;background-repeat:no-repeat}.metaverse-overlay{background:linear-gradient(to bottom,rgba(0,0,0,.25),rgba(0,0,0,.38))}.gold-text{background:linear-gradient(110deg,#9d7734,#f5d994,#bd8d3b);-webkit-background-clip:text;color:transparent}.noise{background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.12'/%3E%3C/svg%3E")}.scrollbar-none::-webkit-scrollbar{display:none}@media(min-width:768px){.metaverse-art{background-image:url('/images/smart-earning-nft-bg-desktop.webp');background-position:center top}}@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+
+.dashboard-theme{--se-green:#00f57a;--se-bright:#20ff8a;--se-muted:#8fa59a;--se-surface:rgba(5,14,11,.58);width:100%;max-width:100vw;overflow-x:clip;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}.dashboard-theme main,.dashboard-theme main>*,.dashboard-theme main>*>*{min-width:0}.dashboard-theme .scrollbar-none{width:100%;max-width:100%}.dash-bg{z-index:0;background:radial-gradient(circle at 78% 16%,rgba(0,245,122,.105),transparent 25%),radial-gradient(circle at 15% 65%,rgba(7,60,38,.24),transparent 28%),linear-gradient(145deg,#030806,#06100c 58%,#030806)}.dash-bg:after{content:"";position:absolute;inset:0;opacity:.16;background-image:radial-gradient(circle,rgba(0,245,122,.4) 0 1px,transparent 1.5px);background-size:42px 42px;mask-image:linear-gradient(to bottom,black,transparent 70%)}.dash-glass,.dashboard-theme .glass{background:rgba(5,14,11,.58);border:1px solid rgba(0,245,122,.22);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);box-shadow:inset 0 1px 0 rgba(255,255,255,.04),0 10px 30px rgba(0,245,122,.06)}.dash-header{background:rgba(3,8,6,.72);border-bottom:1px solid rgba(0,245,122,.22);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px)}.dash-sidebar{background:rgba(3,8,6,.76);border-right:1px solid rgba(0,245,122,.18);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px)}.dash-icon{display:grid;height:36px;width:36px;place-items:center;border-radius:12px;color:#8fa59a;transition:.2s}.dash-icon:hover{background:rgba(0,245,122,.1);color:#00f57a}.dash-label{font-size:9px;line-height:1.25;color:#8fa59a}.mascot-hero{background:#030806;box-shadow:inset 0 1px 0 rgba(255,255,255,.04),0 18px 60px rgba(0,245,122,.08)}.mascot-art{background-image:url('/images/smart-earning-cyber-panther.png');background-size:cover;background-position:center top}.hero-particles{background:radial-gradient(circle at 30% 30%,rgba(0,245,122,.22) 0 1px,transparent 2px),radial-gradient(circle at 72% 62%,rgba(32,255,138,.18) 0 1px,transparent 2px);background-size:67px 73px,91px 83px;animation:se-drift 12s linear infinite}.action-pill{min-width:0;overflow:hidden;background:rgba(3,8,6,.76);border:1px solid rgba(0,245,122,.3);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);box-shadow:inset 0 1px rgba(255,255,255,.04),0 8px 28px rgba(0,245,122,.08);clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px)}.action-pill:hover{border-color:rgba(32,255,138,.58);box-shadow:inset 0 1px rgba(255,255,255,.05),0 8px 28px rgba(0,245,122,.17)}.dash-section-head{display:flex;align-items:end;justify-content:space-between;margin-bottom:12px;padding:0 2px}.dash-section-head p{font-size:9px;letter-spacing:.2em;color:#00f57a}.dash-section-head h2{margin-top:3px;font-size:18px;font-weight:700}.dash-section-head button{font-size:10px;font-weight:600;color:#00f57a}.dash-bottom{background:rgba(3,8,6,.88);border:1px solid rgba(0,245,122,.22);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);box-shadow:0 10px 35px rgba(0,0,0,.42),inset 0 1px rgba(255,255,255,.04)}.dashboard-theme .text-gold,.dashboard-theme [class*="text-gold"]{color:#00f57a!important}.dashboard-theme .bg-gold,.dashboard-theme [class*="bg-gold"]{background-color:#00f57a!important}.dashboard-theme [class*="border-gold"]{border-color:rgba(0,245,122,.25)!important}.dashboard-theme .gold-text{background:linear-gradient(90deg,#00f57a,#20ff8a);-webkit-background-clip:text;color:transparent}.dashboard-theme .dashboard-legacy .glass:hover{border-color:rgba(0,245,122,.3);box-shadow:inset 0 1px rgba(255,255,255,.04),0 10px 30px rgba(0,245,122,.075)}@keyframes se-drift{50%{transform:translate3d(8px,-10px,0)}}@media(max-width:389px){.mascot-hero{min-height:500px}.action-pill{padding-left:9px;padding-right:9px}.action-pill span{height:36px;width:36px}.network-strip{padding-left:8px;padding-right:8px}}@media(min-width:1024px){.mascot-hero{min-height:680px}.network-strip{max-width:720px}.dashboard-legacy{margin-top:28px}}@media(prefers-reduced-motion:reduce){.hero-particles{animation:none}.mascot-art{transform:none!important}}
+
+/* Public landing and wallet authentication reuse the dashboard palette. */
+.auth-theme,
+body:has(> header):not(:has(.dashboard-theme)){
+  --se-accent:#00f77a;
+  --se-bright:#20ff8a;
+  --se-muted:#8b9d94;
+  min-height:100svh;
+  width:100%;
+  max-width:100vw;
+  overflow-x:clip;
+  background:#020705;
+  color:#f5fff9;
+}
+.auth-theme .metaverse-art,
+body:has(> header):not(:has(.dashboard-theme)) > div:first-child .metaverse-art{opacity:.14;filter:saturate(.55) hue-rotate(75deg)}
+.auth-theme .metaverse-overlay,
+body:has(> header):not(:has(.dashboard-theme)) > div:first-child .metaverse-overlay{
+  background:radial-gradient(circle at 72% 18%,rgba(0,247,122,.09),transparent 28%),linear-gradient(145deg,rgba(2,7,5,.9),rgba(6,16,12,.94) 58%,rgba(2,7,5,.97));
+}
+.auth-theme .glass,
+body:has(> header):not(:has(.dashboard-theme)) .glass{
+  background:rgba(4,13,10,.58);
+  border-color:rgba(0,247,122,.22);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.04),0 10px 30px rgba(0,247,122,.06);
+  -webkit-backdrop-filter:blur(14px);
+  backdrop-filter:blur(14px);
+}
+.auth-theme .text-gold,
+.auth-theme [class*="text-gold"],
+body:has(> header):not(:has(.dashboard-theme)) .text-gold,
+body:has(> header):not(:has(.dashboard-theme)) [class*="text-gold"]{color:var(--se-accent)!important}
+.auth-theme .gold-text,
+body:has(> header):not(:has(.dashboard-theme)) .gold-text{background:linear-gradient(90deg,var(--se-accent),var(--se-bright));-webkit-background-clip:text;color:transparent}
+.auth-theme .bg-gold,
+.auth-theme [class*="bg-gold"],
+body:has(> header):not(:has(.dashboard-theme)) .bg-gold,
+body:has(> header):not(:has(.dashboard-theme)) [class*="bg-gold"]{background-color:var(--se-accent)!important}
+.auth-frame{position:relative;z-index:1;display:grid;grid-template-columns:minmax(0,1fr);min-height:100svh;width:100%;max-width:100vw;place-items:center;padding:max(20px,env(safe-area-inset-top)) 16px max(20px,env(safe-area-inset-bottom))}
+.auth-card{min-width:0;width:100%;max-width:448px;justify-self:center;padding:26px}
+.auth-card h1{margin-top:22px;font-size:28px;font-weight:700;line-height:1.15}
+.auth-copy{margin:10px 0 22px;color:var(--se-muted);font-size:13px;line-height:1.65}
+.auth-primary,.auth-secondary{display:flex;width:100%;min-height:50px;align-items:center;justify-content:center;gap:8px;border-radius:12px;padding:12px 14px;font-size:13px;font-weight:750;transition:.18s}
+.auth-primary{background:linear-gradient(90deg,var(--se-accent),var(--se-bright));color:#020705;box-shadow:0 8px 22px rgba(0,247,122,.11)}
+.auth-secondary{margin-top:10px;border:1px solid rgba(0,247,122,.28);background:rgba(0,247,122,.07);color:var(--se-accent)}
+.auth-primary:disabled,.auth-secondary:disabled{cursor:not-allowed;opacity:.55}
+.auth-status{overflow-wrap:anywhere;margin-top:12px;border:1px solid rgba(0,247,122,.18);border-radius:11px;background:rgba(0,247,122,.055);padding:11px 12px;color:#c8d8d0;font-size:12px;line-height:1.55}
+.auth-footnote{margin-top:22px;text-align:center;color:#71847a;font-size:9px;line-height:1.5}
+@media(max-width:370px){.auth-frame{padding-left:10px;padding-right:10px}.auth-card{padding:20px}.auth-card h1{font-size:25px}.auth-copy{font-size:12px}}
+
+/* Public surfaces use the same background layer and visual tokens as the dashboard. */
+.public-theme,
+body:has(> .fixed-metaverse-background){
+  --se-accent:#00f77a;
+  --se-bright:#20ff8a;
+  --se-muted:#8b9d94;
+  min-height:100svh;
+  max-width:100vw;
+  overflow-x:clip;
+  background:#020705;
+  color:#f5fff9;
+  font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+.public-theme .glass,
+body:has(> .fixed-metaverse-background) .glass{
+  background:rgba(4,13,10,.18);
+  border-color:rgba(0,247,122,.17);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.035),0 10px 30px rgba(0,247,122,.055);
+  -webkit-backdrop-filter:blur(12px) saturate(115%);
+  backdrop-filter:blur(12px) saturate(115%);
+}
+.public-theme .glass:hover,
+body:has(> .fixed-metaverse-background) .glass:hover{
+  border-color:rgba(0,247,122,.3);
+  box-shadow:inset 0 1px rgba(255,255,255,.04),0 10px 30px rgba(0,247,122,.075);
+}
+.public-theme .text-gold,
+.public-theme [class*="text-gold"],
+body:has(> .fixed-metaverse-background) .text-gold,
+body:has(> .fixed-metaverse-background) [class*="text-gold"]{color:var(--se-accent)!important}
+.public-theme .gold-text,
+body:has(> .fixed-metaverse-background) .gold-text{
+  background:linear-gradient(90deg,var(--se-accent),var(--se-bright));
+  -webkit-background-clip:text;
+  color:transparent;
+}
+.public-theme .bg-gold,
+.public-theme [class*="bg-gold"],
+body:has(> .fixed-metaverse-background) .bg-gold,
+body:has(> .fixed-metaverse-background) [class*="bg-gold"]{background-color:var(--se-accent)!important}
+.public-theme [class*="border-gold"],
+body:has(> .fixed-metaverse-background) [class*="border-gold"]{border-color:rgba(0,247,122,.25)!important}
+.public-theme [class*="from-[#b7893c]"],
+body:has(> .fixed-metaverse-background) [class*="from-[#b7893c]"]{
+  background-image:linear-gradient(90deg,var(--se-accent),var(--se-bright))!important;
+}
+.public-theme header,
+.public-theme footer,
+body:has(> .fixed-metaverse-background)>header,
+body:has(> .fixed-metaverse-background)>footer{border-color:rgba(0,247,122,.16)}

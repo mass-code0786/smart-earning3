@@ -1,0 +1,2 @@
+import{loadEnvConfig}from"@next/env";import{getPool}from"../lib/server/db";import{runX3RecoveryBatch,withRecoveryWorkerLock}from"../lib/server/x3-recovery-service";loadEnvConfig(process.cwd());
+withRecoveryWorkerLock(()=>runX3RecoveryBatch("WORKER")).then(async result=>{process.stdout.write(JSON.stringify(result,null,2)+"\n");await getPool().end()}).catch(async error=>{console.error(error);await getPool().end().catch(()=>undefined);process.exitCode=1});

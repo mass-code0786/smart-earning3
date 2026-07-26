@@ -1,0 +1,2 @@
+import{NextRequest,NextResponse}from"next/server";import{requireAdmin}from"@/lib/server/auth";import{apiError,assertSameOrigin}from"@/lib/server/http";import{runBoosterScheduler,withBoosterWorkerLock}from"@/lib/server/booster-service";
+export async function POST(r:NextRequest){try{assertSameOrigin(r);await requireAdmin();return NextResponse.json({results:await withBoosterWorkerLock(()=>runBoosterScheduler())})}catch(e){return apiError(e)}}

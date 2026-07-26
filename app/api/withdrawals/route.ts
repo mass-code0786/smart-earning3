@@ -1,0 +1,2 @@
+import{NextResponse}from"next/server";import{requireSession}from"@/lib/server/auth";import{apiError}from"@/lib/server/http";import{query}from"@/lib/server/db";import{getWithdrawalDashboard}from"@/lib/server/withdrawal-service";
+export async function GET(){try{const s=await requireSession(),user=(await query<{id:string}>("SELECT id FROM users WHERE wallet_address=$1",[s.wallet])).rows[0];return NextResponse.json(await getWithdrawalDashboard(user.id))}catch(e){return apiError(e)}}

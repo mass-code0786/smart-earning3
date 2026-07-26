@@ -1,0 +1,2 @@
+import{NextResponse}from"next/server";import{requireAdmin}from"@/lib/server/auth";import{apiError}from"@/lib/server/http";import{query}from"@/lib/server/db";
+export async function GET(){try{await requireAdmin();return NextResponse.json({workers:(await query(`SELECT *,extract(epoch from(now()-last_heartbeat_at))::bigint heartbeat_age_seconds,(now()-last_heartbeat_at)>make_interval(secs=>expected_interval_seconds*2) stale FROM worker_heartbeats ORDER BY worker_name`)).rows})}catch(e){return apiError(e)}}

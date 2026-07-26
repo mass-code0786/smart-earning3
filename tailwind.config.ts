@@ -1,0 +1,1 @@
+import type {Config} from 'tailwindcss'; export default {content:['./app/**/*.{ts,tsx}','./components/**/*.{ts,tsx}'],theme:{extend:{colors:{gold:'#d7ad5b',ink:'#070707'},fontFamily:{sans:['var(--font-inter)']}}},plugins:[]} satisfies Config;

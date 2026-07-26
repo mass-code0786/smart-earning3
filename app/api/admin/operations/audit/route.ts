@@ -1,0 +1,2 @@
+import{NextResponse}from"next/server";import{requireAdmin}from"@/lib/server/auth";import{apiError}from"@/lib/server/http";import{query}from"@/lib/server/db";
+export async function GET(){try{await requireAdmin();return NextResponse.json({actions:(await query(`SELECT a.*,u.wallet_address admin_wallet FROM operations_admin_actions a JOIN users u ON u.id=a.admin_user_id ORDER BY created_at DESC LIMIT 500`)).rows})}catch(e){return apiError(e)}}

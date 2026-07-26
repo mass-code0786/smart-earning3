@@ -1,0 +1,2 @@
+import{NextRequest,NextResponse}from"next/server";import{requireSession}from"@/lib/server/auth";import{apiError}from"@/lib/server/http";import{getX3Matrix}from"@/lib/server/x3-query-service";
+export async function GET(r:NextRequest,{params}:{params:Promise<{packageId:string}>}){try{const s=await requireSession(),p=await params;return NextResponse.json(await getX3Matrix(s.wallet,Number(p.packageId),Number(r.nextUrl.searchParams.get("depth")||4)))}catch(e){return apiError(e)}}

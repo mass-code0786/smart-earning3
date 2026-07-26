@@ -1,0 +1,2 @@
+import{NextRequest,NextResponse}from"next/server";import{requireAdmin}from"@/lib/server/auth";import{apiError}from"@/lib/server/http";import{getAdminAutopoolReport}from"@/lib/server/autopool-query-service";
+export async function GET(request:NextRequest,context:{params:Promise<{report:string}>}){try{await requireAdmin();return NextResponse.json(await getAdminAutopoolReport((await context.params).report,request.nextUrl.searchParams))}catch(error){return apiError(error)}}

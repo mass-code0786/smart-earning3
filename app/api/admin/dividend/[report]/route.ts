@@ -1,0 +1,2 @@
+import{NextRequest,NextResponse}from"next/server";import{requireAdmin}from"@/lib/server/auth";import{apiError}from"@/lib/server/http";import{getAdminDividendReport}from"@/lib/server/dividend-query-service";
+export async function GET(r:NextRequest,c:{params:Promise<{report:string}>}){try{await requireAdmin();return NextResponse.json(await getAdminDividendReport((await c.params).report,r.nextUrl.searchParams))}catch(e){return apiError(e)}}
