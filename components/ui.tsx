@@ -27,8 +27,8 @@ export function Logo() {
       <Image
         src="/logo.png"
         alt="Smart Earning"
-        width={220}
-        height={147}
+        width={1048}
+        height={356}
         priority
         className="h-auto w-[156px] object-contain"
       />
