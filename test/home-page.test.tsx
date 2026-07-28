@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation", () => ({
@@ -110,5 +110,9 @@ describe("locked mobile Home composition", () => {
     for (const label of ["Home", "Income", "Matrix", "Team", "Wallet"]) {
       expect(screen.getAllByRole("link", { name: label }).length).toBeGreaterThan(0);
     }
+    fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
+    expect(screen.getByRole("complementary", { name: "History Center menu" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /All History/ })).toHaveAttribute("href", "/history");
+    expect(screen.getByRole("link", { name: /Recycle History/ })).toHaveAttribute("href", "/history?category=MATRIX");
   });
 });

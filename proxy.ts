@@ -37,5 +37,6 @@ export const config = {
     "/dividend/:path*",
     "/income/:path*",
     "/magic-level/:path*",
+    "/history/:path*",
   ],
 };
