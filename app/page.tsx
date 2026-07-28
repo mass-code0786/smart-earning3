@@ -5,21 +5,21 @@ import { GlassCard, Logo, MetaverseBackground, SectionTitle } from "@/components
 const modules = [
   ["Working X3 Matrix", "Package-based X3 placement, hold and recycle records."],
   ["Magic Matrix", "Qualified level distribution backed by verified ledger records."],
-  ["Smart Packages", "Eight sequential BNB Testnet package levels."],
+  ["Smart Packages", "Eight sequential package levels."],
   ["Booster", "Automated entries funded through Booster Wallet."],
   ["Global Autopool", "Autopool access when verified backend records are available."],
   ["Daily Dividend", "Dividend access when verified backend records are available."],
 ] as const;
 
-const packages = [2, 4, 8, 16, 32, 64, 128, 256].map((price, index) => ({
+const packages = [8, 16, 32, 64, 128, 256, 512, 1024].map((price, index) => ({
   id: index + 1,
   price,
 }));
 
 export default function Page() {
   const steps: [string, typeof ShieldCheck][] = [
-    ["Connect a BNB Testnet wallet", ShieldCheck],
-    ["Register with 2 USDT", ChevronRight],
+    ["Connect your wallet", ShieldCheck],
+    ["Choose your package", ChevronRight],
     ["Access Smart Earning", Network],
   ];
 
@@ -29,11 +29,11 @@ export default function Page() {
       <header className="relative z-10 mx-auto flex max-w-7xl items-center justify-between px-4 py-5">
         <Logo />
         <div className="flex gap-2">
-          <Link className="rounded-xl px-4 py-2 text-xs text-white/60" href="/login">
-            Login
+          <Link className="rounded-xl border border-gold/35 bg-gold/10 px-4 py-2 text-xs font-bold text-white" href="/login">
+            Connect
           </Link>
-          <Link className="rounded-xl bg-gold px-4 py-2 text-xs font-bold text-black" href="/register">
-            Register
+          <Link className="rounded-xl bg-gold px-4 py-2 text-xs font-bold text-white" href="/register">
+            Signup
           </Link>
         </div>
       </header>
@@ -41,23 +41,21 @@ export default function Page() {
       <main className="relative z-[2] mx-auto max-w-7xl px-4 pb-20">
         <section className="grid min-h-[75vh] items-center py-16 lg:grid-cols-2">
           <div>
-            <p className="text-xs uppercase tracking-[.3em] text-gold">Built for the BNB Chain ecosystem</p>
-            <h1 className="mt-5 text-5xl font-semibold leading-[1.05] sm:text-7xl">
+            <h1 className="text-5xl font-semibold leading-[1.05] sm:text-7xl">
               One premium view of a <span className="gold-text">connected ecosystem.</span>
             </h1>
             <p className="mt-6 max-w-xl text-base leading-7 text-white/50">
               Connect your wallet to access matrix, autopool, booster, dividend and level modules.
               Potential rewards depend on platform rules.
             </p>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Link className="rounded-xl bg-gold px-5 py-3 text-sm font-bold text-black" href="/login">
-                Wallet Login
+            <div className="mx-auto mt-8 flex w-full max-w-[280px] flex-col gap-3 lg:mx-0">
+              <Link className="flex h-12 w-full items-center justify-center rounded-xl bg-gold px-5 text-sm font-bold text-white" href="/login">
+                Connect
               </Link>
-              <Link className="rounded-xl border border-gold/25 px-5 py-3 text-sm text-gold" href="/register">
-                Wallet Registration
+              <Link className="flex h-12 w-full items-center justify-center rounded-xl border border-gold/35 bg-gold/10 px-5 text-sm font-bold text-white" href="/register">
+                Signup
               </Link>
             </div>
-            <p className="mt-4 text-[11px] text-white/35">BNB Smart Chain Testnet · Wallet signature required</p>
           </div>
           <div className="relative hidden lg:block">
             <div className="mx-auto grid h-80 w-80 place-items-center rounded-full border border-gold/20">
@@ -102,7 +100,7 @@ export default function Page() {
         <GlassCard className="p-8 text-center sm:p-12">
           <h2 className="text-3xl font-semibold">Enter Smart Earning</h2>
           <p className="mx-auto mt-3 max-w-xl text-sm text-white/45">
-            Existing members sign a nonce. New members register on BNB Testnet with 2 USDT.
+            Existing members can connect securely. New members can create their Smart Earning account.
           </p>
           <Link className="mt-6 inline-block rounded-xl bg-gold px-6 py-3 text-sm font-bold text-black" href="/login">
             Connect Wallet
@@ -111,7 +109,7 @@ export default function Page() {
       </main>
 
       <footer className="relative z-[2] border-t border-white/10 px-4 py-8 text-center text-xs text-white/35">
-        © Smart Earning · BNB Smart Chain Testnet
+        © Smart Earning
       </footer>
     </div>
   );
