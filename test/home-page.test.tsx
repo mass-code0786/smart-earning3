@@ -1,0 +1,99 @@
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/dashboard",
+  useRouter: () => ({ replace: vi.fn() }),
+}));
+
+import RealDashboard from "@/components/real-dashboard";
+
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
+
+describe("locked mobile Home composition", () => {
+  it("renders only the approved live Home sections in their required order", async () => {
+    const fetchMock = vi.fn(async (input: string) => {
+      const body = input === "/api/dashboard"
+        ? { user: {
+          wallet_address: "0x000000000000000000000000000000000000dEaD",
+          direct_count: 4,
+        } }
+        : input === "/api/x3/packages"
+          ? { packages: [{
+            packageId: 1,
+            active: true,
+            earnedIncome: "1250000",
+            slots: [{ slotNumber: 1, wallet: "0x0000000000000000000000000000000000000001" }],
+          }] }
+          : { packages: [{
+            packageId: 1,
+            active: true,
+            totalEarnings: "2750000",
+            slots: [
+              { slotNumber: 1, level: 1, wallet: "0x0000000000000000000000000000000000000001" },
+              { slotNumber: 2, level: 1, wallet: "0x0000000000000000000000000000000000000002" },
+            ],
+          }] };
+      return { ok: true, status: 200, json: async () => body };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { container } = render(<RealDashboard />);
+    expect(await screen.findByText("Direct Members")).toBeInTheDocument();
+    expect(screen.getByText("Total Team")).toBeInTheDocument();
+    expect(screen.getByText("0x0000…dEaD")).toBeInTheDocument();
+
+    for (const action of ["Buy Package", "Upgrade Package", "Booster Topup", "Invite"]) {
+      expect(screen.getByRole("link", { name: action })).toBeInTheDocument();
+    }
+    expect(screen.getByRole("link", { name: "Buy Package" })).toHaveAttribute("href", "/packages");
+    expect(screen.getByRole("link", { name: "Booster Topup" })).toHaveAttribute("href", "/booster");
+    expect(screen.getByRole("link", { name: "Invite" })).toHaveAttribute("href", "/team");
+
+    const matrixCards = container.querySelectorAll(".home-matrix-card");
+    expect(matrixCards).toHaveLength(2);
+    expect(within(matrixCards[0] as HTMLElement).getAllByText("X3")).toHaveLength(2);
+    expect(within(matrixCards[0] as HTMLElement).getByText(/\$1\.25/)).toBeInTheDocument();
+    expect(within(matrixCards[1] as HTMLElement).getAllByText("X4")).toHaveLength(2);
+    expect(within(matrixCards[1] as HTMLElement).getByText(/\$2\.75/)).toBeInTheDocument();
+
+    const order = [
+      container.querySelector(".home-team-summary"),
+      container.querySelector(".home-hero-composition"),
+      container.querySelector(".home-matrix-list"),
+    ];
+    expect(order.every(Boolean)).toBe(true);
+    expect(order[0]!.compareDocumentPosition(order[1]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(order[1]!.compareDocumentPosition(order[2]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    for (const removed of [
+      "Authenticated Wallet", "Income Wallet", "Magic Wallet", "X3 Hold Wallet",
+      "Total Earned", "Total Withdrawn", "Pending Withdrawal", "Dividend Income",
+      "5X Cap Used", "5X Cap Remaining", "Active Package Value",
+    ]) {
+      expect(screen.queryByText(removed, { exact: false })).not.toBeInTheDocument();
+    }
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+  });
+
+  it("keeps the approved header and bottom navigation labels", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: string) => ({
+      ok: true,
+      status: 200,
+      json: async () => input === "/api/dashboard"
+        ? { user: { wallet_address: "0x000000000000000000000000000000000000dead", direct_count: 0 } }
+        : { packages: [] },
+    })));
+    render(<RealDashboard />);
+    await screen.findByText("Direct Members");
+    expect(screen.getByRole("button", { name: "Open menu" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Light theme" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Log out" })).toBeInTheDocument();
+    for (const label of ["Home", "Income", "Matrix", "Team", "Wallet"]) {
+      expect(screen.getAllByRole("link", { name: label }).length).toBeGreaterThan(0);
+    }
+  });
+});

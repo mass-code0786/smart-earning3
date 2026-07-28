@@ -16,7 +16,7 @@ describe("real-wallet-only entry points", () => {
 
   it("renders the dashboard from the authenticated API without mock balances", () => {
     const dashboard = read("components/real-dashboard.tsx");
-    expect(dashboard).toContain('fetch("/api/dashboard"');
+    expect(dashboard).toContain('json("/api/dashboard")');
     expect(dashboard).not.toContain("$1,248.50");
     expect(dashboard).not.toContain("$246.80");
     expect(dashboard).not.toContain("SE123456");
