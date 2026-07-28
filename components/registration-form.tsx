@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import { CheckCircle2, ShieldCheck } from "lucide-react";
 import { registerOnTestnet, walletLogin } from "@/lib/client/wallet";
 
-export function RegistrationForm({ registrationEnabled }: { registrationEnabled: boolean }) {
-  const [sponsor, setSponsor] = useState("");
+export function RegistrationForm({ registrationEnabled, initialSponsor = "" }: { registrationEnabled: boolean; initialSponsor?: string }) {
+  const [sponsor, setSponsor] = useState(initialSponsor);
   const [status, setStatus] = useState("");
   const [hash, setHash] = useState("");
   const [busy, setBusy] = useState(false);

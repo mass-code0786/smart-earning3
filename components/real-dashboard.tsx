@@ -22,6 +22,7 @@ type DashboardData = {
 
 type X3Package = {
   packageId: number;
+  priceTokenUnits: string;
   active: boolean;
   slots: { slotNumber: number; wallet: string }[];
   earnedIncome: string;
@@ -29,6 +30,7 @@ type X3Package = {
 
 type X4Package = {
   packageId: number;
+  priceTokenUnits: string;
   active: boolean;
   slots: { slotNumber: number; level: number; wallet: string }[];
   totalEarnings: string;
@@ -115,13 +117,13 @@ export default function RealDashboard() {
             <MatrixCard
               kind="X3"
               profit={profit(data.x3.map((item) => item.earnedIncome))}
-              slots={latestX3(data.x3)}
+              packages={data.x3}
               href="/matrix/x3"
             />
             <MatrixCard
               kind="X4"
               profit={profit(data.x4.map((item) => item.totalEarnings))}
-              slots={latestX4(data.x4)}
+              packages={data.x4}
               href="/matrix/x4"
             />
           </div>
@@ -168,29 +170,15 @@ function HomeAction({
   );
 }
 
-function latestX3(packages: X3Package[]) {
-  const active = packages.filter((item) => item.active).at(-1);
-  return Array.from({ length: 3 }, (_, index) => (
-    active?.slots.find((slot) => slot.slotNumber === index + 1)?.wallet
-  ) || null);
-}
-
-function latestX4(packages: X4Package[]) {
-  const active = packages.filter((item) => item.active).at(-1);
-  return Array.from({ length: 6 }, (_, index) => (
-    active?.slots.find((slot) => slot.slotNumber === index + 1)?.wallet
-  ) || null);
-}
-
 function MatrixCard({
   kind,
   profit: value,
-  slots,
+  packages,
   href,
 }: {
   kind: "X3" | "X4";
   profit: string;
-  slots: (string | null)[];
+  packages: (X3Package | X4Package)[];
   href: string;
 }) {
   return (
@@ -199,16 +187,13 @@ function MatrixCard({
         <span><small>Total Profit</small><b>{value} <em>USDT</em></b></span>
         <strong>{kind}</strong>
       </header>
-      <div className={`home-matrix-tree ${kind === "X4" ? "is-x4" : ""}`} aria-label={`${kind} matrix structure`}>
-        <i className="home-matrix-root">{kind}</i>
-        <div className="home-matrix-lines" />
-        <div className="home-matrix-slots">
-          {slots.map((wallet, index) => (
-            <span className={wallet ? "is-filled" : ""} key={index}>
-              {wallet ? wallet.slice(2, 4).toUpperCase() : ""}
-            </span>
-          ))}
-        </div>
+      <div className="home-matrix-packages" aria-label={`${kind} package overview`}>
+        {packages.map((item) => (
+          <div className={item.active ? "is-active" : "is-locked"} key={item.packageId}>
+            <span>{item.active ? item.packageId : "🔒"}</span>
+            <b>${BigInt(item.priceTokenUnits) / 1_000_000n}</b>
+          </div>
+        ))}
       </div>
       <Link href={href}>Preview</Link>
     </section>

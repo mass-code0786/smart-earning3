@@ -15,6 +15,7 @@ afterEach(() => {
 
 describe("locked mobile Home composition", () => {
   it("renders only the approved live Home sections in their required order", async () => {
+    const prices = [8, 16, 32, 64, 128, 256, 512, 1024];
     const fetchMock = vi.fn(async (input: string) => {
       const body = input === "/api/dashboard"
         ? { user: {
@@ -22,21 +23,23 @@ describe("locked mobile Home composition", () => {
           direct_count: 4,
         } }
         : input === "/api/x3/packages"
-          ? { packages: [{
-            packageId: 1,
-            active: true,
-            earnedIncome: "1250000",
-            slots: [{ slotNumber: 1, wallet: "0x0000000000000000000000000000000000000001" }],
-          }] }
-          : { packages: [{
-            packageId: 1,
-            active: true,
-            totalEarnings: "2750000",
-            slots: [
+          ? { packages: prices.map((price, index) => ({
+            packageId: index + 1,
+            priceTokenUnits: String(price * 1_000_000),
+            active: index < 2,
+            earnedIncome: index === 0 ? "1250000" : "0",
+            slots: index === 0 ? [{ slotNumber: 1, wallet: "0x0000000000000000000000000000000000000001" }] : [],
+          })) }
+          : { packages: prices.map((price, index) => ({
+            packageId: index + 1,
+            priceTokenUnits: String(price * 1_000_000),
+            active: index === 0,
+            totalEarnings: index === 0 ? "2750000" : "0",
+            slots: index === 0 ? [
               { slotNumber: 1, level: 1, wallet: "0x0000000000000000000000000000000000000001" },
               { slotNumber: 2, level: 1, wallet: "0x0000000000000000000000000000000000000002" },
-            ],
-          }] };
+            ] : [],
+          })) };
       return { ok: true, status: 200, json: async () => body };
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -55,10 +58,15 @@ describe("locked mobile Home composition", () => {
 
     const matrixCards = container.querySelectorAll(".home-matrix-card");
     expect(matrixCards).toHaveLength(2);
-    expect(within(matrixCards[0] as HTMLElement).getAllByText("X3")).toHaveLength(2);
+    expect(within(matrixCards[0] as HTMLElement).getByText("X3")).toBeInTheDocument();
     expect(within(matrixCards[0] as HTMLElement).getByText(/\$1\.25/)).toBeInTheDocument();
-    expect(within(matrixCards[1] as HTMLElement).getAllByText("X4")).toHaveLength(2);
+    expect(within(matrixCards[1] as HTMLElement).getByText("X4")).toBeInTheDocument();
     expect(within(matrixCards[1] as HTMLElement).getByText(/\$2\.75/)).toBeInTheDocument();
+    expect(matrixCards[0].querySelectorAll(".home-matrix-packages>div")).toHaveLength(8);
+    expect(matrixCards[1].querySelectorAll(".home-matrix-packages>div")).toHaveLength(8);
+    expect(matrixCards[0].querySelectorAll(".is-active")).toHaveLength(2);
+    expect(matrixCards[1].querySelectorAll(".is-active")).toHaveLength(1);
+    expect(container.querySelector(".home-matrix-tree")).not.toBeInTheDocument();
 
     const order = [
       container.querySelector(".home-team-summary"),
