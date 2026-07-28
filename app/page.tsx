@@ -1,6 +1,8 @@
-import Link from "next/link";
 import { ChevronRight, Network, ShieldCheck, Zap } from "lucide-react";
 import { GlassCard, Logo, MetaverseBackground, SectionTitle } from "@/components/ui";
+import { LandingActionButtons, LandingInlinePanel, LandingInteractionProvider } from "@/components/landing-interactions";
+import { registrationConfiguration } from "@/lib/server/config";
+import { referralSponsorFromParam } from "@/lib/referral";
 
 const modules = [
   ["Working X3 Matrix", "Package-based X3 placement, hold and recycle records."],
@@ -16,7 +18,9 @@ const packages = [8, 16, 32, 64, 128, 256, 512, 1024].map((price, index) => ({
   price,
 }));
 
-export default function Page() {
+export default async function Page({ searchParams }: { searchParams: Promise<{ ref?: string }> }) {
+  const initialSponsor = referralSponsorFromParam((await searchParams).ref);
+  const registrationEnabled = registrationConfiguration().enabled;
   const steps: [string, typeof ShieldCheck][] = [
     ["Connect your wallet", ShieldCheck],
     ["Choose your package", ChevronRight],
@@ -24,38 +28,26 @@ export default function Page() {
   ];
 
   return (
-    <div className="public-theme fixed-background-shell min-h-screen">
+    <LandingInteractionProvider initialSponsor={initialSponsor} registrationEnabled={registrationEnabled}><div className="public-theme fixed-background-shell min-h-screen">
       <MetaverseBackground />
       <header className="relative z-10 mx-auto flex max-w-7xl items-center justify-between px-4 py-5">
         <Logo />
-        <div className="flex gap-2">
-          <Link className="rounded-xl border border-gold/35 bg-gold/10 px-4 py-2 text-xs font-bold text-white" href="/login">
-            Connect
-          </Link>
-          <Link className="rounded-xl bg-gold px-4 py-2 text-xs font-bold text-white" href="/register">
-            Signup
-          </Link>
-        </div>
+        <LandingActionButtons compact />
       </header>
 
       <main className="relative z-[2] mx-auto max-w-7xl px-4 pb-20">
         <section className="grid min-h-[75vh] items-center py-16 lg:grid-cols-2">
           <div className="text-center">
-            <h1 className="text-5xl font-semibold leading-[1.05] sm:text-7xl">
-              One premium view of a <span className="gold-text">connected ecosystem.</span>
+            <h1 className="landing-journey-heading">
+              <span>Your Journey Starts Here</span>
+              <strong>Build a Strong Global Network</strong>
+              <span>Achieve Financial Freedom Together.</span>
             </h1>
             <p className="mx-auto mt-6 max-w-xl text-base leading-7 text-white/50">
               Connect your wallet to access matrix, autopool, booster, dividend and level modules.
               Potential rewards depend on platform rules.
             </p>
-            <div className="mx-auto mt-8 flex w-full max-w-[280px] flex-col gap-3">
-              <Link className="flex h-12 w-full items-center justify-center rounded-xl bg-gold px-5 text-sm font-bold text-white" href="/login">
-                Connect
-              </Link>
-              <Link className="flex h-12 w-full items-center justify-center rounded-xl border border-gold/35 bg-gold/10 px-5 text-sm font-bold text-white" href="/register">
-                Signup
-              </Link>
-            </div>
+            <LandingActionButtons />
           </div>
           <div className="relative hidden lg:block">
             <div className="mx-auto grid h-80 w-80 place-items-center rounded-full border border-gold/20">
@@ -65,6 +57,7 @@ export default function Page() {
             </div>
           </div>
         </section>
+        <LandingInlinePanel initialSponsor={initialSponsor} registrationEnabled={registrationEnabled}/>
 
         <div className="text-center">
           <SectionTitle eyebrow="Platform ecosystem" title="Six modules. One focused workspace." />
@@ -106,15 +99,13 @@ export default function Page() {
           <p className="mx-auto mt-3 max-w-xl text-sm text-white/45">
             Existing members can connect securely. New members can create their Smart Earning account.
           </p>
-          <Link className="mt-6 inline-block rounded-xl bg-gold px-6 py-3 text-sm font-bold text-black" href="/login">
-            Connect Wallet
-          </Link>
+          <div className="mx-auto max-w-[280px]"><LandingActionButtons /></div>
         </GlassCard>
       </main>
 
       <footer className="relative z-[2] border-t border-white/10 px-4 py-8 text-center text-xs text-white/35">
         © Smart Earning
       </footer>
-    </div>
+    </div></LandingInteractionProvider>
   );
 }

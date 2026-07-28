@@ -8,8 +8,9 @@ const read = (file: string) => fs.readFileSync(path.join(process.cwd(), file), "
 describe("real-wallet-only entry points", () => {
   it("offers wallet login and registration without a demo dashboard bypass", () => {
     const landing = read("app/page.tsx");
-    expect(landing).toContain('href="/login"');
-    expect(landing).toContain('href="/register"');
+    expect(landing).toContain("LandingActionButtons");
+    expect(landing).not.toContain('href="/login"');
+    expect(landing).not.toContain('href="/register"');
     expect(landing).not.toContain("Open Demo");
     expect(landing).not.toContain('href="/dashboard"');
   });

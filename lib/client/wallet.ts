@@ -213,8 +213,10 @@ async function authRequest(path: string, body?: unknown) {
   return { response, result };
 }
 
-export async function walletLogin() {
+export async function walletLogin(onStage?: (stage: "Connecting wallet…" | "Requesting signature…" | "Verifying…" | "Connected") => void) {
+  onStage?.("Connecting wallet…");
   const { signer, wallet } = await connectTestnet();
+  onStage?.("Requesting signature…");
   const nonceCall = await authRequest("/api/auth/nonce", { wallet });
   if (!nonceCall.response.ok) {
     if (nonceCall.result.code === "SERVER_CONFIG_INCOMPLETE") {
@@ -231,6 +233,7 @@ export async function walletLogin() {
     if (isWalletRejection(error)) throw new WalletLoginError("SIGNATURE_REJECTED", "Signature rejected");
     throw new WalletLoginError("PROVIDER_ERROR", "Wallet provider could not sign the login message");
   }
+  onStage?.("Verifying…");
   const verification = await authRequest("/api/auth/verify", { wallet, nonce: nonce.nonce, signature });
   if (!verification.response.ok) {
     if (verification.result.code === "SERVER_CONFIG_INCOMPLETE") {
@@ -246,6 +249,7 @@ export async function walletLogin() {
     registered?: boolean;
     registrationStatus?: string | null;
   };
+  onStage?.("Connected");
   return {
     ...result,
     wallet: result.wallet.toLowerCase(),
