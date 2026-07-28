@@ -34,6 +34,12 @@ export function RegistrationForm({ registrationEnabled }: { registrationEnabled:
         throw new Error("Self-referral is not allowed");
       }
       const result = await registerOnTestnet(sponsor, setStatus);
+      if (result.alreadyRegistered) {
+        setStatus("Wallet is already registered. Redirecting to dashboard.");
+        router.replace("/dashboard");
+        router.refresh();
+        return;
+      }
       setHash(result.txHash);
       setStatus("Registration verified and activated. Redirecting to dashboard…");
       router.replace("/dashboard");

@@ -16,6 +16,7 @@ vi.mock("ethers", async (importOriginal) => {
 import {
   connectTestnet,
   getInjectedProvider,
+  registerOnTestnet,
   walletLogin,
   WalletLoginError,
 } from "@/lib/client/wallet";
@@ -112,5 +113,47 @@ describe("nonce, signature, and session request flow", () => {
       signature: "0xsigned",
     });
     expect(fetchMock.mock.calls[2][0]).toBe("/api/auth/session");
+  });
+
+  it("maps an ACTIVE mixed-case session wallet to registered", async () => {
+    vi.stubGlobal("window", { ethereum: provider() });
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        nonce: "a".repeat(48),
+        message: "server-generated-message",
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        wallet: "0x000000000000000000000000000000000000dead",
+        chainId: 97,
+      }), {
+        status: 200,
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        wallet: "0x000000000000000000000000000000000000dEaD",
+        chainId: 97,
+        registered: false,
+        registrationStatus: "ACTIVE",
+      }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(walletLogin()).resolves.toMatchObject({
+      wallet: "0x000000000000000000000000000000000000dead",
+      registered: true,
+    });
+  });
+
+  it("treats preparation 409 ALREADY_REGISTERED as registered before any payment call", async () => {
+    vi.stubGlobal("window", { ethereum: provider() });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      error: "Wallet is already registered",
+      code: "ALREADY_REGISTERED",
+    }), { status: 409 })));
+
+    await expect(registerOnTestnet(
+      "0x00000000000000000000000000000000000000aa",
+      vi.fn(),
+    )).resolves.toEqual({ alreadyRegistered: true });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect((fetch as ReturnType<typeof vi.fn>).mock.calls[0][0]).toBe("/api/registrations/prepare");
   });
 });

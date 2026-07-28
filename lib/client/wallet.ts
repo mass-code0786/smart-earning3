@@ -240,19 +240,21 @@ export async function walletLogin() {
   }
   const session = await authRequest("/api/auth/session");
   if (!session.response.ok) throw new WalletLoginError("SESSION_FAILED", "Session could not be created");
-  return session.result as { wallet: string; chainId: number; registered: boolean };
+  const result = session.result as {
+    wallet: string;
+    chainId: number;
+    registered?: boolean;
+    registrationStatus?: string | null;
+  };
+  return {
+    ...result,
+    wallet: result.wallet.toLowerCase(),
+    registered: result.registered === true || result.registrationStatus === "ACTIVE",
+  };
 }
 
 export async function registerOnTestnet(sponsor: string, onStatus: (status: string) => void) {
   const { signer, wallet } = await connectTestnet();
-  const { app, usdt } = publicContracts();
-  const token = new Contract(usdt, ERC20_ABI, signer);
-  const registration = new Contract(app, SMART_EARNING_ABI, signer);
-  const price = parseUnits("2", Number(await token.decimals()));
-  if (BigInt(await token.allowance(wallet, app)) < price) {
-    onStatus("Approve exactly 2 USDT. BNB gas is charged separately.");
-    await (await token.approve(app, price)).wait();
-  }
   onStatus("Finding placement…");
   const preparationStorageKey = `registration-preparation:${wallet}:${sponsor.toLowerCase()}`;
   let requestKey = sessionStorage.getItem(preparationStorageKey);
@@ -265,7 +267,19 @@ export async function registerOnTestnet(sponsor: string, onStatus: (status: stri
     body: JSON.stringify({ sponsor, requestKey }),
   });
   const placement = await preparation.json();
+  if (preparation.status === 409 && placement.code === "ALREADY_REGISTERED") {
+    sessionStorage.removeItem(preparationStorageKey);
+    return { alreadyRegistered: true as const };
+  }
   if (!preparation.ok) throw new Error(placement.error || "Could not find matrix placement");
+  const { app, usdt } = publicContracts();
+  const token = new Contract(usdt, ERC20_ABI, signer);
+  const registration = new Contract(app, SMART_EARNING_ABI, signer);
+  const price = parseUnits("2", Number(await token.decimals()));
+  if (BigInt(await token.allowance(wallet, app)) < price) {
+    onStatus("Approve exactly 2 USDT. BNB gas is charged separately.");
+    await (await token.approve(app, price)).wait();
+  }
   onStatus("Confirm registration. Your wallet will show the separate BNB gas fee.");
   const sent = await registration.register(sponsor);
   sessionStorage.removeItem(preparationStorageKey);
@@ -277,5 +291,5 @@ export async function registerOnTestnet(sponsor: string, onStatus: (status: stri
   });
   const result = await response.json();
   if (!response.ok) throw new Error(result.error || "Backend verification failed");
-  return { ...result, txHash: sent.hash };
+  return { ...result, txHash: sent.hash, alreadyRegistered: false as const };
 }
