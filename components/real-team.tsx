@@ -77,7 +77,7 @@ export default function RealTeam() {
         {notice && <p role="status" className="mt-2 text-[10px] text-[#00F77A]">{notice}</p>}
       </section>
 
-      <section className="grid grid-cols-2 gap-2">
+      <section id="total-team" className="grid grid-cols-2 gap-2">
         {[
           ["Direct Members", data.directMembers],
           ["Total Team", data.totalTeam],
@@ -86,7 +86,7 @@ export default function RealTeam() {
         ].map(([label, value]) => <div className="smart-glass-card rounded-[16px] p-3" key={label}><small className="text-[9px] text-[#8B9D94]">{label}</small><b className="mt-1 block text-xl">{value}</b></div>)}
       </section>
 
-      <section className="smart-glass-card rounded-[20px] p-4">
+      <section id="direct-team" className="smart-glass-card rounded-[20px] p-4">
         <div className="flex items-center gap-2"><Users size={17} className="text-[#00F77A]" /><h1 className="text-sm font-bold">Direct Team</h1></div>
         {data.directs.length ? <div className="mt-3 grid">
           {data.directs.map((member) => <div className="team-member-row border-t border-[#00F77A]/10 py-3 first:border-0" key={member.wallet_address}>

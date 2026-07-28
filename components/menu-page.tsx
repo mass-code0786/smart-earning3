@@ -4,45 +4,44 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   BadgeDollarSign, ChevronRight, CircleDollarSign, Copy, FileClock, GitBranch,
-  HandCoins, History, Layers3, LogOut, Network, PackagePlus, Share2, Sparkles,
-  TrendingUp, Users, Wallet, WalletCards, Zap,
+  HandCoins, Headphones, History, Layers3, LogOut, Network, PackagePlus, Share2,
+  Sparkles, TrendingUp, Users, Wallet, Zap,
 } from "lucide-react";
 
 type TeamData = { referralIdentifier: string };
 type MenuRow = { label: string; href: string; icon: typeof History };
 
 const sections: { title: string; rows: MenuRow[] }[] = [
-  { title: "GLOBAL X3 BOOSTER", rows: [
+  { title: "BOOSTER", rows: [
     { label: "Booster Wallet Topup", href: "/booster", icon: Zap },
-    { label: "Booster Activation Wallet History", href: "/history?category=BOOSTER", icon: FileClock },
-    { label: "X3 Booster Structure", href: "/matrix/x3", icon: GitBranch },
+    { label: "Booster History", href: "/history?category=BOOSTER", icon: FileClock },
   ] },
   { title: "PACKAGES", rows: [
     { label: "Buy Package", href: "/packages", icon: PackagePlus },
     { label: "Upgrade Package", href: "/packages", icon: TrendingUp },
-    { label: "Transaction List", href: "/history?category=PACKAGES", icon: History },
+    { label: "Package History", href: "/history?category=PACKAGE", icon: History },
   ] },
   { title: "WITHDRAW", rows: [
-    { label: "Account Summary", href: "/wallet", icon: WalletCards },
-    { label: "Withdraw History", href: "/history?category=WITHDRAWALS", icon: HandCoins },
+    { label: "Withdraw History", href: "/history?category=WITHDRAWAL", icon: HandCoins },
   ] },
-  { title: "INCOME REPORT", rows: [
-    { label: "Direct Income", href: "/history?category=DIRECT_INCOME", icon: CircleDollarSign },
-    { label: "Magic Level Income", href: "/history?category=MAGIC_LEVEL", icon: Sparkles },
-    { label: "Working X3 Matrix Income", href: "/history?category=X3", icon: GitBranch },
-    { label: "Non Working X4 Matrix Income", href: "/history?category=X4", icon: Network },
-    { label: "X3 Booster Income", href: "/history?category=BOOSTER_INCOME", icon: Zap },
-    { label: "Global Auto Pool Income", href: "/history?category=AUTOPOOL", icon: Layers3 },
-    { label: "Daily Dividend Income", href: "/history?category=DIVIDEND", icon: BadgeDollarSign },
+  { title: "INCOME HISTORY", rows: [
+    { label: "Direct Income History", href: "/history?category=DIRECT_INCOME", icon: CircleDollarSign },
+    { label: "Magic Level Income History", href: "/history?category=MAGIC_LEVEL_INCOME", icon: Sparkles },
+    { label: "Working X3 Income History", href: "/history?category=X3_INCOME", icon: GitBranch },
+    { label: "X3 Recycle History", href: "/history?category=X3_RECYCLE", icon: GitBranch },
+    { label: "Booster Income History", href: "/history?category=BOOSTER_INCOME", icon: Zap },
+    { label: "Global Autopool Income History", href: "/history?category=AUTOPOOL", icon: Layers3 },
+    { label: "Daily Dividend Income History", href: "/history?category=DIVIDEND", icon: BadgeDollarSign },
   ] },
-  { title: "OTHER REPORTS", rows: [
-    { label: "Magic Wallet Report", href: "/wallet?section=magic", icon: Wallet },
-    { label: "Magic Level Report", href: "/history?category=MAGIC_LEVEL", icon: Sparkles },
-    { label: "Hold Wallet Report", href: "/wallet?section=hold", icon: WalletCards },
+  { title: "TEAM", rows: [
+    { label: "Direct Team", href: "/team#direct-team", icon: Users },
+    { label: "Total Team", href: "/team#total-team", icon: Network },
   ] },
-  { title: "AFFILIATE", rows: [
-    { label: "Direct Affiliate", href: "/team?view=direct", icon: Users },
-    { label: "Team Affiliate", href: "/team?view=all", icon: Network },
+  { title: "WALLET", rows: [
+    { label: "Wallet Ledger / Wallet History", href: "/history?category=WALLET", icon: Wallet },
+  ] },
+  { title: "SUPPORT", rows: [
+    { label: "Support", href: "/support", icon: Headphones },
   ] },
 ];
 
@@ -87,14 +86,17 @@ export default function MenuPage() {
   }
   return <div className="menu-page">
     <h1 className="menu-title">Menu</h1>
-    <section className="menu-invite smart-glass-card">
-      <Link href="/team" aria-label="Open team referral page">
-        <span><small>Your Invite Link</small><b>{inviteLink || (error || "Loading invite link…")}</b></span>
-      </Link>
-      <button type="button" aria-label="Copy invite link" disabled={!inviteLink} onClick={() => void copyInvite()}><Copy size={16}/></button>
-      {typeof navigator !== "undefined" && typeof navigator.share === "function" &&
-        <button type="button" aria-label="Share invite link" disabled={!inviteLink} onClick={() => void shareInvite()}><Share2 size={16}/></button>}
-      {notice && <p role="status">{notice}</p>}
+    <section className="menu-section">
+      <h2>INVITE</h2>
+      <div className="menu-invite smart-glass-card">
+        <Link href="/team" aria-label="Referral Link">
+          <span><small>Referral Link</small><b>{inviteLink || (error || "Loading invite link…")}</b></span>
+        </Link>
+        <button type="button" aria-label="Copy Link" disabled={!inviteLink} onClick={() => void copyInvite()}><Copy size={16}/></button>
+        {typeof navigator !== "undefined" && typeof navigator.share === "function" &&
+          <button type="button" aria-label="Share Link" disabled={!inviteLink} onClick={() => void shareInvite()}><Share2 size={16}/></button>}
+        {notice && <p role="status">{notice}</p>}
+      </div>
     </section>
     {sections.map(section => <section className="menu-section" key={section.title}>
       <h2>{section.title}</h2>
@@ -106,7 +108,7 @@ export default function MenuPage() {
       </div>
     </section>)}
     <button type="button" className="menu-logout smart-glass-card" onClick={() => void logoutFromMenu()}>
-      <i><LogOut size={18}/></i><span>Log out</span><ChevronRight size={16}/>
+      <i><LogOut size={18}/></i><span>Logout</span><ChevronRight size={16}/>
     </button>
   </div>;
 }

@@ -8,8 +8,11 @@ export async function GET(request: NextRequest) {
     const session = await requireSession();
     const search = request.nextUrl.searchParams;
     return NextResponse.json(await getHistory(session.wallet, {
-      category: search.get("category"), status: search.get("status"), search: search.get("q"),
-      from: search.get("from"), to: search.get("to"), cursor: search.get("cursor"),
+      category: search.get("category"), eventType: search.get("eventType"), status: search.get("status"),
+      fromDate: search.get("fromDate") || search.get("from"), toDate: search.get("toDate") || search.get("to"),
+      sourceWallet: search.get("sourceWallet"), txHash: search.get("txHash"),
+      packageNumber: search.has("packageNumber") ? Number(search.get("packageNumber")) : null,
+      cursor: search.get("cursor"),
       limit: search.has("limit") ? Number(search.get("limit")) : 20,
     }));
   } catch (error) {

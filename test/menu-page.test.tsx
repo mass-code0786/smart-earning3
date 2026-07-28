@@ -24,35 +24,33 @@ describe("mobile Menu page", () => {
     await screen.findByText(new RegExp(wallet, "i"));
     const routes: [string, string][] = [
       ["Booster Wallet Topup", "/booster"],
-      ["Booster Activation Wallet History", "/history?category=BOOSTER"],
-      ["X3 Booster Structure", "/matrix/x3"],
+      ["Booster History", "/history?category=BOOSTER"],
       ["Buy Package", "/packages"],
       ["Upgrade Package", "/packages"],
-      ["Transaction List", "/history?category=PACKAGES"],
-      ["Account Summary", "/wallet"],
-      ["Withdraw History", "/history?category=WITHDRAWALS"],
-      ["Direct Income", "/history?category=DIRECT_INCOME"],
-      ["Magic Level Income", "/history?category=MAGIC_LEVEL"],
-      ["Working X3 Matrix Income", "/history?category=X3"],
-      ["Non Working X4 Matrix Income", "/history?category=X4"],
-      ["X3 Booster Income", "/history?category=BOOSTER_INCOME"],
-      ["Global Auto Pool Income", "/history?category=AUTOPOOL"],
-      ["Daily Dividend Income", "/history?category=DIVIDEND"],
-      ["Magic Wallet Report", "/wallet?section=magic"],
-      ["Magic Level Report", "/history?category=MAGIC_LEVEL"],
-      ["Hold Wallet Report", "/wallet?section=hold"],
-      ["Direct Affiliate", "/team?view=direct"],
-      ["Team Affiliate", "/team?view=all"],
+      ["Package History", "/history?category=PACKAGE"],
+      ["Withdraw History", "/history?category=WITHDRAWAL"],
+      ["Direct Income History", "/history?category=DIRECT_INCOME"],
+      ["Magic Level Income History", "/history?category=MAGIC_LEVEL_INCOME"],
+      ["Working X3 Income History", "/history?category=X3_INCOME"],
+      ["X3 Recycle History", "/history?category=X3_RECYCLE"],
+      ["Booster Income History", "/history?category=BOOSTER_INCOME"],
+      ["Global Autopool Income History", "/history?category=AUTOPOOL"],
+      ["Daily Dividend Income History", "/history?category=DIVIDEND"],
+      ["Direct Team", "/team#direct-team"],
+      ["Total Team", "/team#total-team"],
+      ["Wallet Ledger / Wallet History", "/history?category=WALLET"],
+      ["Support", "/support"],
     ];
     for (const [label, href] of routes) expect(screen.getByRole("link", { name: label })).toHaveAttribute("href", href);
-    expect(screen.queryByText("Support")).not.toBeInTheDocument();
+    for (const removed of ["Account Summary", "Transaction List", "Non Working X4 Matrix Income", "Magic Wallet Report", "Magic Level Report", "Hold Wallet Report", "Direct Affiliate", "Team Affiliate"])
+      expect(screen.queryByText(removed)).not.toBeInTheDocument();
     expect(screen.queryByText("Plan")).not.toBeInTheDocument();
   });
 
   it("copies the authenticated user's production-origin referral link", async () => {
     render(<MenuPage />);
     await screen.findByText(new RegExp(wallet, "i"));
-    fireEvent.click(screen.getByRole("button", { name: "Copy invite link" }));
+    fireEvent.click(screen.getByRole("button", { name: "Copy Link" }));
     const expected = `${window.location.origin}/register?ref=${wallet}`;
     await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(expected));
     expect(screen.getByRole("status")).toHaveTextContent("Invite link copied");
@@ -61,7 +59,7 @@ describe("mobile Menu page", () => {
   it("requires confirmation before secure logout", async () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
     render(<MenuPage />);
-    fireEvent.click(screen.getByRole("button", { name: "Log out" }));
+    fireEvent.click(screen.getByRole("button", { name: "Logout" }));
     expect(confirm).toHaveBeenCalledOnce();
     expect(fetch).not.toHaveBeenCalledWith("/api/auth/logout", expect.anything());
   });

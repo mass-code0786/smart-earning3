@@ -15,8 +15,8 @@ describe("History Center UI",()=>{
   expect(await screen.findByText("X3 package 2 recycled")).toBeInTheDocument();
   expect(screen.getByText("2 times ♻️")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button",{name:"Filters"}));
-  fireEvent.change(screen.getByPlaceholderText("Wallet, hash, package, income"),{target:{value:"0xabc"}});
+  fireEvent.change(screen.getByPlaceholderText("0x source wallet"),{target:{value:"0xabc"}});
   fireEvent.click(screen.getByRole("button",{name:"Apply Filters"}));
-  await waitFor(()=>expect(String(fetchMock.mock.calls.at(-1)?.[0])).toContain("q=0xabc"));
+  await waitFor(()=>expect(String(fetchMock.mock.calls.at(-1)?.[0])).toContain("sourceWallet=0xabc"));
  });
 });

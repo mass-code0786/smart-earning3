@@ -9,9 +9,12 @@ describe("GET /api/history authorization",()=>{
  it("scopes history to the authenticated session wallet",async()=>{
   requireSession.mockResolvedValue({wallet:"0x1234567890abcdef1234567890abcdef12345678"});
   const{GET}=await import("@/app/api/history/route");
-  const response=await GET(new NextRequest("http://localhost/api/history?category=income&limit=20"));
+  const response=await GET(new NextRequest("http://localhost/api/history?category=DIRECT_INCOME&eventType=DIRECT_INCOME_CREDITED&sourceWallet=0x1234567890abcdef1234567890abcdef12345678&packageNumber=3&limit=20"));
   expect(response.status).toBe(200);
-  expect(getHistory).toHaveBeenCalledWith("0x1234567890abcdef1234567890abcdef12345678",expect.objectContaining({category:"income",limit:20}));
+  expect(getHistory).toHaveBeenCalledWith("0x1234567890abcdef1234567890abcdef12345678",expect.objectContaining({
+   category:"DIRECT_INCOME",eventType:"DIRECT_INCOME_CREDITED",
+   sourceWallet:"0x1234567890abcdef1234567890abcdef12345678",packageNumber:3,limit:20,
+  }));
  });
  it("does not query history when authentication fails",async()=>{
   requireSession.mockRejectedValue(new Error("unauthorized"));
