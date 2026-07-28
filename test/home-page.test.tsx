@@ -30,7 +30,7 @@ describe("locked mobile Home composition", () => {
             earnedIncome: index === 0 ? "1250000" : "0",
             slots: index === 0 ? [{ slotNumber: 1, wallet: "0x0000000000000000000000000000000000000001" }] : [],
           })) }
-          : { packages: prices.map((price, index) => ({
+          : input === "/api/x4/packages" ? { packages: prices.map((price, index) => ({
             packageId: index + 1,
             priceTokenUnits: String(price * 1_000_000),
             active: index === 0,
@@ -39,7 +39,11 @@ describe("locked mobile Home composition", () => {
               { slotNumber: 1, level: 1, wallet: "0x0000000000000000000000000000000000000001" },
               { slotNumber: 2, level: 1, wallet: "0x0000000000000000000000000000000000000002" },
             ] : [],
-          })) };
+          })) } : {
+            server_time: "2026-07-28T10:00:00.000Z",
+            next_entry_at: "2026-07-28T15:00:00.000Z",
+            eligibility: "NOT_DUE",
+          };
       return { ok: true, status: 200, json: async () => body };
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -84,7 +88,8 @@ describe("locked mobile Home composition", () => {
     ]) {
       expect(screen.queryByText(removed, { exact: false })).not.toBeInTheDocument();
     }
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    expect(screen.getByText("Next booster: 05:00:00")).toBeInTheDocument();
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4));
   });
 
   it("keeps the approved header and bottom navigation labels", async () => {
@@ -93,7 +98,9 @@ describe("locked mobile Home composition", () => {
       status: 200,
       json: async () => input === "/api/dashboard"
         ? { user: { wallet_address: "0x000000000000000000000000000000000000dead", direct_count: 0 } }
-        : { packages: [] },
+        : input === "/api/booster"
+          ? { server_time: "2026-07-28T10:00:00.000Z", next_entry_at: null, eligibility: "INACTIVE" }
+          : { packages: [] },
     })));
     render(<RealDashboard />);
     await screen.findByText("Direct Members");

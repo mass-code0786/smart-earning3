@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { SmartEarningPageShell } from "@/components/smart-earning-shell";
 import { formatTokenUnits } from "@/lib/client/money";
+import { BoosterCountdown, type BoosterEligibility } from "@/components/booster-countdown";
 
 type DashboardData = {
   wallet_address: string;
@@ -40,6 +41,7 @@ type HomeData = {
   user: DashboardData;
   x3: X3Package[];
   x4: X4Package[];
+  booster: { server_time: string; next_entry_at: string | null; eligibility: BoosterEligibility };
 };
 
 const shortWallet = (wallet: string) => `${wallet.slice(0, 6)}…${wallet.slice(-4)}`;
@@ -64,16 +66,17 @@ export default function RealDashboard() {
   async function load() {
     setError("");
     try {
-      const [dashboard, x3, x4] = await Promise.all([
+      const [dashboard, x3, x4, booster] = await Promise.all([
         json("/api/dashboard"),
         json("/api/x3/packages"),
         json("/api/x4/packages"),
+        json("/api/booster"),
       ]);
       if (!dashboard.user) {
         router.replace("/register");
         return;
       }
-      setData({ user: dashboard.user, x3: x3.packages, x4: x4.packages });
+      setData({ user: dashboard.user, x3: x3.packages, x4: x4.packages, booster });
     } catch (cause) {
       if (cause instanceof Error && cause.message === "UNAUTHENTICATED") {
         router.replace("/login");
@@ -109,7 +112,9 @@ export default function RealDashboard() {
             <div className="home-action-grid">
               <HomeAction href="/packages" label="Buy Package" icon={PackagePlus} />
               <HomeAction href="/packages" label="Upgrade Package" icon={ArrowUpCircle} />
-              <HomeAction href="/booster" label="Booster Topup" icon={Rocket} />
+              <HomeAction href="/booster" label="Booster Topup" icon={Rocket}>
+                <BoosterCountdown serverTime={data.booster.server_time} nextEntryAt={data.booster.next_entry_at} eligibility={data.booster.eligibility} onRefresh={load} compact />
+              </HomeAction>
               <HomeAction href="/team" label="Invite" icon={UserPlus} />
             </div>
           </section>
@@ -157,15 +162,17 @@ function HomeAction({
   href,
   label,
   icon: Icon,
+  children,
 }: {
   href: string;
   label: string;
   icon: typeof Gift;
+  children?: React.ReactNode;
 }) {
   return (
-    <Link href={href} className="home-action-card">
+    <Link href={href} className="home-action-card" aria-label={label}>
       <span><Icon size={20} /></span>
-      <b>{label}</b>
+      <span className="home-action-copy"><b>{label}</b>{children}</span>
     </Link>
   );
 }

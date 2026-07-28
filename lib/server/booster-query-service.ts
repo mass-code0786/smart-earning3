@@ -12,7 +12,7 @@ export async function getBoosterDashboard(wallet:string){
    COALESCE(sum(amount_token_units) FILTER(WHERE reason='C_POSITION_REFUND'),0)::text refunds,
    COALESCE(sum(amount_token_units) FILTER(WHERE reason='ENTRY_DEDUCTION'),0)::text deductions
    FROM booster_wallet_ledger WHERE user_id=$1`,[id]),
-  query<{next_entry_at:string|null}>("SELECT next_entry_at FROM booster_memberships WHERE user_id=$1",[id]),
+  query<{last_entry_at:string|null;next_entry_at:string|null}>("SELECT last_entry_at,next_entry_at FROM booster_memberships WHERE user_id=$1",[id]),
   query(`SELECT e.id,e.cycle_number,e.status,e.created_at,e.completed_at,
    COALESCE((SELECT jsonb_agg(jsonb_build_object('slotNumber',p.slot_number,'wallet',u.wallet_address)
     ORDER BY p.slot_number) FROM booster_positions p JOIN users u ON u.id=p.placed_user_id WHERE p.owner_entry_id=e.id),'[]') positions
@@ -36,10 +36,13 @@ export async function getBoosterDashboard(wallet:string){
   ) q),0)::int pending_positions
   FROM booster_entries e WHERE owner_user_id=$1`,[id]);
  const balance=BigInt(String(totals.rows[0]?.balance||"0"));
- const nextEntryAt=member.rows[0]?.next_entry_at||null;
- const eligibility=balance<2_500_000n?"INSUFFICIENT_BALANCE"
+ const membership=member.rows[0],boosterActive=Boolean(membership);
+ const lastRunAt=membership?.last_entry_at||null,nextEntryAt=membership?.next_entry_at||null;
+ const eligibility=!boosterActive?"INACTIVE":balance<2_500_000n?"INSUFFICIENT_BALANCE"
   :!nextEntryAt?"ERROR":new Date(nextEntryAt).getTime()<=serverTime.getTime()?"DUE":"NOT_DUE";
  return{...totals.rows[0],...stats.rows[0],nextEntryAt,
+  boosterActive,lastRunAt,nextEligibleAt:nextEntryAt,
+  remainingSeconds:nextEntryAt?Math.max(0,Math.ceil((new Date(nextEntryAt).getTime()-serverTime.getTime())/1000)):0,
   server_time:serverTime.toISOString(),next_entry_at:nextEntryAt,
   booster_wallet_balance:balance.toString(),eligibility,status:eligibility,
   entries:entries.rows,walletHistory:walletHistory.rows,entryHistory:entryHistory.rows,
