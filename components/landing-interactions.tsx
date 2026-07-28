@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ShieldCheck, Wallet } from "lucide-react";
+import { ArrowLeft, Wallet } from "lucide-react";
 import { RegistrationForm } from "@/components/registration-form";
 import { switchToTestnet, walletLogin, WalletLoginError } from "@/lib/client/wallet";
 
@@ -119,9 +119,9 @@ export function LandingActionButtons({ compact = false }: { compact?: boolean })
 export function LandingInlinePanel({ initialSponsor, registrationEnabled }: { initialSponsor: string; registrationEnabled: boolean }) {
   const { mode, busy, status, error, wrongNetwork, cancel, switchNetwork } = useLanding();
   if (mode === "idle") return null;
-  return <section id="landing-inline-auth" className="landing-inline-auth glass">
-    <header>
-      <div>{mode === "connect" ? <Wallet size={20}/> : <ShieldCheck size={20}/>}<span><small>{mode === "connect" ? "SECURE ACCESS" : "NEW ACCOUNT"}</small><h2>{mode === "connect" ? "Connect Wallet" : "Signup"}</h2></span></div>
+  return <section id="landing-inline-auth" className={`landing-inline-auth glass ${mode === "signup" ? "is-signup" : ""}`}>
+    <header className={mode === "signup" ? "signup-header" : ""}>
+      {mode === "connect" && <div><Wallet size={20}/><span><small>SECURE ACCESS</small><h2>Connect Wallet</h2></span></div>}
       <button type="button" disabled={busy} onClick={cancel}><ArrowLeft size={15}/> Back</button>
     </header>
     {mode === "connect" ? <div className="landing-connect-progress">
@@ -129,6 +129,6 @@ export function LandingInlinePanel({ initialSponsor, registrationEnabled }: { in
       <b>{status || "Wallet connection paused"}</b>
       <p>{error || "Complete the wallet prompts to authenticate securely."}</p>
       {wrongNetwork && <button type="button" disabled={busy} onClick={switchNetwork}>Switch network</button>}
-    </div> : <RegistrationForm registrationEnabled={registrationEnabled} initialSponsor={initialSponsor}/>}
+    </div> : <RegistrationForm compact registrationEnabled={registrationEnabled} initialSponsor={initialSponsor}/>}
   </section>;
 }

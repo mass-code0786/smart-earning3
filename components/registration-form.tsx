@@ -5,7 +5,15 @@ import { useRouter } from "next/navigation";
 import { CheckCircle2, ShieldCheck } from "lucide-react";
 import { registerOnTestnet, walletLogin } from "@/lib/client/wallet";
 
-export function RegistrationForm({ registrationEnabled, initialSponsor = "" }: { registrationEnabled: boolean; initialSponsor?: string }) {
+export function RegistrationForm({
+  registrationEnabled,
+  initialSponsor = "",
+  compact = false,
+}: {
+  registrationEnabled: boolean;
+  initialSponsor?: string;
+  compact?: boolean;
+}) {
   const [sponsor, setSponsor] = useState(initialSponsor);
   const [status, setStatus] = useState("");
   const [hash, setHash] = useState("");
@@ -53,8 +61,8 @@ export function RegistrationForm({ registrationEnabled, initialSponsor = "" }: {
   }
 
   return (
-    <form onSubmit={submit} className="grid gap-4">
-      <div className="grid grid-cols-2 gap-3">
+    <form onSubmit={submit} className={compact ? "grid gap-3" : "grid gap-4"}>
+      {!compact && <div className="grid grid-cols-2 gap-3">
         <div className="rounded-xl border border-gold/20 bg-black/20 p-3">
           <small className="text-white/45">Registration</small>
           <b className="mt-1 block text-gold">2 USDT</b>
@@ -63,13 +71,13 @@ export function RegistrationForm({ registrationEnabled, initialSponsor = "" }: {
           <small className="text-white/45">Network fee</small>
           <b className="mt-1 block">BNB gas, separate</b>
         </div>
-      </div>
-      <div className="rounded-xl border border-white/10 bg-black/20 p-3 text-xs text-white/55">
+      </div>}
+      {!compact && <div className="rounded-xl border border-white/10 bg-black/20 p-3 text-xs text-white/55">
         <p>The unified contract forwards the full $2 payment to treasury and records $1 Registration Magic accounting.</p>
         <p className="mt-2">Only BNB Smart Chain Testnet (chain ID 97) is enabled.</p>
-      </div>
-      <label className="text-xs text-white/60">
-        Sponsor wallet
+      </div>}
+      <label className="text-xs font-medium text-white">
+        {compact ? "Sponsor Wallet" : "Sponsor wallet"}
         <input
           required
           value={sponsor}
@@ -83,12 +91,12 @@ export function RegistrationForm({ registrationEnabled, initialSponsor = "" }: {
         disabled={busy || !registrationEnabled}
         className="flex items-center justify-center gap-2 rounded-xl bg-gold p-4 text-sm font-bold text-black disabled:opacity-50"
       >
-        <ShieldCheck size={17} />
-        {busy ? "Processing…" : "Register with 2 USDT"}
+        {!compact && <ShieldCheck size={17} />}
+        {busy ? "Processing…" : compact ? "Signup" : "Register with 2 USDT"}
       </button>
       {!registrationEnabled && (
         <p role="alert" className="rounded-xl border border-[#e9ad45]/25 bg-[#e9ad45]/5 p-3 text-xs leading-5 text-[#e9c47c]">
-          BSC Testnet registration configuration is incomplete
+          {compact ? "Signup is temporarily unavailable" : "BSC Testnet registration configuration is incomplete"}
         </p>
       )}
       {status && (

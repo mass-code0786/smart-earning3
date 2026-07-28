@@ -10,8 +10,8 @@ vi.mock("@/lib/client/wallet", async importOriginal => ({
   walletLogin: walletLoginMock, switchToTestnet: switchMock,
 }));
 vi.mock("@/components/registration-form", () => ({
-  RegistrationForm: ({ initialSponsor }: { initialSponsor: string }) =>
-    <div data-testid="registration-form">Sponsor: {initialSponsor}</div>,
+  RegistrationForm: ({ initialSponsor, compact }: { initialSponsor: string; compact?: boolean }) =>
+    <div data-compact={compact} data-testid="registration-form">Sponsor: {initialSponsor}</div>,
 }));
 
 import {
@@ -40,6 +40,10 @@ describe("landing inline wallet actions", () => {
     render(<Subject/>);
     fireEvent.click(screen.getAllByRole("button", { name: "Signup" })[index]);
     expect(screen.getByTestId("registration-form")).toHaveTextContent(sponsor);
+    expect(screen.getByTestId("registration-form")).toHaveAttribute("data-compact", "true");
+    expect(screen.getByRole("button", { name: "Back" })).toBeInTheDocument();
+    expect(screen.queryByText("NEW ACCOUNT")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Signup" })).not.toBeInTheDocument();
     expect(push).not.toHaveBeenCalled();
   });
 
