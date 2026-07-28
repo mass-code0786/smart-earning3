@@ -35,7 +35,7 @@ describe("wallet login UI", () => {
       resolve = () => done({ registered: true });
     }));
     render(<WalletLogin />);
-    const button = screen.getByRole("button", { name: "Connect & Sign" });
+    const button = screen.getByRole("button", { name: "Connect" });
     fireEvent.click(button);
     fireEvent.click(button);
     expect(walletLoginMock).toHaveBeenCalledTimes(1);
@@ -55,19 +55,19 @@ describe("wallet login UI", () => {
   ] as const)("shows %s and always resets loading", async (code, message) => {
     walletLoginMock.mockRejectedValue(new WalletLoginError(code, message));
     render(<WalletLogin />);
-    fireEvent.click(screen.getByRole("button", { name: "Connect & Sign" }));
+    fireEvent.click(screen.getByRole("button", { name: "Connect" }));
     expect(await screen.findByRole("status")).toHaveTextContent(message);
-    expect(screen.getByRole("button", { name: "Connect & Sign" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Connect" })).toBeEnabled();
   });
 
-  it("offers a BNB Testnet switch action for the wrong chain", async () => {
+  it("offers a network switch action for the wrong chain", async () => {
     walletLoginMock.mockRejectedValue(
       new WalletLoginError("WRONG_NETWORK", "Switch to BNB Smart Chain Testnet"),
     );
     render(<WalletLogin />);
-    fireEvent.click(screen.getByRole("button", { name: "Connect & Sign" }));
+    fireEvent.click(screen.getByRole("button", { name: "Connect" }));
     expect(await screen.findByRole("button", {
-      name: "Switch to BNB Smart Chain Testnet",
+      name: "Switch network",
     })).toBeEnabled();
   });
 
@@ -78,7 +78,7 @@ describe("wallet login UI", () => {
       registered: false,
     });
     render(<WalletLogin />);
-    fireEvent.click(screen.getByRole("button", { name: "Connect & Sign" }));
+    fireEvent.click(screen.getByRole("button", { name: "Connect" }));
     await waitFor(() => expect(push).toHaveBeenCalledWith("/register"));
   });
 });

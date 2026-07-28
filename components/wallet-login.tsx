@@ -17,7 +17,7 @@ export function WalletLogin() {
     locked.current = true;
     setBusy(true);
     setWrongNetwork(false);
-    setStatus("Connect BNB Testnet wallet and sign the nonce message.");
+    setStatus("Open your wallet and approve the secure login request.");
     try {
       const session = await walletLogin();
       setStatus("Wallet verified.");
@@ -26,7 +26,7 @@ export function WalletLogin() {
     } catch (error) {
       const known = error instanceof WalletLoginError;
       setWrongNetwork(known && error.code === "WRONG_NETWORK");
-      setStatus(known ? error.message : "Wallet login failed");
+      setStatus(known && error.code === "WRONG_NETWORK" ? "Please switch to the supported network and try again." : known ? error.message : "Wallet login failed");
     } finally {
       locked.current = false;
       setBusy(false);
@@ -40,7 +40,7 @@ export function WalletLogin() {
     try {
       await switchToTestnet();
       setWrongNetwork(false);
-      setStatus("BNB Smart Chain Testnet selected. Continue to connect and sign.");
+      setStatus("Supported network selected. Continue to connect.");
     } catch (error) {
       setStatus(error instanceof WalletLoginError ? error.message : "Wallet could not switch networks");
     } finally {
@@ -51,10 +51,10 @@ export function WalletLogin() {
 
   return <>
     <button type="button" disabled={busy} onClick={login} className="auth-primary">
-      <Wallet size={17}/>{busy ? "Waiting for wallet…" : "Connect & Sign"}
+      <Wallet size={17}/>{busy ? "Waiting for wallet…" : "Connect"}
     </button>
     {wrongNetwork && <button type="button" disabled={busy} onClick={switchNetwork} className="auth-secondary">
-      Switch to BNB Smart Chain Testnet
+      Switch network
     </button>}
     {status && <p role="status" className="auth-status">{status}</p>}
   </>;

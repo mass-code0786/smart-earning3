@@ -40,15 +40,15 @@ export default function Page() {
 
       <main className="relative z-[2] mx-auto max-w-7xl px-4 pb-20">
         <section className="grid min-h-[75vh] items-center py-16 lg:grid-cols-2">
-          <div>
+          <div className="text-center">
             <h1 className="text-5xl font-semibold leading-[1.05] sm:text-7xl">
               One premium view of a <span className="gold-text">connected ecosystem.</span>
             </h1>
-            <p className="mt-6 max-w-xl text-base leading-7 text-white/50">
+            <p className="mx-auto mt-6 max-w-xl text-base leading-7 text-white/50">
               Connect your wallet to access matrix, autopool, booster, dividend and level modules.
               Potential rewards depend on platform rules.
             </p>
-            <div className="mx-auto mt-8 flex w-full max-w-[280px] flex-col gap-3 lg:mx-0">
+            <div className="mx-auto mt-8 flex w-full max-w-[280px] flex-col gap-3">
               <Link className="flex h-12 w-full items-center justify-center rounded-xl bg-gold px-5 text-sm font-bold text-white" href="/login">
                 Connect
               </Link>
@@ -66,13 +66,17 @@ export default function Page() {
           </div>
         </section>
 
-        <SectionTitle eyebrow="Platform ecosystem" title="Six modules. One focused workspace." />
+        <div className="text-center">
+          <SectionTitle eyebrow="Platform ecosystem" title="Six modules. One focused workspace." />
+        </div>
         <div className="grid gap-3 md:grid-cols-3">
           {modules.map(([name, description], index) => (
-            <GlassCard className="p-5" key={name}>
-              <span className="text-gold">{index % 2 ? <Network /> : <Zap />}</span>
-              <h3 className="mt-5 font-semibold">{name}</h3>
-              <p className="mt-2 text-xs leading-5 text-white/45">{description}</p>
+            <GlassCard className="flex min-h-[78px] items-center gap-3 px-4 py-2.5" key={name}>
+              <span className="shrink-0 text-gold">{index % 2 ? <Network /> : <Zap />}</span>
+              <div className="min-w-0 flex-1">
+                <h3 className="font-semibold text-white">{name}</h3>
+                <p className="mt-1 text-xs leading-4 text-white/75">{description}</p>
+              </div>
             </GlassCard>
           ))}
         </div>

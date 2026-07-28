@@ -4,23 +4,25 @@ export function AuthFrame({
   title,
   copy,
   children,
+  fullPage = false,
 }: {
   title: string;
   copy: string;
   children: React.ReactNode;
+  fullPage?: boolean;
 }) {
   return (
     <div className="public-theme auth-theme fixed-background-shell">
       <MetaverseBackground />
-      <div className="auth-frame">
-        <GlassCard className="auth-card">
+      <div className={`auth-frame ${fullPage ? "auth-login-frame" : ""}`}>
+        <GlassCard className={`auth-card ${fullPage ? "auth-login-card" : ""}`}>
           <Logo />
           <h1>{title}</h1>
           <p className="auth-copy">{copy}</p>
           {children}
-          <p className="auth-footnote">
+          {!fullPage && <p className="auth-footnote">
             BNB Smart Chain Testnet · Gas is always paid separately in BNB
-          </p>
+          </p>}
         </GlassCard>
       </div>
     </div>

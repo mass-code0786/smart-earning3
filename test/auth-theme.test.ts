@@ -18,4 +18,10 @@ describe("landing/login dashboard token reuse", () => {
     expect(css).toContain("@media(max-width:370px)");
     expect(css).toContain(".auth-frame{padding-left:10px;padding-right:10px}");
   });
+
+  it("uses a full dynamic viewport layout for Wallet Login only", () => {
+    expect(css).toContain(".auth-login-frame{min-height:100dvh");
+    expect(css).toContain(".auth-login-card{display:flex;min-height:calc(100dvh");
+    expect(css).toContain("max-width:none");
+  });
 });

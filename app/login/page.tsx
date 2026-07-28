@@ -5,13 +5,14 @@ import { WalletLogin } from "@/components/wallet-login";
 export default function Page() {
   return (
     <AuthFrame
-      title="Wallet login"
-      copy="Connect on BNB Testnet and sign a one-time nonce. Signing is free and cannot move funds."
+      title="Connect Wallet"
+      copy="Connect your wallet securely to access your Smart Earning account."
+      fullPage
     >
       <WalletLogin />
-      <p className="mt-5 text-center text-xs text-white/40">
-        Not registered?{" "}
-        <Link className="text-gold" href="/register">Register with USDT</Link>
+      <p className="auth-login-signup">
+        New user?{" "}
+        <Link className="text-gold" href="/register">Signup</Link>
       </p>
     </AuthFrame>
   );
