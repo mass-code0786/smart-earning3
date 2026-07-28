@@ -1,5 +1,6 @@
 require("@nomicfoundation/hardhat-ethers");
 require("@nomicfoundation/hardhat-chai-matchers");
+require("@nomicfoundation/hardhat-verify");
 
 const privateKey = process.env.DEPLOYER_PRIVATE_KEY;
 
@@ -22,5 +23,8 @@ module.exports = {
       chainId: 97,
       accounts: privateKey ? [privateKey] : [],
     },
+  },
+  etherscan: {
+    apiKey: process.env.BSCSCAN_API_KEY || "",
   },
 };

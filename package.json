@@ -8,7 +8,12 @@
     "contract:compile": "hardhat compile",
     "contract:test": "hardhat test",
     "app:test": "vitest run",
-    "deploy:unified:testnet": "hardhat run scripts/deploy-contract.cjs --network bscTestnet",
+    "deploy:mock-usdt:testnet": "node --env-file=.env scripts/deploy-mock-usdt.cjs",
+    "deploy:unified:testnet": "node --env-file=.env node_modules/hardhat/internal/cli/cli.js run scripts/deploy-contract.cjs --network bscTestnet",
+    "verify:mock-usdt:testnet": "node --env-file=.env node_modules/hardhat/internal/cli/cli.js run scripts/verify-mock-usdt.cjs --network bscTestnet",
+    "verify:smart-earning:testnet": "node --env-file=.env node_modules/hardhat/internal/cli/cli.js run scripts/verify-smart-earning.cjs --network bscTestnet",
+    "preflight:deploy:testnet": "node --env-file=.env scripts/preflight-testnet-deployment.cjs",
+    "check:deployment:testnet": "node --env-file=.env scripts/check-testnet-deployment.cjs",
     "migrate": "tsx scripts/migrate.ts",
     "seed:genesis": "tsx scripts/seed-genesis.ts",
     "indexer": "tsx scripts/indexer.ts",
@@ -22,9 +27,9 @@
     "financial:audit": "tsx scripts/financial-correction-audit.ts",
     "operations:check": "tsx scripts/operations-check.ts",
     "operations:testnet-smoke": "tsx scripts/operations-testnet-smoke.ts",
-    "frontend:audit": "tsx scripts/frontend-browser-audit.ts"
-    ,"local:e2e": "node scripts/local-e2e.cjs"
-    ,"local:e2e:verify": "node scripts/local-e2e.cjs --verify-only"
+    "frontend:audit": "tsx scripts/frontend-browser-audit.ts",
+    "local:e2e": "node scripts/local-e2e.cjs",
+    "local:e2e:verify": "node scripts/local-e2e.cjs --verify-only"
   },
   "dependencies": {
     "@types/node": "latest",
@@ -47,6 +52,7 @@
   "devDependencies": {
     "@nomicfoundation/hardhat-chai-matchers": "^2.1.0",
     "@nomicfoundation/hardhat-ethers": "^3.1.0",
+    "@nomicfoundation/hardhat-verify": "^2.1.3",
     "@openzeppelin/contracts": "^5.6.1",
     "@testing-library/jest-dom": "^7.0.0",
     "@testing-library/react": "^16.3.2",
