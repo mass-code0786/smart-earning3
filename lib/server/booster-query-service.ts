@@ -23,8 +23,10 @@ export async function getBoosterDashboard(wallet:string){
    FROM booster_income_history i WHERE i.owner_user_id=$1 UNION ALL
    SELECT p.id,'PLACEMENT',p.slot_number,'0',p.created_at,p.owner_entry_id FROM booster_positions p
    WHERE p.placed_user_id=$1 ORDER BY created_at DESC LIMIT 300`,[id]),
-  query(`SELECT id,amount_token_units::text amount,source_reference,tx_hash,status,created_at
-    FROM booster_top_up_history WHERE user_id=$1 ORDER BY created_at DESC LIMIT 100`,[id]),
+  query(`SELECT t.id,t.amount_token_units::text amount,t.source_reference,t.tx_hash,t.status,t.sender_address,t.created_at,
+      l.metadata->>'previousBalance' previous_balance,l.metadata->>'newBalance' new_balance
+    FROM booster_top_up_history t LEFT JOIN booster_wallet_ledger l ON l.top_up_id=t.id
+    WHERE t.user_id=$1 ORDER BY t.created_at DESC LIMIT 100`,[id]),
  ]);
  const stats=await query(`SELECT count(*)::int total_entries,count(*) FILTER(WHERE status='ACTIVE')::int active_entries,
   count(*) FILTER(WHERE status='COMPLETED')::int completed_entries,

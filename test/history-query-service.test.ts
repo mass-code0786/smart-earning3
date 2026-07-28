@@ -47,4 +47,14 @@ describe("unified history read model",()=>{
   expect(query.mock.calls[0][1].slice(0,6)).toEqual([wallet,"MATRIX","COMPLETED","0xabc",expect.any(Date),expect.any(Date)]);
   expect(String(query.mock.calls[0][0])).toContain("JOIN viewer v");
  });
+ it.each([
+  ["DIRECT_INCOME","DIRECT_INCOME"],["MAGIC_LEVEL","MAGIC_LEVEL_INCOME"],
+  ["X3","X3"],["X4","X4"],["BOOSTER_INCOME","BOOSTER_INCOME"],
+ ])("maps menu filter %s to the read-only type filter %s",async(category,typeFilter)=>{
+  query.mockResolvedValueOnce({rows:[]});
+  const{getHistory}=await import("@/lib/server/history-query-service");
+  await getHistory(wallet,{category});
+  expect(query.mock.calls.at(-1)?.[1][1]).toBeNull();
+  expect(query.mock.calls.at(-1)?.[1][9]).toBe(typeFilter);
+ });
 });

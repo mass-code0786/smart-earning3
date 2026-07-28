@@ -4,6 +4,13 @@ import { ApiError } from "./http";
 
 export const HISTORY_CATEGORIES = ["PACKAGES","REFERRALS","INCOME","MATRIX","AUTOPOOL","BOOSTER","MAGIC","DIVIDEND","WITHDRAWALS","WALLET"] as const;
 export type HistoryCategory = typeof HISTORY_CATEGORIES[number];
+const HISTORY_TYPE_FILTERS: Record<string, string> = {
+  DIRECT_INCOME: "DIRECT_INCOME",
+  MAGIC_LEVEL: "MAGIC_LEVEL_INCOME",
+  X3: "X3",
+  X4: "X4",
+  BOOSTER_INCOME: "BOOSTER_INCOME",
+};
 
 export type HistoryFilters = {
   category?: string | null;
@@ -44,7 +51,9 @@ function optionalDate(value: string | null | undefined, end = false) {
 
 export async function getHistory(walletInput: string, filters: HistoryFilters = {}) {
   const wallet = normalizeWallet(walletInput);
-  const category = filters.category?.toUpperCase() || null;
+  const requestedCategory = filters.category?.toUpperCase() || null;
+  const typeFilter = requestedCategory ? HISTORY_TYPE_FILTERS[requestedCategory] || null : null;
+  const category = typeFilter ? null : requestedCategory;
   if (category && !HISTORY_CATEGORIES.includes(category as HistoryCategory)) {
     throw new ApiError(400, "Invalid history category", "INVALID_CATEGORY");
   }
@@ -53,7 +62,7 @@ export async function getHistory(walletInput: string, filters: HistoryFilters = 
   const values = [
     wallet, category, filters.status?.trim().toUpperCase() || null,
     filters.search?.trim() || null, optionalDate(filters.from), optionalDate(filters.to, true),
-    cursor?.createdAt || null, cursor?.id || null, limit + 1,
+    cursor?.createdAt || null, cursor?.id || null, limit + 1, typeFilter,
   ];
   const result = await query<any>(
     `WITH RECURSIVE viewer AS (
@@ -166,9 +175,11 @@ export async function getHistory(walletInput: string, filters: HistoryFilters = 
        JOIN booster_entries e ON e.id=b.owner_entry_id
        UNION ALL
        SELECT 'booster-topup:'||b.id,'BOOSTER_TOP_UP','BOOSTER',b.amount_token_units::text,'USDT',b.sender_address,
-         NULL,NULL,'BOOSTER',NULL,NULL,'CONFIRMED',b.tx_hash,b.created_at,'Booster Wallet topped up',
-         NULL,NULL,NULL,jsonb_build_object('blockNumber',b.block_number)
+         NULL,NULL,'BOOSTER',NULL,NULL,b.status,b.tx_hash,b.created_at,'Booster Wallet topped up',
+         NULL,NULL,NULL,jsonb_build_object('blockNumber',b.block_number,
+           'previousBalance',l.metadata->>'previousBalance','newBalance',l.metadata->>'newBalance')
        FROM booster_top_up_history b JOIN viewer v ON v.id=b.user_id
+       LEFT JOIN booster_wallet_ledger l ON l.top_up_id=b.id
        UNION ALL
        SELECT 'booster-run:'||s.id,'BOOSTER_RUN','BOOSTER',NULL,NULL,NULL,NULL,NULL,'BOOSTER',
          e.cycle_number,NULL,s.status,NULL,s.created_at,'Booster run processed',NULL,NULL,e.placement_slot,
@@ -195,6 +206,7 @@ export async function getHistory(walletInput: string, filters: HistoryFilters = 
      )
      SELECT * FROM history
      WHERE ($2::text IS NULL OR category=$2)
+       AND ($10::text IS NULL OR type=$10 OR ($10='X3' AND type LIKE 'X3_%') OR ($10='X4' AND type LIKE 'X4_%'))
        AND ($3::text IS NULL OR upper(status)=$3)
        AND ($4::text IS NULL OR source_wallet ILIKE '%'||$4||'%' OR tx_hash ILIKE '%'||$4||'%'
          OR package_id::text=$4 OR income_type ILIKE '%'||$4||'%')
@@ -207,7 +219,7 @@ export async function getHistory(walletInput: string, filters: HistoryFilters = 
   const hasMore = result.rows.length > limit;
   const items = result.rows.slice(0, limit).map((row: any) => {
     const metadata = { ...(row.metadata || {}) };
-    for (const key of ["cycleEarnings","directIncomeGenerated","fee","netAmount"]) {
+    for (const key of ["cycleEarnings","directIncomeGenerated","fee","netAmount","previousBalance","newBalance"]) {
       if (metadata[key] !== undefined && metadata[key] !== null) metadata[key] = usdt(String(metadata[key]));
     }
     return {

@@ -38,5 +38,6 @@ export const config = {
     "/income/:path*",
     "/magic-level/:path*",
     "/history/:path*",
+    "/menu/:path*",
   ],
 };

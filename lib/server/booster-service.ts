@@ -233,7 +233,12 @@ export async function verifyBoosterTopUp(walletInput:string,txHashInput:string,e
     if(duplicate.rows[0])return{topUpId:duplicate.rows[0].id,duplicate:true};
     const user=(await client.query<{id:string}>("SELECT id FROM users WHERE wallet_address=$1 AND status='ACTIVE'",[wallet])).rows[0];
     if(!user)throw new ApiError(404,"User is not indexed","USER_NOT_FOUND");
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))",[`booster:top-up-user:${user.id}`]);
     await client.query("INSERT INTO booster_memberships(user_id) VALUES($1) ON CONFLICT(user_id) DO NOTHING",[user.id]);
+    const previousBalance=BigInt(String((await client.query<{balance:string}>(`SELECT COALESCE(sum(
+      CASE direction WHEN 'CREDIT' THEN amount_token_units ELSE -amount_token_units END),0)::text balance
+      FROM booster_wallet_ledger WHERE user_id=$1`,[user.id])).rows[0].balance));
+    const newBalance=previousBalance+expectedAmount;
     const topUp=(await client.query<{id:string}>(`INSERT INTO booster_top_up_history(
       user_id,tx_hash,token_address,sender_address,recipient_address,amount_token_units,block_number,confirmations,
       source_reference,status,treasury_address,treasury_amount_token_units
@@ -244,9 +249,26 @@ export async function verifyBoosterTopUp(walletInput:string,txHashInput:string,e
       user_id,direction,amount_token_units,reason,top_up_id,idempotency_key,metadata
     ) VALUES($1,'CREDIT',$2,'MANUAL_TOP_UP',$3,$4,$5)`,
     [user.id,expectedAmount.toString(),topUp.id,`booster:top-up:${topUpEvidence.sourceReference}`,
-      JSON.stringify({txHash,sourceReference:topUpEvidence.sourceReference,status:"CONFIRMED"})]);
+      JSON.stringify({txHash,sourceReference:topUpEvidence.sourceReference,status:"CONFIRMED",
+        previousBalance:previousBalance.toString(),newBalance:newBalance.toString()})]);
     await audit(client,"MANUAL_TOP_UP",`booster:audit:top-up:${topUpEvidence.sourceReference}`,
       {userId:user.id,metadata:{amount:expectedAmount.toString(),txHash,sourceReference:topUpEvidence.sourceReference}});
-    return{topUpId:topUp.id,duplicate:false};
+    return{topUpId:topUp.id,duplicate:false,previousBalance:previousBalance.toString(),newBalance:newBalance.toString()};
   });
+}
+
+export async function prepareBoosterTopUp(walletInput:string,amount:bigint){
+  const wallet=normalizeWallet(walletInput);
+  if(amount<=0n)throw new ApiError(400,"Top-up amount must be greater than zero","INVALID_TOP_UP");
+  const config=getServerConfig(),provider=getProvider();
+  const network=await provider.getNetwork();
+  if(Number(network.chainId)!==CHAIN_ID)throw new ApiError(503,"RPC is connected to the wrong network","WRONG_RPC_NETWORK");
+  const user=(await query<{id:string}>("SELECT id FROM users WHERE wallet_address=$1 AND status='ACTIVE'",[wallet])).rows[0];
+  if(!user)throw new ApiError(404,"User is not indexed","USER_NOT_FOUND");
+  const token=new Contract(config.BSC_TESTNET_USDT_ADDRESS,["function balanceOf(address) view returns(uint256)"],provider);
+  const availableBalance=BigInt(await token.balanceOf(wallet));
+  if(amount>availableBalance)throw new ApiError(422,"Top-up amount exceeds available USDT balance","INSUFFICIENT_USDT");
+  return{amountTokenUnits:amount.toString(),availableBalanceTokenUnits:availableBalance.toString(),
+    network:CHAIN_ID===97?"BNB Smart Chain Testnet":"BNB Smart Chain Mainnet",chainId:CHAIN_ID,
+    gasCurrency:CHAIN_ID===97?"tBNB":"BNB"};
 }

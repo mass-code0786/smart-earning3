@@ -63,6 +63,8 @@ function HistoryCard({item}:{item:Item}){
    {typeof item.metadata.rejectionReason==="string"&&item.metadata.rejectionReason&&<Field label="Rejection reason" value={item.metadata.rejectionReason}/>}
    {typeof item.metadata.parentWallet==="string"&&<Field label="Parent wallet" value={short(item.metadata.parentWallet)}/>}
    {typeof item.metadata.nextEligibleAt==="string"&&<Field label="Next eligible" value={new Date(item.metadata.nextEligibleAt).toLocaleString()}/>}
+   {typeof item.metadata.previousBalance==="string"&&<Field label="Previous balance" value={`${item.metadata.previousBalance} USDT`}/>}
+   {typeof item.metadata.newBalance==="string"&&<Field label="New balance" value={`${item.metadata.newBalance} USDT`} accent/>}
   </div>
   {item.txHash&&<a className="history-reference" href={item.txHash.startsWith("0x")?`https://testnet.bscscan.com/tx/${item.txHash}`:"#"} target={item.txHash.startsWith("0x")?"_blank":undefined} rel="noreferrer"><span>{item.txHash.startsWith("0x")?short(item.txHash):item.txHash}</span>{item.txHash.startsWith("0x")&&<ExternalLink size={12}/>}</a>}
  </article>

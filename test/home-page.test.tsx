@@ -1,9 +1,10 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+const { push } = vi.hoisted(() => ({ push: vi.fn() }));
 vi.mock("next/navigation", () => ({
   usePathname: () => "/dashboard",
-  useRouter: () => ({ replace: vi.fn() }),
+  useRouter: () => ({ replace: vi.fn(), push }),
 }));
 
 import RealDashboard from "@/components/real-dashboard";
@@ -111,8 +112,6 @@ describe("locked mobile Home composition", () => {
       expect(screen.getAllByRole("link", { name: label }).length).toBeGreaterThan(0);
     }
     fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
-    expect(screen.getByRole("complementary", { name: "History Center menu" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /All History/ })).toHaveAttribute("href", "/history");
-    expect(screen.getByRole("link", { name: /Recycle History/ })).toHaveAttribute("href", "/history?category=MATRIX");
+    expect(push).toHaveBeenCalledWith("/menu");
   });
 });

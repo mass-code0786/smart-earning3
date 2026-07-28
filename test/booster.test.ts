@@ -10,6 +10,12 @@ describe("Booster exact arithmetic",()=>{
   expect(boosterScheduledFor(last,new Date()).toISOString()).toBe("2026-01-01T05:00:00.000Z")});
 });
 describe("Booster Wallet top-up evidence",()=>{
+ it("confirms the contract accepts arbitrary positive top-up amounts",()=>{
+  const contract=readFileSync(resolve(process.cwd(),"contracts/SmartEarning.sol"),"utf8");
+  expect(contract).toContain("function topupBooster(uint256 amount,bytes32 sourceReference)");
+  expect(contract).toContain("if(amount==0) revert UnexpectedTokenTransfer()");
+  expect(contract).not.toMatch(/amount\s*!=\s*BOOSTER_ENTRY_COST|amount\s*==\s*2500000/);
+ });
  it("accepts only the configured token, sender and recipient",()=>{
   const iface=new Interface(["event Transfer(address indexed from,address indexed to,uint256 value)"]);
   const token="0x0000000000000000000000000000000000000001",from="0x0000000000000000000000000000000000000002",to="0x0000000000000000000000000000000000000003";
@@ -23,6 +29,13 @@ describe("Booster Wallet top-up evidence",()=>{
   const source="0x"+"12".repeat(32),event=iface.encodeEventLog(iface.getEvent("BoosterTopup")!,[user,5_000_000n,source]);
   const found=findConfirmedBoosterTopUp([{address:contract,topics:event.topics,data:event.data}],contract,user);
   expect(found.topUp).toEqual({amount:5_000_000n,sourceReference:source});
+ });
+ it("stores one verified history row with previous and new balance metadata",()=>{
+  const service=readFileSync(resolve(process.cwd(),"lib/server/booster-service.ts"),"utf8");
+  expect(service).toContain("INSERT INTO booster_top_up_history");
+  expect(service).toContain("previousBalance:previousBalance.toString()");
+  expect(service).toContain("newBalance:newBalance.toString()");
+  expect(service).toContain("SELECT id FROM booster_top_up_history WHERE tx_hash=$1 OR source_reference=$2");
  });
 });
 describe("Booster naming and isolation",()=>{
