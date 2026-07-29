@@ -56,18 +56,22 @@ describe("exact BSC Testnet registration transaction reconciliation", () => {
   function eventLookupProvider(events: Array<{ hash: string; eventWallet?: string; status?: number }>) {
     return {
       getNetwork: vi.fn(async () => ({ chainId: 97n })),
-      getLogs: vi.fn(async () => events.map((item, index) => {
+      getBlockNumber: vi.fn(async () => 121728500),
+      getLogs: vi.fn(async ({ fromBlock, toBlock }: { fromBlock: number; toBlock: number }) =>
+        events.map((item, index) => {
+          const blockNumber = 121722400 + (index * 3_100);
+          if (blockNumber < fromBlock || blockNumber > toBlock) return null;
         const encoded = iface.encodeEventLog(iface.getEvent("UserRegistered")!, [
           item.eventWallet ?? wallet, sponsor, parent, 1n, 0, 1_000_000n, 1_000_000n,
         ]);
         return {
           address: contract,
           transactionHash: item.hash,
-          blockNumber: 121722400 + index,
+          blockNumber,
           topics: encoded.topics,
           data: encoded.data,
         };
-      })),
+        }).filter((item) => item !== null)),
       getTransactionReceipt: vi.fn(async (hash: string) => {
         const item = events.find((candidate) => candidate.hash === hash);
         return { status: item?.status ?? 1, to: contract, logs: [] };
@@ -91,8 +95,9 @@ describe("exact BSC Testnet registration transaction reconciliation", () => {
     expect(provider.getLogs).toHaveBeenCalledWith(expect.objectContaining({
       address: contract.toLowerCase(),
       fromBlock: 121722387,
-      toBlock: "latest",
+      toBlock: 121725386,
     }));
+    expect(provider.getLogs).toHaveBeenCalledTimes(3);
   });
 
   it("stops safely when no confirmed registration event exists", async () => {
@@ -112,6 +117,20 @@ describe("exact BSC Testnet registration transaction reconciliation", () => {
       contractAddress: contract,
       deploymentBlock: 121722387,
     })).rejects.toMatchObject({ code: "MULTIPLE_REGISTRATION_EVENTS", status: 409 });
+  });
+
+  it("retries a block range after an RPC limit exceeded response", async () => {
+    const provider = eventLookupProvider([{ hash: txHash }]);
+    provider.getLogs
+      .mockRejectedValueOnce(Object.assign(new Error("limit exceeded"), { code: -32005 }));
+
+    await expect(findRegistrationTransactionForWallet(wallet, {
+      provider,
+      contractAddress: contract,
+      deploymentBlock: 121722387,
+      retryDelayMs: 0,
+    })).resolves.toMatchObject({ txHash, wallet: wallet.toLowerCase() });
+    expect(provider.getLogs).toHaveBeenCalledTimes(4);
   });
 
   it("validates and reconciles one successful paid registration transaction", async () => {

@@ -10,6 +10,8 @@ import { query } from "./db";
 
 const txHashSchema = z.string().regex(/^0x[a-fA-F0-9]{64}$/);
 const iface = new Interface(SMART_EARNING_ABI);
+const REGISTRATION_LOG_BLOCK_CHUNK = 3_000;
+const REGISTRATION_LOG_MAX_RETRIES = 4;
 
 type ExactTransactionProvider = {
   getNetwork(): Promise<{ chainId: bigint | number }>;
@@ -31,10 +33,11 @@ type ExactTransactionProvider = {
 
 type RegistrationEventProvider = {
   getNetwork(): Promise<{ chainId: bigint | number }>;
+  getBlockNumber(): Promise<number>;
   getLogs(filter: {
     address: string;
     fromBlock: number;
-    toBlock: "latest";
+    toBlock: number;
     topics: Array<string | null | string[]>;
   }): Promise<ReadonlyArray<{
     address: string;
@@ -53,6 +56,39 @@ type RegistrationEventProvider = {
     }>;
   } | null>;
 };
+
+function isRpcRateLimit(error: unknown) {
+  const candidate = error as {
+    code?: number | string;
+    status?: number;
+    message?: string;
+    error?: { code?: number | string; message?: string };
+  };
+  const code = candidate.code ?? candidate.error?.code;
+  const message = `${candidate.message ?? ""} ${candidate.error?.message ?? ""}`.toLowerCase();
+  return code === -32005
+    || code === "-32005"
+    || candidate.status === 429
+    || message.includes("limit exceeded")
+    || message.includes("rate limit")
+    || message.includes("too many requests");
+}
+
+async function getLogsWithRateLimitRetry(
+  provider: RegistrationEventProvider,
+  filter: Parameters<RegistrationEventProvider["getLogs"]>[0],
+  maxRetries: number,
+  retryDelayMs: number,
+) {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await provider.getLogs(filter);
+    } catch (error) {
+      if (!isRpcRateLimit(error) || attempt >= maxRetries) throw error;
+      await new Promise((resolve) => setTimeout(resolve, retryDelayMs * (2 ** attempt)));
+    }
+  }
+}
 
 type RegistrationVerifier = (
   wallet: string,
@@ -120,6 +156,9 @@ export async function findRegistrationTransactionForWallet(
     provider?: RegistrationEventProvider;
     contractAddress?: string;
     deploymentBlock: number;
+    blockChunkSize?: number;
+    maxRateLimitRetries?: number;
+    retryDelayMs?: number;
   },
 ) {
   const wallet = normalizeWallet(walletInput);
@@ -131,7 +170,10 @@ export async function findRegistrationTransactionForWallet(
   }
 
   const provider = dependencies.provider ?? getProvider();
-  const network = await provider.getNetwork();
+  const [network, latestBlock] = await Promise.all([
+    provider.getNetwork(),
+    provider.getBlockNumber(),
+  ]);
   if (Number(network.chainId) !== CHAIN_ID || CHAIN_ID !== 97) {
     throw new ApiError(503, "RPC is not connected to BNB Testnet", "WRONG_RPC_NETWORK");
   }
@@ -141,38 +183,59 @@ export async function findRegistrationTransactionForWallet(
     throw new ApiError(500, "UserRegistered event is not configured", "EVENT_NOT_CONFIGURED");
   }
   const topics = iface.encodeFilterTopics(event, [wallet]);
-  const logs = await provider.getLogs({
-    address: contractAddress,
-    fromBlock: dependencies.deploymentBlock,
-    toBlock: "latest",
-    topics,
-  });
+  const blockChunkSize = dependencies.blockChunkSize ?? REGISTRATION_LOG_BLOCK_CHUNK;
+  const maxRetries = dependencies.maxRateLimitRetries ?? REGISTRATION_LOG_MAX_RETRIES;
+  const retryDelayMs = dependencies.retryDelayMs ?? 250;
+  if (!Number.isSafeInteger(blockChunkSize) || blockChunkSize < 1 || blockChunkSize > 5_000) {
+    throw new ApiError(503, "Registration event block chunk is invalid", "BLOCK_CHUNK_INVALID");
+  }
 
   const candidates = [];
-  for (const log of logs) {
-    if (normalizeWallet(log.address) !== contractAddress) continue;
-    let parsed;
-    try {
-      parsed = iface.parseLog({ topics: log.topics, data: log.data });
-    } catch {
-      parsed = null;
+  for (
+    let fromBlock = dependencies.deploymentBlock;
+    fromBlock <= latestBlock;
+    fromBlock += blockChunkSize
+  ) {
+    const toBlock = Math.min(fromBlock + blockChunkSize - 1, latestBlock);
+    const logs = await getLogsWithRateLimitRetry(provider, {
+      address: contractAddress,
+      fromBlock,
+      toBlock,
+      topics,
+    }, maxRetries, retryDelayMs);
+
+    for (const log of logs) {
+      if (normalizeWallet(log.address) !== contractAddress) continue;
+      let parsed;
+      try {
+        parsed = iface.parseLog({ topics: log.topics, data: log.data });
+      } catch {
+        parsed = null;
+      }
+      if (!parsed || parsed.name !== "UserRegistered") continue;
+      const registrant = normalizeWallet(String(parsed.args.user));
+      if (registrant !== wallet) continue;
+      const receipt = await provider.getTransactionReceipt(log.transactionHash);
+      if (
+        !receipt
+        || receipt.status !== 1
+        || normalizeWallet(receipt.to || "") !== contractAddress
+      ) continue;
+      candidates.push({
+        txHash: txHashSchema.parse(log.transactionHash).toLowerCase(),
+        blockNumber: log.blockNumber,
+        wallet: registrant,
+        sponsor: normalizeWallet(String(parsed.args.sponsor)),
+        contractAddress,
+      });
+      if (candidates.length > 1) {
+        throw new ApiError(
+          409,
+          "Found multiple confirmed UserRegistered events; refusing to guess",
+          "MULTIPLE_REGISTRATION_EVENTS",
+        );
+      }
     }
-    if (!parsed || parsed.name !== "UserRegistered") continue;
-    const registrant = normalizeWallet(String(parsed.args.user));
-    if (registrant !== wallet) continue;
-    const receipt = await provider.getTransactionReceipt(log.transactionHash);
-    if (
-      !receipt
-      || receipt.status !== 1
-      || normalizeWallet(receipt.to || "") !== contractAddress
-    ) continue;
-    candidates.push({
-      txHash: txHashSchema.parse(log.transactionHash).toLowerCase(),
-      blockNumber: log.blockNumber,
-      wallet: registrant,
-      sponsor: normalizeWallet(String(parsed.args.sponsor)),
-      contractAddress,
-    });
   }
 
   if (candidates.length === 0) {
@@ -180,13 +243,6 @@ export async function findRegistrationTransactionForWallet(
       404,
       "No confirmed UserRegistered event was found for this wallet",
       "REGISTRATION_EVENT_NOT_FOUND",
-    );
-  }
-  if (candidates.length !== 1) {
-    throw new ApiError(
-      409,
-      `Found ${candidates.length} confirmed UserRegistered events; refusing to guess`,
-      "MULTIPLE_REGISTRATION_EVENTS",
     );
   }
   return candidates[0];
