@@ -6,7 +6,10 @@ import { getRecoveryPolicy } from "./x3-recovery-policy";
 
 async function userId(walletInput:string){
   const wallet=normalizeWallet(walletInput);
-  const result=await query<{id:string}>("SELECT id FROM users WHERE wallet_address=$1",[wallet]);
+  const result=await query<{id:string}>(
+    "SELECT id FROM users WHERE lower(wallet_address)=lower($1) AND status='ACTIVE'",
+    [wallet],
+  );
   if(!result.rows[0])throw new ApiError(404,"User is not indexed","USER_NOT_FOUND");
   return result.rows[0].id;
 }

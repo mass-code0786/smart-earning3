@@ -6,6 +6,7 @@ import { normalizeWallet } from "./auth";
 import { CHAIN_ID, getServerConfig } from "./config";
 import { ApiError } from "./http";
 import { verifyAndActivateRegistration } from "./registration-service";
+import { query } from "./db";
 
 const txHashSchema = z.string().regex(/^0x[a-fA-F0-9]{64}$/);
 const iface = new Interface(SMART_EARNING_ABI);
@@ -33,12 +34,55 @@ type RegistrationVerifier = (
   txHash: string,
 ) => Promise<{ registrationId: string; status: string; duplicate: boolean }>;
 
+export async function inspectRegistrationProjection(wallet: string, sponsor: string, txHash: string) {
+  const result = await query<{
+    user_exists: boolean; registration_exists: boolean; relation_exists: boolean;
+    history_exists: boolean; placement_count: number; direct_income_count: number;
+    magic_credit_count: number;
+  }>(
+    `SELECT
+       EXISTS(SELECT 1 FROM users WHERE lower(wallet_address)=lower($1) AND status='ACTIVE') user_exists,
+       EXISTS(SELECT 1 FROM registrations WHERE lower(tx_hash)=lower($3) AND status='CONFIRMED') registration_exists,
+       EXISTS(
+         SELECT 1 FROM referral_relations rr
+         JOIN users child ON child.id=rr.user_id
+         JOIN users parent ON parent.id=rr.sponsor_user_id
+         WHERE lower(child.wallet_address)=lower($1) AND lower(parent.wallet_address)=lower($2)
+       ) relation_exists,
+       EXISTS(
+         SELECT 1 FROM activity_history h
+         WHERE h.event_type='DIRECT_REFERRAL_ACTIVATED'
+           AND lower(h.user_wallet)=lower($2) AND lower(h.source_wallet)=lower($1)
+           AND lower(h.tx_hash)=lower($3)
+       ) history_exists,
+       (SELECT count(*)::int FROM matrix_placements mp JOIN users u ON u.id=mp.user_id
+        WHERE lower(u.wallet_address)=lower($1)) placement_count,
+       (SELECT count(*)::int FROM direct_income_ledger d JOIN users u ON u.id=d.source_user_id
+        WHERE lower(u.wallet_address)=lower($1) AND lower(d.tx_hash)=lower($3)) direct_income_count,
+       (SELECT count(*)::int FROM magic_wallet_ledger m JOIN users u ON u.id=m.user_id
+        WHERE lower(u.wallet_address)=lower($1) AND m.idempotency_key=$4) magic_credit_count`,
+    [wallet, sponsor, txHash, `registration:${txHash.toLowerCase()}:magic`],
+  );
+  const state = result.rows[0];
+  return {
+    ...state,
+    missing: [
+      !state?.user_exists && "user",
+      !state?.registration_exists && "registration",
+      !state?.relation_exists && "referral_relation",
+      !state?.history_exists && "direct_referral_history",
+    ].filter(Boolean),
+  };
+}
+
 export async function reconcileRegistrationTransaction(
   txHashInput: string,
   dependencies: {
     provider?: ExactTransactionProvider;
     verifyRegistration?: RegistrationVerifier;
     contractAddress?: string;
+    dryRun?: boolean;
+    inspectProjection?: typeof inspectRegistrationProjection;
   } = {},
 ) {
   const txHash = txHashSchema.parse(txHashInput).toLowerCase();
@@ -101,6 +145,19 @@ export async function reconcileRegistrationTransaction(
   }
   if (eventSponsor !== intendedSponsor) {
     throw new ApiError(422, "Registration sponsor does not match transaction", "SPONSOR_MISMATCH");
+  }
+
+  if (dependencies.dryRun) {
+    const projection = await (dependencies.inspectProjection ?? inspectRegistrationProjection)(
+      intendedWallet, eventSponsor, txHash,
+    );
+    return {
+      txHash,
+      wallet: intendedWallet,
+      sponsor: eventSponsor,
+      dryRun: true as const,
+      projection,
+    };
   }
 
   const result = await (dependencies.verifyRegistration ?? verifyAndActivateRegistration)(

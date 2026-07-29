@@ -131,4 +131,36 @@ describe("exact BSC Testnet registration transaction reconciliation", () => {
       alreadyReconciled: true,
     });
   });
+
+  it("dry-runs one exact transaction and reports missing projections without writing", async () => {
+    const verifyRegistration = vi.fn();
+    const inspectProjection = vi.fn(async () => ({
+      user_exists: true,
+      registration_exists: true,
+      relation_exists: false,
+      history_exists: false,
+      placement_count: 1,
+      direct_income_count: 1,
+      magic_credit_count: 1,
+      missing: ["referral_relation", "direct_referral_history"],
+    }));
+    const result = await reconcileRegistrationTransaction(txHash, {
+      provider: fixture(),
+      verifyRegistration,
+      inspectProjection,
+      contractAddress: contract,
+      dryRun: true,
+    });
+    expect(result).toMatchObject({
+      dryRun: true,
+      wallet: wallet.toLowerCase(),
+      sponsor: sponsor.toLowerCase(),
+      projection: {
+        missing: ["referral_relation", "direct_referral_history"],
+        direct_income_count: 1,
+        magic_credit_count: 1,
+      },
+    });
+    expect(verifyRegistration).not.toHaveBeenCalled();
+  });
 });

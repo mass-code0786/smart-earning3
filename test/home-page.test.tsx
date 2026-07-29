@@ -114,4 +114,29 @@ describe("locked mobile Home composition", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
     expect(push).toHaveBeenCalledWith("/menu");
   });
+
+  it("renders the Home composition when optional modules fail", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: string) => {
+      if (input === "/api/dashboard") return {
+        ok: true, status: 200,
+        json: async () => ({ user: {
+          wallet_address: "0x000000000000000000000000000000000000dead",
+          direct_count: 0,
+        } }),
+      };
+      return {
+        ok: false, status: 503,
+        json: async () => ({ error: "Optional module unavailable" }),
+      };
+    }));
+    const { container } = render(<RealDashboard />);
+    expect(await screen.findByText("Direct Members")).toBeInTheDocument();
+    expect(screen.queryByText("Home data could not be loaded")).not.toBeInTheDocument();
+    expect(container.querySelectorAll(".home-matrix-packages>div")).toHaveLength(16);
+    expect(container.querySelectorAll(".home-matrix-packages .is-locked")).toHaveLength(16);
+    expect(screen.getByText("Booster inactive")).toBeInTheDocument();
+    expect(screen.getByText("X3 data temporarily unavailable")).toBeInTheDocument();
+    expect(screen.getByText("X4 data temporarily unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Booster data temporarily unavailable")).toBeInTheDocument();
+  });
 });

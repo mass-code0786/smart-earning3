@@ -1,5 +1,5 @@
 import{normalizeWallet}from"./auth";import{query}from"./db";import{ApiError}from"./http";
-async function user(wallet:string){const r=await query<{id:string}>("SELECT id FROM users WHERE wallet_address=$1",[normalizeWallet(wallet)]);
+async function user(wallet:string){const r=await query<{id:string}>("SELECT id FROM users WHERE lower(wallet_address)=lower($1) AND status='ACTIVE'",[normalizeWallet(wallet)]);
 if(!r.rows[0])throw new ApiError(404,"User is not indexed","USER_NOT_FOUND");return r.rows[0].id}
 export async function getBoosterDashboard(wallet:string){
  const id=await user(wallet);

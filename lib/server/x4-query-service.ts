@@ -5,7 +5,10 @@ import{X4_PACKAGE_PRICES}from"./x4-math";
 
 async function indexedUser(walletInput:string){
   const wallet=normalizeWallet(walletInput);
-  const user=await query<{id:string}>("SELECT id FROM users WHERE wallet_address=$1",[wallet]);
+  const user=await query<{id:string}>(
+    "SELECT id FROM users WHERE lower(wallet_address)=lower($1) AND status='ACTIVE'",
+    [wallet],
+  );
   if(!user.rows[0])throw new ApiError(404,"User is not indexed","USER_NOT_FOUND");
   return user.rows[0].id;
 }

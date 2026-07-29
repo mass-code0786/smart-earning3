@@ -7,6 +7,8 @@ import { transaction } from "./db";
 import { ApiError } from "./http";
 import { normalizeWallet } from "./auth";
 import { creditGrossEarning } from "./earning-split-service";
+import { internalHistoryKey, recordReferralHistory } from "./history-service";
+import type { PoolClient } from "pg";
 
 const hashSchema = z.string().regex(/^0x[a-fA-F0-9]{64}$/);
 const iface = new Interface(SMART_EARNING_ABI);
@@ -21,6 +23,70 @@ function registrationEvent(receipt: TransactionReceipt) {
     }
   }
   throw new ApiError(422, "Registration event was not found", "EVENT_NOT_FOUND");
+}
+
+export async function reconcileExistingRegistrationProjection(
+  client: PoolClient,
+  input: {
+    registrationId: string;
+    status: string;
+    userId: string;
+    sponsorUserId: string;
+    wallet: string;
+    sponsor: string;
+    txHash: string;
+    blockNumber: number;
+    confirmedAt: Date;
+  },
+) {
+  const relationInsert = await client.query<{ id: string }>(
+    `INSERT INTO referral_relations(user_id,sponsor_user_id,registration_id)
+     VALUES($1,$2,$3) ON CONFLICT(user_id) DO NOTHING RETURNING id`,
+    [input.userId, input.sponsorUserId, input.registrationId],
+  );
+  const relation = (await client.query<{
+    id: string; sponsor_user_id: string; registration_id: string;
+  }>(
+    "SELECT id,sponsor_user_id,registration_id FROM referral_relations WHERE user_id=$1",
+    [input.userId],
+  )).rows[0];
+  if (!relation ||
+      relation.sponsor_user_id !== input.sponsorUserId ||
+      relation.registration_id !== input.registrationId) {
+    throw new ApiError(409, "Existing referral relation conflicts with the confirmed event", "REFERRAL_CONFLICT");
+  }
+
+  await client.query(
+    `UPDATE users sponsor SET direct_count=(
+       SELECT count(*)::int FROM referral_relations rr WHERE rr.sponsor_user_id=sponsor.id
+     ) WHERE sponsor.id=$1`,
+    [input.sponsorUserId],
+  );
+  const history = await recordReferralHistory(client, {
+    userWallet: input.sponsor,
+    userId: input.sponsorUserId,
+    category: "DIRECT_REFERRAL",
+    eventType: "DIRECT_REFERRAL_ACTIVATED",
+    title: "Direct referral activated",
+    direction: "INFO",
+    sourceWallet: input.wallet,
+    sourceUserId: input.userId,
+    sponsorWallet: input.sponsor,
+    referralLevel: 1,
+    status: "ACTIVE",
+    txHash: input.txHash,
+    blockNumber: input.blockNumber,
+    sourceTable: "referral_relations",
+    sourceRecordId: relation.id,
+    idempotencyKey: internalHistoryKey(
+      "referral_relations", relation.id, "DIRECT_REFERRAL_ACTIVATED", input.sponsor,
+    ),
+    occurredAt: input.confirmedAt,
+  });
+  return {
+    relationCreated: Boolean(relationInsert.rows[0]),
+    historyCreated: !history.duplicate,
+  };
 }
 
 export async function verifyAndActivateRegistration(
@@ -69,12 +135,40 @@ export async function verifyAndActivateRegistration(
   return transaction(async (client) => {
     await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`registration:${txHash}`]);
 
-    const existing = await client.query<{ id: string; status: string }>(
-      "SELECT id, status FROM registrations WHERE tx_hash=$1",
+    const existing = await client.query<{
+      id: string; status: string; user_id: string; sponsor_user_id: string;
+      user_wallet: string; sponsor_wallet: string; block_number: number;
+      confirmed_at: Date;
+    }>(
+      `SELECT r.id,r.status,r.user_id,r.sponsor_user_id,
+              u.wallet_address user_wallet,s.wallet_address sponsor_wallet,
+              r.block_number,r.confirmed_at
+       FROM registrations r JOIN users u ON u.id=r.user_id
+       JOIN users s ON s.id=r.sponsor_user_id WHERE lower(r.tx_hash)=lower($1)`,
       [txHash],
     );
     if (existing.rows[0]) {
-      return { registrationId: existing.rows[0].id, status: existing.rows[0].status, duplicate: true };
+      const row = existing.rows[0];
+      if (normalizeWallet(row.user_wallet) !== wallet || normalizeWallet(row.sponsor_wallet) !== sponsor) {
+        throw new ApiError(409, "Indexed registration conflicts with the confirmed event", "REGISTRATION_CONFLICT");
+      }
+      const projection = await reconcileExistingRegistrationProjection(client, {
+        registrationId: row.id,
+        status: row.status,
+        userId: row.user_id,
+        sponsorUserId: row.sponsor_user_id,
+        wallet,
+        sponsor,
+        txHash,
+        blockNumber: row.block_number,
+        confirmedAt: row.confirmed_at,
+      });
+      return {
+        registrationId: row.id,
+        status: row.status,
+        duplicate: true,
+        repaired: projection.relationCreated || projection.historyCreated,
+      };
     }
     const duplicateWallet = await client.query("SELECT 1 FROM users WHERE wallet_address=$1", [wallet]);
     if (duplicateWallet.rowCount) {
@@ -134,9 +228,12 @@ export async function verifyAndActivateRegistration(
        ) VALUES($1,$2,$3,$4,$5)`,
       [userId,parentResult.rows[0].id,matrixPosition,matrixIndex.toString(),registrationId],
     );
-    await client.query("UPDATE users SET direct_count=direct_count+1 WHERE id=$1", [
-      sponsorResult.rows[0].id,
-    ]);
+    await client.query(
+      `UPDATE users sponsor SET direct_count=(
+         SELECT count(*)::int FROM referral_relations rr WHERE rr.sponsor_user_id=sponsor.id
+       ) WHERE sponsor.id=$1`,
+      [sponsorResult.rows[0].id],
+    );
     await client.query(
       `INSERT INTO magic_wallet_ledger(
         user_id,registration_id,direction,amount_token_units,reason,idempotency_key,metadata

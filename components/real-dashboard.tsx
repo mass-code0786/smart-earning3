@@ -42,7 +42,25 @@ type HomeData = {
   x3: X3Package[];
   x4: X4Package[];
   booster: { server_time: string; next_entry_at: string | null; eligibility: BoosterEligibility };
+  moduleErrors: { x3: boolean; x4: boolean; booster: boolean };
 };
+
+const emptyPackages = [8,16,32,64,128,256,512,1024].map((price, index) => ({
+  packageId: index + 1,
+  priceTokenUnits: String(price * 1_000_000),
+  active: false,
+  slots: [],
+  earnedIncome: "0",
+  totalEarnings: "0",
+}));
+
+function emptyBooster() {
+  return {
+    server_time: new Date().toISOString(),
+    next_entry_at: null,
+    eligibility: "INACTIVE" as BoosterEligibility,
+  };
+}
 
 const shortWallet = (wallet: string) => `${wallet.slice(0, 6)}…${wallet.slice(-4)}`;
 const initials = (wallet: string) => wallet.slice(2, 4).toUpperCase();
@@ -66,17 +84,33 @@ export default function RealDashboard() {
   async function load() {
     setError("");
     try {
-      const [dashboard, x3, x4, booster] = await Promise.all([
-        json("/api/dashboard"),
-        json("/api/x3/packages"),
-        json("/api/x4/packages"),
-        json("/api/booster"),
-      ]);
+      const dashboard = await json("/api/dashboard");
       if (!dashboard.user) {
         router.replace("/register");
         return;
       }
-      setData({ user: dashboard.user, x3: x3.packages, x4: x4.packages, booster });
+      const [x3, x4, booster] = await Promise.allSettled([
+        json("/api/x3/packages"),
+        json("/api/x4/packages"),
+        json("/api/booster"),
+      ]);
+      for (const result of [x3, x4, booster]) {
+        if (result.status === "rejected" &&
+            result.reason instanceof Error && result.reason.message === "UNAUTHENTICATED") {
+          throw result.reason;
+        }
+      }
+      setData({
+        user: dashboard.user,
+        x3: x3.status === "fulfilled" ? x3.value.packages : emptyPackages,
+        x4: x4.status === "fulfilled" ? x4.value.packages : emptyPackages,
+        booster: booster.status === "fulfilled" ? booster.value : emptyBooster(),
+        moduleErrors: {
+          x3: x3.status === "rejected",
+          x4: x4.status === "rejected",
+          booster: booster.status === "rejected",
+        },
+      });
     } catch (cause) {
       if (cause instanceof Error && cause.message === "UNAUTHENTICATED") {
         router.replace("/");
@@ -114,6 +148,7 @@ export default function RealDashboard() {
               <HomeAction href="/packages" label="Upgrade Package" icon={ArrowUpCircle} />
               <HomeAction href="/booster" label="Booster Topup" icon={Rocket}>
                 <BoosterCountdown serverTime={data.booster.server_time} nextEntryAt={data.booster.next_entry_at} eligibility={data.booster.eligibility} onRefresh={load} compact />
+                {data.moduleErrors.booster && <small>Booster data temporarily unavailable</small>}
               </HomeAction>
               <HomeAction href="/team" label="Invite" icon={UserPlus} />
             </div>
@@ -124,12 +159,14 @@ export default function RealDashboard() {
               profit={profit(data.x3.map((item) => item.earnedIncome))}
               packages={data.x3}
               href="/matrix/x3"
+              unavailable={data.moduleErrors.x3}
             />
             <MatrixCard
               kind="X4"
               profit={profit(data.x4.map((item) => item.totalEarnings))}
               packages={data.x4}
               href="/matrix/x4"
+              unavailable={data.moduleErrors.x4}
             />
           </div>
         </div>
@@ -182,11 +219,13 @@ function MatrixCard({
   profit: value,
   packages,
   href,
+  unavailable = false,
 }: {
   kind: "X3" | "X4";
   profit: string;
   packages: (X3Package | X4Package)[];
   href: string;
+  unavailable?: boolean;
 }) {
   return (
     <section className={`home-matrix-card home-matrix-${kind.toLowerCase()}`}>
@@ -202,6 +241,7 @@ function MatrixCard({
           </div>
         ))}
       </div>
+      {unavailable && <small>{kind} data temporarily unavailable</small>}
       <Link href={href}>Preview</Link>
     </section>
   );
