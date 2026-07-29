@@ -6,6 +6,7 @@ import { referralSponsorFromParam } from "@/lib/referral";
 
 const modules = [
   ["Working X3 Matrix", "Package-based X3 placement, hold and recycle records."],
+  ["X4 Matrix", "Package-based X4 placement and earning records."],
   ["Magic Matrix", "Qualified level distribution backed by verified ledger records."],
   ["Smart Packages", "Eight sequential package levels."],
   ["Booster", "Automated entries funded through Booster Wallet."],
@@ -86,10 +87,10 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ r
 
         <section className="grid gap-4 py-20 md:grid-cols-3">
           {steps.map(([label, Icon], index) => (
-            <GlassCard className="p-6" key={label}>
-              <Icon className="text-gold" />
-              <p className="mt-4 text-xs text-white/35">0{index + 1}</p>
-              <h3 className="mt-1">{label}</h3>
+            <GlassCard className="flex min-h-[78px] items-center gap-3 overflow-hidden px-4 py-3 sm:px-5" key={label}>
+              <Icon className="shrink-0 text-gold" />
+              <span className="shrink-0 text-xs font-semibold text-white/90">0{index + 1}</span>
+              <h3 className="min-w-0 whitespace-nowrap text-sm font-semibold text-white sm:text-base">{label}</h3>
             </GlassCard>
           ))}
         </section>

@@ -6,6 +6,8 @@ import { ERC20_ABI, PACKAGE_ABI, SMART_EARNING_ABI } from "@/lib/blockchain/abi"
 export type InjectedProvider = Eip1193Provider & {
   providers?: InjectedProvider[];
   isTokenPocket?: boolean;
+  on?: (event: "accountsChanged" | "disconnect" | "chainChanged", listener: (...args: unknown[]) => void) => void;
+  removeListener?: (event: "accountsChanged" | "disconnect" | "chainChanged", listener: (...args: unknown[]) => void) => void;
 };
 
 declare global {
@@ -199,10 +201,19 @@ export async function switchToTestnet() {
 async function authRequest(path: string, body?: unknown) {
   let response: Response;
   try {
-    response = await fetch(path, body === undefined ? { cache: "no-store" } : {
+    const headers: Record<string, string> = {};
+    if (path === "/api/auth/session") {
+      const accounts = await getInjectedProvider().request({ method: "eth_accounts" });
+      const connected = Array.isArray(accounts) ? accounts[0] : undefined;
+      if (typeof connected !== "string") {
+        throw new WalletLoginError("SESSION_FAILED", "Wallet session mismatch");
+      }
+      headers["x-connected-wallet"] = connected.toLowerCase();
+    }
+    response = await fetch(path, body === undefined ? { cache: "no-store", headers } : {
       method: "POST",
       credentials: "same-origin",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...headers },
       body: JSON.stringify(body),
     });
   } catch {
@@ -259,6 +270,11 @@ export async function walletLogin(onStage?: (stage: "Connecting wallet…" | "Re
 
 export async function registerOnTestnet(sponsor: string, onStatus: (status: string) => void) {
   const { signer, wallet } = await connectTestnet();
+  const authenticated = await authRequest("/api/auth/session");
+  if (!authenticated.response.ok ||
+      String(authenticated.result.wallet || "").toLowerCase() !== wallet) {
+    throw new WalletLoginError("SESSION_FAILED", "Wallet session mismatch");
+  }
   onStatus("Finding placement…");
   const preparationStorageKey = `registration-preparation:${wallet}:${sponsor.toLowerCase()}`;
   let requestKey = sessionStorage.getItem(preparationStorageKey);
@@ -276,6 +292,12 @@ export async function registerOnTestnet(sponsor: string, onStatus: (status: stri
     return { alreadyRegistered: true as const };
   }
   if (!preparation.ok) throw new Error(placement.error || "Could not find matrix placement");
+  const currentAccounts = await getInjectedProvider().request({ method: "eth_accounts" });
+  const currentWallet = Array.isArray(currentAccounts) && typeof currentAccounts[0] === "string"
+    ? currentAccounts[0].toLowerCase() : "";
+  if (currentWallet !== wallet) {
+    throw new WalletLoginError("SESSION_FAILED", "Wallet session mismatch");
+  }
   const { app, usdt } = publicContracts();
   const token = new Contract(usdt, ERC20_ABI, signer);
   const registration = new Contract(app, SMART_EARNING_ABI, signer);

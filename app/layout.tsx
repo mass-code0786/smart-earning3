@@ -1,6 +1,7 @@
 import './globals.css';
 import './dashboard.css';
 import type { Metadata } from 'next';
+import { WalletSessionBoundary } from '@/components/wallet-session-boundary';
 
 export const metadata: Metadata = {
   title: 'Smart Earning — BNB Testnet',
@@ -9,5 +10,5 @@ export const metadata: Metadata = {
 };
 
 export default function Layout({ children }: { children: React.ReactNode }) {
-  return <html lang="en"><body>{children}</body></html>;
+  return <html lang="en"><body><WalletSessionBoundary/>{children}</body></html>;
 }

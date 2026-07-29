@@ -17,6 +17,7 @@ vi.mock("@/components/registration-form", () => ({
 import {
   LandingActionButtons, LandingInlinePanel, LandingInteractionProvider,
 } from "@/components/landing-interactions";
+import { WalletLoginError } from "@/lib/client/wallet";
 
 const sponsor = "0x1234567890abcdef1234567890abcdef12345678";
 function Subject() {
@@ -34,6 +35,8 @@ describe("landing inline wallet actions", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Connect" })[index]);
     await waitFor(() => expect(walletLoginMock).toHaveBeenCalledOnce());
     await waitFor(() => expect(push).toHaveBeenCalledWith("/dashboard"));
+    expect(screen.queryByText("SECURE ACCESS")).not.toBeInTheDocument();
+    expect(screen.queryByText("Complete the wallet prompts to authenticate securely.")).not.toBeInTheDocument();
   });
 
   it.each([0, 1])("opens inline Signup from button %s and preserves referral sponsor", index => {
@@ -69,5 +72,46 @@ describe("landing inline wallet actions", () => {
     expect(walletLoginMock).toHaveBeenCalledOnce();
     reject(new Error("Wallet connection rejected"));
     expect(await screen.findByText("Wallet connection rejected")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Connect" })).toHaveLength(2);
+    expect(screen.queryByRole("heading", { name: "Connect Wallet" })).not.toBeInTheDocument();
+  });
+
+  it("shows authentication stages only on the clicked Connect button", async () => {
+    let finish!: (value: { registered: boolean; wallet: string; chainId: number }) => void;
+    walletLoginMock.mockImplementation((onStage: (stage: string) => void) => {
+      onStage("Requesting signature…");
+      return new Promise(resolve => { finish = resolve; });
+    });
+    render(<Subject/>);
+    fireEvent.click(screen.getAllByRole("button", { name: "Connect" })[1]);
+    expect(await screen.findByRole("button", { name: "Requesting signature…" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
+    expect(screen.queryByText("Requesting signature…", { selector: "p,div,small" })).not.toBeInTheDocument();
+    finish({ registered: true, wallet: sponsor, chainId: 97 });
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/dashboard"));
+  });
+
+  it.each([
+    ["Wallet connection rejected", "WALLET_REJECTED"],
+    ["Signature rejected", "SIGNATURE_REJECTED"],
+  ] as const)("stays on the landing page after %s", async (message, code) => {
+    walletLoginMock.mockRejectedValue(new WalletLoginError(code, message));
+    render(<Subject/>);
+    fireEvent.click(screen.getAllByRole("button", { name: "Connect" })[0]);
+    expect(await screen.findByRole("alert")).toHaveTextContent(message);
+    expect(push).not.toHaveBeenCalled();
+    expect(screen.getAllByRole("button", { name: "Connect" })).toHaveLength(2);
+  });
+
+  it("requests the existing network switch and retries authentication", async () => {
+    walletLoginMock
+      .mockRejectedValueOnce(new WalletLoginError("WRONG_NETWORK", "Switch network"))
+      .mockResolvedValueOnce({ registered: true, wallet: sponsor, chainId: 97 });
+    switchMock.mockResolvedValue(undefined);
+    render(<Subject/>);
+    fireEvent.click(screen.getAllByRole("button", { name: "Connect" })[0]);
+    await waitFor(() => expect(switchMock).toHaveBeenCalledOnce());
+    await waitFor(() => expect(walletLoginMock).toHaveBeenCalledTimes(2));
+    expect(push).toHaveBeenCalledWith("/dashboard");
   });
 });

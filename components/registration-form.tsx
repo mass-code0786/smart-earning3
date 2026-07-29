@@ -18,6 +18,7 @@ export function RegistrationForm({
   const [status, setStatus] = useState("");
   const [hash, setHash] = useState("");
   const [busy, setBusy] = useState(false);
+  const [connectedWallet, setConnectedWallet] = useState("");
   const locked = useRef(false);
   const router = useRouter();
 
@@ -34,6 +35,7 @@ export function RegistrationForm({
     try {
       setStatus("Authenticating wallet…");
       const session = await walletLogin();
+      setConnectedWallet(session.wallet);
       if (session.registered) {
         router.replace("/dashboard");
         return;
@@ -87,6 +89,12 @@ export function RegistrationForm({
           className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 p-4 text-sm text-white outline-none focus:border-gold"
         />
       </label>
+      {connectedWallet && (
+        <div className="rounded-xl border border-white/10 bg-black/20 p-3 text-xs text-white/60">
+          <span className="block">Connected registration wallet</span>
+          <b className="mt-1 block break-all text-white">{connectedWallet}</b>
+        </div>
+      )}
       <button
         disabled={busy || !registrationEnabled}
         className="flex items-center justify-center gap-2 rounded-xl bg-gold p-4 text-sm font-bold text-black disabled:opacity-50"

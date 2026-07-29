@@ -79,7 +79,7 @@ export default function RealDashboard() {
       setData({ user: dashboard.user, x3: x3.packages, x4: x4.packages, booster });
     } catch (cause) {
       if (cause instanceof Error && cause.message === "UNAUTHENTICATED") {
-        router.replace("/login");
+        router.replace("/");
         return;
       }
       setError("Home data could not be loaded");

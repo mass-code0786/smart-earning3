@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { SignJWT, jwtVerify } from "jose";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { getAddress, verifyMessage } from "ethers";
 import { transaction } from "./db";
 import { ApiError } from "./http";
@@ -28,6 +28,20 @@ export function normalizeWallet(wallet: string) {
     return getAddress(wallet).toLowerCase();
   } catch {
     throw new ApiError(400, "Invalid wallet address", "INVALID_WALLET");
+  }
+}
+
+export function assertSessionWallet(sessionWallet: string, connectedWallet: string | null) {
+  if (!connectedWallet) {
+    throw new ApiError(401, "Wallet session mismatch", "SESSION_WALLET_MISMATCH");
+  }
+  try {
+    if (normalizeWallet(connectedWallet) !== normalizeWallet(sessionWallet)) {
+      throw new ApiError(401, "Wallet session mismatch", "SESSION_WALLET_MISMATCH");
+    }
+  } catch (error) {
+    if (error instanceof ApiError && error.code === "SESSION_WALLET_MISMATCH") throw error;
+    throw new ApiError(401, "Wallet session mismatch", "SESSION_WALLET_MISMATCH");
   }
 }
 
@@ -110,8 +124,11 @@ export async function requireSession() {
       encoder.encode(getAuthConfig().SESSION_SECRET),
       { algorithms: ["HS256"] },
     );
-    return { wallet: normalizeWallet(String(payload.sub)), chainId: Number(payload.chainId) };
-  } catch {
+    const wallet = normalizeWallet(String(payload.sub));
+    assertSessionWallet(wallet, (await headers()).get("x-connected-wallet"));
+    return { wallet, chainId: Number(payload.chainId) };
+  } catch (error) {
+    if (error instanceof ApiError && error.code === "SESSION_WALLET_MISMATCH") throw error;
     throw new ApiError(401, "Session is invalid or expired", "SESSION_INVALID");
   }
 }

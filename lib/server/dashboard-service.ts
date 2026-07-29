@@ -15,7 +15,7 @@ export async function userDashboard(wallet: string) {
      LEFT JOIN referral_relations rr ON rr.user_id=u.id
      LEFT JOIN users s ON s.id=rr.sponsor_user_id
      LEFT JOIN registrations r ON r.user_id=u.id
-     WHERE u.wallet_address=$1`,
+     WHERE lower(u.wallet_address)=lower($1)`,
     [wallet],
   );
   const user = userResult.rows[0];

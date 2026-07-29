@@ -5,7 +5,7 @@ import { ApiError } from "./http";
 export async function getTeam(walletInput: string) {
   const wallet = normalizeWallet(walletInput);
   const user = (await query<{ id: string; wallet_address: string }>(
-    "SELECT id,wallet_address FROM users WHERE wallet_address=$1",
+    "SELECT id,wallet_address FROM users WHERE lower(wallet_address)=lower($1)",
     [wallet],
   )).rows[0];
   if (!user) throw new ApiError(404, "User is not indexed", "USER_NOT_FOUND");

@@ -15,7 +15,7 @@ async function clearWalletSession() {
   }
 }
 
-async function clearClientAuthState() {
+export async function clearUserSpecificClientState() {
   try {
     localStorage.clear();
   } catch {
@@ -46,7 +46,7 @@ export async function logoutAndRedirect(
       cache: "no-store",
     });
   } finally {
-    await clearClientAuthState();
+    await clearUserSpecificClientState();
     await clearWalletSession();
     redirect("/");
   }
