@@ -29,6 +29,31 @@ type ExactTransactionProvider = {
   } | null>;
 };
 
+type RegistrationEventProvider = {
+  getNetwork(): Promise<{ chainId: bigint | number }>;
+  getLogs(filter: {
+    address: string;
+    fromBlock: number;
+    toBlock: "latest";
+    topics: Array<string | null | string[]>;
+  }): Promise<ReadonlyArray<{
+    address: string;
+    transactionHash: string;
+    blockNumber: number;
+    topics: readonly string[];
+    data: string;
+  }>>;
+  getTransactionReceipt(txHash: string): Promise<{
+    status: number | null;
+    to: string | null;
+    logs: ReadonlyArray<{
+      address: string;
+      topics: readonly string[];
+      data: string;
+    }>;
+  } | null>;
+};
+
 type RegistrationVerifier = (
   wallet: string,
   txHash: string,
@@ -37,8 +62,9 @@ type RegistrationVerifier = (
 export async function inspectRegistrationProjection(wallet: string, sponsor: string, txHash: string) {
   const result = await query<{
     user_exists: boolean; registration_exists: boolean; relation_exists: boolean;
-    history_exists: boolean; placement_count: number; direct_income_count: number;
-    magic_credit_count: number;
+    relation_count: number; history_exists: boolean; history_count: number;
+    sponsor_direct_count: number | null; placement_count: number;
+    direct_income_count: number; magic_credit_count: number;
   }>(
     `SELECT
        EXISTS(SELECT 1 FROM users WHERE lower(wallet_address)=lower($1) AND status='ACTIVE') user_exists,
@@ -49,12 +75,25 @@ export async function inspectRegistrationProjection(wallet: string, sponsor: str
          JOIN users parent ON parent.id=rr.sponsor_user_id
          WHERE lower(child.wallet_address)=lower($1) AND lower(parent.wallet_address)=lower($2)
        ) relation_exists,
+       (SELECT count(*)::int
+        FROM referral_relations rr
+        JOIN users child ON child.id=rr.user_id
+        JOIN users parent ON parent.id=rr.sponsor_user_id
+        WHERE lower(child.wallet_address)=lower($1) AND lower(parent.wallet_address)=lower($2)
+       ) relation_count,
        EXISTS(
          SELECT 1 FROM activity_history h
          WHERE h.event_type='DIRECT_REFERRAL_ACTIVATED'
            AND lower(h.user_wallet)=lower($2) AND lower(h.source_wallet)=lower($1)
            AND lower(h.tx_hash)=lower($3)
        ) history_exists,
+       (SELECT count(*)::int FROM activity_history h
+        WHERE h.event_type='DIRECT_REFERRAL_ACTIVATED'
+          AND lower(h.user_wallet)=lower($2) AND lower(h.source_wallet)=lower($1)
+          AND lower(h.tx_hash)=lower($3)
+       ) history_count,
+       (SELECT direct_count::int FROM users WHERE lower(wallet_address)=lower($2) LIMIT 1)
+         sponsor_direct_count,
        (SELECT count(*)::int FROM matrix_placements mp JOIN users u ON u.id=mp.user_id
         WHERE lower(u.wallet_address)=lower($1)) placement_count,
        (SELECT count(*)::int FROM direct_income_ledger d JOIN users u ON u.id=d.source_user_id
@@ -73,6 +112,84 @@ export async function inspectRegistrationProjection(wallet: string, sponsor: str
       !state?.history_exists && "direct_referral_history",
     ].filter(Boolean),
   };
+}
+
+export async function findRegistrationTransactionForWallet(
+  walletInput: string,
+  dependencies: {
+    provider?: RegistrationEventProvider;
+    contractAddress?: string;
+    deploymentBlock: number;
+  },
+) {
+  const wallet = normalizeWallet(walletInput);
+  const contractAddress = normalizeWallet(
+    dependencies.contractAddress ?? getServerConfig().SMART_EARNING_CONTRACT_ADDRESS,
+  );
+  if (!Number.isSafeInteger(dependencies.deploymentBlock) || dependencies.deploymentBlock < 0) {
+    throw new ApiError(503, "Registration deployment block is invalid", "DEPLOYMENT_BLOCK_INVALID");
+  }
+
+  const provider = dependencies.provider ?? getProvider();
+  const network = await provider.getNetwork();
+  if (Number(network.chainId) !== CHAIN_ID || CHAIN_ID !== 97) {
+    throw new ApiError(503, "RPC is not connected to BNB Testnet", "WRONG_RPC_NETWORK");
+  }
+
+  const event = iface.getEvent("UserRegistered");
+  if (!event) {
+    throw new ApiError(500, "UserRegistered event is not configured", "EVENT_NOT_CONFIGURED");
+  }
+  const topics = iface.encodeFilterTopics(event, [wallet]);
+  const logs = await provider.getLogs({
+    address: contractAddress,
+    fromBlock: dependencies.deploymentBlock,
+    toBlock: "latest",
+    topics,
+  });
+
+  const candidates = [];
+  for (const log of logs) {
+    if (normalizeWallet(log.address) !== contractAddress) continue;
+    let parsed;
+    try {
+      parsed = iface.parseLog({ topics: log.topics, data: log.data });
+    } catch {
+      parsed = null;
+    }
+    if (!parsed || parsed.name !== "UserRegistered") continue;
+    const registrant = normalizeWallet(String(parsed.args.user));
+    if (registrant !== wallet) continue;
+    const receipt = await provider.getTransactionReceipt(log.transactionHash);
+    if (
+      !receipt
+      || receipt.status !== 1
+      || normalizeWallet(receipt.to || "") !== contractAddress
+    ) continue;
+    candidates.push({
+      txHash: txHashSchema.parse(log.transactionHash).toLowerCase(),
+      blockNumber: log.blockNumber,
+      wallet: registrant,
+      sponsor: normalizeWallet(String(parsed.args.sponsor)),
+      contractAddress,
+    });
+  }
+
+  if (candidates.length === 0) {
+    throw new ApiError(
+      404,
+      "No confirmed UserRegistered event was found for this wallet",
+      "REGISTRATION_EVENT_NOT_FOUND",
+    );
+  }
+  if (candidates.length !== 1) {
+    throw new ApiError(
+      409,
+      `Found ${candidates.length} confirmed UserRegistered events; refusing to guess`,
+      "MULTIPLE_REGISTRATION_EVENTS",
+    );
+  }
+  return candidates[0];
 }
 
 export async function reconcileRegistrationTransaction(

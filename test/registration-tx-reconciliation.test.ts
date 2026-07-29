@@ -2,7 +2,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { Interface } from "ethers";
 import { SMART_EARNING_ABI } from "@/lib/blockchain/abi";
-import { reconcileRegistrationTransaction } from "@/lib/server/registration-tx-reconciliation";
+import {
+  findRegistrationTransactionForWallet,
+  reconcileRegistrationTransaction,
+} from "@/lib/server/registration-tx-reconciliation";
 
 const iface = new Interface(SMART_EARNING_ABI);
 const contract = "0x4509301aa843F504936999850f4bCaF57a03Cd99";
@@ -50,6 +53,67 @@ function fixture(overrides: {
 }
 
 describe("exact BSC Testnet registration transaction reconciliation", () => {
+  function eventLookupProvider(events: Array<{ hash: string; eventWallet?: string; status?: number }>) {
+    return {
+      getNetwork: vi.fn(async () => ({ chainId: 97n })),
+      getLogs: vi.fn(async () => events.map((item, index) => {
+        const encoded = iface.encodeEventLog(iface.getEvent("UserRegistered")!, [
+          item.eventWallet ?? wallet, sponsor, parent, 1n, 0, 1_000_000n, 1_000_000n,
+        ]);
+        return {
+          address: contract,
+          transactionHash: item.hash,
+          blockNumber: 121722400 + index,
+          topics: encoded.topics,
+          data: encoded.data,
+        };
+      })),
+      getTransactionReceipt: vi.fn(async (hash: string) => {
+        const item = events.find((candidate) => candidate.hash === hash);
+        return { status: item?.status ?? 1, to: contract, logs: [] };
+      }),
+    };
+  }
+
+  it("finds exactly one confirmed registration event for an exact wallet", async () => {
+    const provider = eventLookupProvider([{ hash: txHash }]);
+    await expect(findRegistrationTransactionForWallet(wallet, {
+      provider,
+      contractAddress: contract,
+      deploymentBlock: 121722387,
+    })).resolves.toEqual({
+      txHash,
+      blockNumber: 121722400,
+      wallet: wallet.toLowerCase(),
+      sponsor: sponsor.toLowerCase(),
+      contractAddress: contract.toLowerCase(),
+    });
+    expect(provider.getLogs).toHaveBeenCalledWith(expect.objectContaining({
+      address: contract.toLowerCase(),
+      fromBlock: 121722387,
+      toBlock: "latest",
+    }));
+  });
+
+  it("stops safely when no confirmed registration event exists", async () => {
+    await expect(findRegistrationTransactionForWallet(wallet, {
+      provider: eventLookupProvider([]),
+      contractAddress: contract,
+      deploymentBlock: 121722387,
+    })).rejects.toMatchObject({ code: "REGISTRATION_EVENT_NOT_FOUND", status: 404 });
+  });
+
+  it("stops safely instead of guessing between multiple registration events", async () => {
+    await expect(findRegistrationTransactionForWallet(wallet, {
+      provider: eventLookupProvider([
+        { hash: txHash },
+        { hash: `0x${"34".repeat(32)}` },
+      ]),
+      contractAddress: contract,
+      deploymentBlock: 121722387,
+    })).rejects.toMatchObject({ code: "MULTIPLE_REGISTRATION_EVENTS", status: 409 });
+  });
+
   it("validates and reconciles one successful paid registration transaction", async () => {
     const verifyRegistration = vi.fn(async () => ({
       registrationId: "registration-1",
@@ -138,7 +202,10 @@ describe("exact BSC Testnet registration transaction reconciliation", () => {
       user_exists: true,
       registration_exists: true,
       relation_exists: false,
+      relation_count: 0,
       history_exists: false,
+      history_count: 0,
+      sponsor_direct_count: 0,
       placement_count: 1,
       direct_income_count: 1,
       magic_credit_count: 1,
