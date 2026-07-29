@@ -30,10 +30,10 @@ describe("registration redirect status", () => {
       registered: true,
     });
     render(<RegistrationForm registrationEnabled />);
-    fireEvent.change(screen.getByLabelText("Sponsor wallet"), {
+    fireEvent.change(screen.getByLabelText("Sponsor Wallet"), {
       target: { value: "0x00000000000000000000000000000000000000aa" },
     });
-    fireEvent.submit(screen.getByRole("button", { name: "Register with 2 USDT" }).closest("form")!);
+    fireEvent.submit(screen.getByRole("button", { name: "Signup" }).closest("form")!);
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/dashboard"));
     expect(registerOnTestnet).not.toHaveBeenCalled();
   });
@@ -45,10 +45,10 @@ describe("registration redirect status", () => {
     });
     registerOnTestnet.mockResolvedValue({ txHash: `0x${"1".repeat(64)}`, alreadyRegistered: false });
     render(<RegistrationForm registrationEnabled />);
-    fireEvent.change(screen.getByLabelText("Sponsor wallet"), {
+    fireEvent.change(screen.getByLabelText("Sponsor Wallet"), {
       target: { value: "0x00000000000000000000000000000000000000aa" },
     });
-    fireEvent.submit(screen.getByRole("button", { name: "Register with 2 USDT" }).closest("form")!);
+    fireEvent.submit(screen.getByRole("button", { name: "Signup" }).closest("form")!);
     await waitFor(() => expect(registerOnTestnet).toHaveBeenCalledTimes(1));
   });
 
@@ -59,10 +59,10 @@ describe("registration redirect status", () => {
     });
     registerOnTestnet.mockResolvedValue({ alreadyRegistered: true });
     render(<RegistrationForm registrationEnabled />);
-    fireEvent.change(screen.getByLabelText("Sponsor wallet"), {
+    fireEvent.change(screen.getByLabelText("Sponsor Wallet"), {
       target: { value: "0x00000000000000000000000000000000000000aa" },
     });
-    fireEvent.submit(screen.getByRole("button", { name: "Register with 2 USDT" }).closest("form")!);
+    fireEvent.submit(screen.getByRole("button", { name: "Signup" }).closest("form")!);
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/dashboard"));
     expect(screen.getByRole("status")).toHaveTextContent("Wallet is already registered");
   });

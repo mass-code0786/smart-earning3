@@ -39,7 +39,7 @@ describe("Team referral experience", () => {
 
   it("builds the authenticated wallet referral link and renders live team data", async () => {
     render(<RealTeam />);
-    const link = await screen.findByText(`${window.location.origin}/register?ref=${wallet}`);
+    const link = await screen.findByText(`${window.location.origin}/?ref=${wallet}`);
     expect(link).toBeInTheDocument();
     expect(screen.getByText("3")).toBeInTheDocument();
     expect(screen.getByText("0xabcd…abcd")).toBeInTheDocument();
@@ -48,20 +48,20 @@ describe("Team referral experience", () => {
 
   it("copies and shares the exact referral link", async () => {
     render(<RealTeam />);
-    await screen.findByText(`${window.location.origin}/register?ref=${wallet}`);
+    await screen.findByText(`${window.location.origin}/?ref=${wallet}`);
     fireEvent.click(screen.getByRole("button", { name: "Copy Link" }));
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/register?ref=${wallet}`));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/?ref=${wallet}`));
     expect(await screen.findByText("Referral link copied")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Share" }));
     await waitFor(() => expect(share).toHaveBeenCalledWith(expect.objectContaining({
-      url: `${window.location.origin}/register?ref=${wallet}`,
-      text: expect.stringContaining(`${window.location.origin}/register?ref=${wallet}`),
+      url: `${window.location.origin}/?ref=${wallet}`,
+      text: expect.stringContaining(`${window.location.origin}/?ref=${wallet}`),
     })));
   });
 
   it("prefills a valid referral sponsor and rejects malformed URL values", () => {
     render(<RegistrationForm registrationEnabled initialSponsor={referralSponsorFromParam(wallet)} />);
-    expect(screen.getByLabelText("Sponsor wallet")).toHaveValue(wallet);
+    expect(screen.getByLabelText("Sponsor Wallet")).toHaveValue(wallet);
     expect(referralSponsorFromParam("javascript:alert(1)")).toBe("");
     expect(referralSponsorFromParam("0x1234")).toBe("");
   });

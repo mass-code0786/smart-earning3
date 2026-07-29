@@ -169,7 +169,7 @@ export function LandingInlinePanel({
       <header className="signup-header">
         <button type="button" disabled={busy} onClick={cancel}><ArrowLeft size={15}/> Back</button>
       </header>
-      <RegistrationForm compact registrationEnabled={registrationEnabled} initialSponsor={initialSponsor}/>
+      <RegistrationForm registrationEnabled={registrationEnabled} initialSponsor={initialSponsor}/>
     </section>
   );
 }

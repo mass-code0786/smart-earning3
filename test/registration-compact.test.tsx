@@ -16,7 +16,7 @@ afterEach(cleanup);
 describe("compact landing registration form", () => {
   it("shows only the sponsor field and full-width Signup action at rest", () => {
     const sponsor = "0x1234567890abcdef1234567890abcdef12345678";
-    const { container } = render(<RegistrationForm compact registrationEnabled initialSponsor={sponsor} />);
+    const { container } = render(<RegistrationForm registrationEnabled initialSponsor={sponsor} />);
 
     expect(screen.getByLabelText("Sponsor Wallet")).toHaveValue(sponsor);
     expect(screen.getByRole("button", { name: "Signup" })).toHaveClass("rounded-xl", "bg-gold");

@@ -30,6 +30,7 @@ function provider(chainId = "0x61", extra = {}) {
   return {
     request: vi.fn(async ({ method }: { method: string }) => {
       if (method === "eth_requestAccounts") return ["0x000000000000000000000000000000000000dEaD"];
+      if (method === "eth_accounts") return ["0x000000000000000000000000000000000000dEaD"];
       if (method === "eth_chainId") return chainId;
       return null;
     }),
@@ -144,16 +145,42 @@ describe("nonce, signature, and session request flow", () => {
 
   it("treats preparation 409 ALREADY_REGISTERED as registered before any payment call", async () => {
     vi.stubGlobal("window", { ethereum: provider() });
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      error: "Wallet is already registered",
-      code: "ALREADY_REGISTERED",
-    }), { status: 409 })));
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        wallet: "0x000000000000000000000000000000000000dead",
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        error: "Wallet is already registered",
+        code: "ALREADY_REGISTERED",
+      }), { status: 409 })));
 
     await expect(registerOnTestnet(
       "0x00000000000000000000000000000000000000aa",
       vi.fn(),
     )).resolves.toEqual({ alreadyRegistered: true });
-    expect(fetch).toHaveBeenCalledTimes(1);
-    expect((fetch as ReturnType<typeof vi.fn>).mock.calls[0][0]).toBe("/api/registrations/prepare");
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect((fetch as ReturnType<typeof vi.fn>).mock.calls[1][0]).toBe("/api/registrations/prepare");
+  });
+
+  it("stops before approval when registration preparation fails", async () => {
+    const injected = provider();
+    vi.stubGlobal("window", { ethereum: injected });
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        wallet: "0x000000000000000000000000000000000000dead",
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        error: "Sponsor wallet is not active",
+        code: "SPONSOR_NOT_ACTIVE",
+      }), { status: 422 })));
+
+    await expect(registerOnTestnet(
+      "0x00000000000000000000000000000000000000aa",
+      vi.fn(),
+    )).rejects.toMatchObject({
+      code: "SPONSOR_NOT_ACTIVE",
+      message: "Sponsor wallet is not active",
+    });
+    expect(injected.request).not.toHaveBeenCalledWith(expect.objectContaining({ method: "eth_sendTransaction" }));
   });
 });

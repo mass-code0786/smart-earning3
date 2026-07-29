@@ -29,6 +29,13 @@ export class WalletLoginError extends Error {
   }
 }
 
+export class RegistrationFlowError extends Error {
+  constructor(public readonly code: string, message: string) {
+    super(message);
+    this.name = "RegistrationFlowError";
+  }
+}
+
 const TESTNET = {
   chainId: "0x61",
   chainName: "BNB Smart Chain Testnet",
@@ -291,7 +298,12 @@ export async function registerOnTestnet(sponsor: string, onStatus: (status: stri
     sessionStorage.removeItem(preparationStorageKey);
     return { alreadyRegistered: true as const };
   }
-  if (!preparation.ok) throw new Error(placement.error || "Could not find matrix placement");
+  if (!preparation.ok) {
+    throw new RegistrationFlowError(
+      String(placement.code || "REGISTRATION_PREPARATION_FAILED"),
+      String(placement.error || "Registration preparation failed"),
+    );
+  }
   const currentAccounts = await getInjectedProvider().request({ method: "eth_accounts" });
   const currentWallet = Array.isArray(currentAccounts) && typeof currentAccounts[0] === "string"
     ? currentAccounts[0].toLowerCase() : "";
@@ -302,20 +314,50 @@ export async function registerOnTestnet(sponsor: string, onStatus: (status: stri
   const token = new Contract(usdt, ERC20_ABI, signer);
   const registration = new Contract(app, SMART_EARNING_ABI, signer);
   const price = parseUnits("2", Number(await token.decimals()));
+  const [tokenBalance, gasBalance] = await Promise.all([
+    token.balanceOf(wallet),
+    signer.provider.getBalance(wallet),
+  ]);
+  if (BigInt(tokenBalance) < price) {
+    throw new RegistrationFlowError("INSUFFICIENT_USDT", "Insufficient USDT balance");
+  }
+  if (BigInt(gasBalance) === 0n) {
+    throw new RegistrationFlowError("INSUFFICIENT_GAS", "Insufficient BNB for network fees");
+  }
   if (BigInt(await token.allowance(wallet, app)) < price) {
     onStatus("Approve exactly 2 USDT. BNB gas is charged separately.");
-    await (await token.approve(app, price)).wait();
+    try {
+      await (await token.approve(app, price)).wait();
+    } catch (error) {
+      if (isWalletRejection(error)) {
+        throw new RegistrationFlowError("TRANSACTION_REJECTED", "USDT approval was rejected");
+      }
+      throw error;
+    }
   }
   onStatus("Confirm registration. Your wallet will show the separate BNB gas fee.");
-  const sent = await registration.register(sponsor);
+  let sent;
+  try {
+    sent = await registration.register(sponsor);
+  } catch (error) {
+    if (isWalletRejection(error)) {
+      throw new RegistrationFlowError("TRANSACTION_REJECTED", "Registration transaction was rejected");
+    }
+    throw error;
+  }
   sessionStorage.removeItem(preparationStorageKey);
   onStatus(`Submitted ${sent.hash}. Waiting for confirmation…`);
   await sent.wait();
   const response = await fetch("/api/registrations/verify", {
     method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ txHash: sent.hash }),
+    body: JSON.stringify({ txHash: sent.hash, sponsor }),
   });
   const result = await response.json();
-  if (!response.ok) throw new Error(result.error || "Backend verification failed");
+  if (!response.ok) {
+    throw new RegistrationFlowError(
+      String(result.code || "REGISTRATION_TX_NOT_CONFIRMED"),
+      String(result.error || "Registration verification failed"),
+    );
+  }
   return { ...result, txHash: sent.hash, alreadyRegistered: false as const };
 }

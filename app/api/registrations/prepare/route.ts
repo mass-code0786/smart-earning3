@@ -4,6 +4,9 @@ import { requireSession } from "@/lib/server/auth";
 import { apiError, assertSameOrigin } from "@/lib/server/http";
 import { ensureRegistrationPlacement } from "@/lib/server/placement-service";
 import { ApiError } from "@/lib/server/http";
+import {
+  logRegistrationFailure, registrationPreflight, safeRegistrationError,
+} from "@/lib/server/registration-preflight";
 
 const schema = z.object({
   sponsor: z.string(),
@@ -11,15 +14,27 @@ const schema = z.object({
 });
 
 export async function POST(request: NextRequest) {
+  let registrant: string | undefined;
+  let sponsor: string | undefined;
   try {
     assertSameOrigin(request);
     const session = await requireSession();
+    registrant = session.wallet;
     if (session.chainId !== 97) {
-      throw new ApiError(403, "Session is not authenticated for BNB Testnet", "WRONG_NETWORK");
+      throw new ApiError(422, "Session is not authenticated for BNB Testnet", "WRONG_CHAIN");
     }
-    const { sponsor, requestKey } = schema.parse(await request.json());
-    return NextResponse.json(await ensureRegistrationPlacement(session.wallet, sponsor, requestKey));
+    const body = schema.parse(await request.json());
+    sponsor = body.sponsor;
+    const wallets = await registrationPreflight(session.wallet, body.sponsor);
+    return NextResponse.json(await ensureRegistrationPlacement(
+      wallets.registrant, wallets.sponsor, body.requestKey,
+    ));
   } catch (error) {
-    return apiError(error);
+    const safe = safeRegistrationError(error);
+    logRegistrationFailure({
+      stage: "PREPARATION", error: safe, registrant, sponsor,
+      endpoint: "/api/registrations/prepare",
+    });
+    return apiError(safe);
   }
 }

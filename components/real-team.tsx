@@ -27,7 +27,7 @@ export default function RealTeam() {
   const [error, setError] = useState("");
   const referralLink = useMemo(
     () => data && typeof window !== "undefined"
-      ? `${window.location.origin}/register?ref=${encodeURIComponent(data.referralIdentifier)}`
+      ? `${window.location.origin}/?ref=${encodeURIComponent(data.referralIdentifier)}`
       : "",
     [data],
   );

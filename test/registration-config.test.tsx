@@ -13,9 +13,9 @@ afterEach(() => cleanup());
 describe("registration configuration gate", () => {
   it("disables payment and shows a clear state when contracts are not configured", () => {
     render(<RegistrationForm registrationEnabled={false} />);
-    expect(screen.getByRole("button", { name: "Register with 2 USDT" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Signup" })).toBeDisabled();
     expect(screen.getByRole("alert")).toHaveTextContent(
-      "BSC Testnet registration configuration is incomplete",
+      "Signup is temporarily unavailable",
     );
   });
 

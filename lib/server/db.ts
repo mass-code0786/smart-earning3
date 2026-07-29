@@ -100,7 +100,13 @@ export function classifyDatabaseError(error: unknown): DatabaseConnectionError {
   if (code === "3D000") {
     return new DatabaseConnectionError("DATABASE_MISSING", "Configured PostgreSQL database does not exist", { cause: error });
   }
-  if (code === "42P01" || message.includes("schema_migrations") || message.includes("auth_nonces")) {
+  if (
+    ["42P01", "42703", "42883", "42704"].includes(code || "")
+    || message.includes("schema_migrations")
+    || message.includes("auth_nonces")
+    || message.includes("activity_history")
+    || message.includes("write_activity_history_from_source")
+  ) {
     return new DatabaseConnectionError("MIGRATION_MISSING", "Required PostgreSQL migrations are missing", { cause: error });
   }
   if (code === "ETIMEDOUT" || code === "CONNECT_TIMEOUT" || message.includes("timeout")) {

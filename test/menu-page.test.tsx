@@ -51,7 +51,7 @@ describe("mobile Menu page", () => {
     render(<MenuPage />);
     await screen.findByText(new RegExp(wallet, "i"));
     fireEvent.click(screen.getByRole("button", { name: "Copy Link" }));
-    const expected = `${window.location.origin}/register?ref=${wallet}`;
+    const expected = `${window.location.origin}/?ref=${wallet}`;
     await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(expected));
     expect(screen.getByRole("status")).toHaveTextContent("Invite link copied");
   });

@@ -60,7 +60,7 @@ export default function MenuPage() {
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const inviteLink = useMemo(() => identifier && typeof window !== "undefined"
-    ? `${window.location.origin}/register?ref=${encodeURIComponent(identifier)}` : "", [identifier]);
+    ? `${window.location.origin}/?ref=${encodeURIComponent(identifier)}` : "", [identifier]);
 
   useEffect(() => {
     void fetch("/api/team", { cache: "no-store", credentials: "same-origin" })
