@@ -26,7 +26,7 @@ describe("protected wallet routes", () => {
     ]));
     const response = await proxy(new NextRequest("http://localhost:3000/dashboard"));
     expect(response.status).toBe(307);
-    expect(response.headers.get("location")).toBe("http://localhost:3000/login?next=%2Fdashboard");
+    expect(response.headers.get("location")).toBe("http://localhost:3000/");
   });
 
   it("allows a valid server session and rejects an expired one", async () => {

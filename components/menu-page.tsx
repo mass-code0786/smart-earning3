@@ -7,6 +7,7 @@ import {
   HandCoins, Headphones, History, Layers3, LogOut, Network, PackagePlus, Share2,
   Sparkles, TrendingUp, Users, Wallet, Zap,
 } from "lucide-react";
+import { logoutAndRedirect } from "@/lib/client/logout";
 
 type TeamData = { referralIdentifier: string };
 type MenuRow = { label: string; href: string; icon: typeof History };
@@ -50,11 +51,7 @@ export async function logoutFromMenu(
   redirect = (url: string) => window.location.assign(url),
 ) {
   if (!confirmLogout()) return false;
-  try {
-    await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
-  } finally {
-    redirect("/login");
-  }
+  await logoutAndRedirect(redirect);
   return true;
 }
 

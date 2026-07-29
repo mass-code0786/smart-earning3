@@ -18,9 +18,7 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  const login = new URL("/login", request.url);
-  login.searchParams.set("next", request.nextUrl.pathname);
-  const response = NextResponse.redirect(login);
+  const response = NextResponse.redirect(new URL("/", request.url));
   if (token) response.cookies.delete(SESSION_COOKIE);
   return response;
 }

@@ -67,7 +67,9 @@ describe("mobile Menu page", () => {
   it("uses the existing secure logout endpoint after confirmation", async () => {
     const redirect = vi.fn();
     expect(await logoutFromMenu(() => true, redirect)).toBe(true);
-    expect(fetch).toHaveBeenCalledWith("/api/auth/logout", { method: "POST", credentials: "same-origin" });
-    expect(redirect).toHaveBeenCalledWith("/login");
+    expect(fetch).toHaveBeenCalledWith("/api/auth/logout", {
+      method: "POST", credentials: "same-origin", cache: "no-store",
+    });
+    expect(redirect).toHaveBeenCalledWith("/");
   });
 });
