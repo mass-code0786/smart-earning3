@@ -23,26 +23,24 @@ vi.mock("@/lib/server/config", async importOriginal => ({
   }),
 }));
 
-import { registrationPreflight } from "@/lib/server/registration-preflight";
+import {
+  registrationPreflight, RegistrationStageFailure, safeRegistrationError,
+} from "@/lib/server/registration-preflight";
 
 const registrant = "0x00000000000000000000000000000000000000bb";
 const sponsor = "0x00000000000000000000000000000000000000aa";
 
-function databaseState(overrides = {}) {
-  return {
-    registrant_active: false,
-    sponsor_active: true,
-    history_migration: true,
-    history_table: true,
-    history_trigger: true,
-    ...overrides,
-  };
-}
-
 describe("registration preparation preflight", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    state.query.mockResolvedValue({ rows: [databaseState()] });
+    state.query.mockImplementation(async (sql: string, values?: unknown[]) => {
+      if (sql.includes("schema_migrations")) return { rows: [{ applied: true }] };
+      if (sql.includes("to_regclass")) return { rows: [{ history_table: true, history_trigger: true }] };
+      if (sql.includes("FROM users")) {
+        return { rows: [{ active: values?.[0] === sponsor }] };
+      }
+      throw new Error("Unexpected query");
+    });
     state.getNetwork.mockResolvedValue({ chainId: 97n });
     state.getCode.mockResolvedValue("0x6000");
   });
@@ -53,27 +51,34 @@ describe("registration preparation preflight", () => {
   });
 
   it("returns stable non-500 expected registration errors", async () => {
-    state.query.mockResolvedValueOnce({ rows: [databaseState({ sponsor_active: false })] });
+    state.query.mockImplementation(async (sql: string) => sql.includes("FROM users")
+      ? { rows: [{ active: false }] }
+      : { rows: [{ applied: true, history_table: true, history_trigger: true }] });
     await expect(registrationPreflight(registrant, sponsor)).rejects.toMatchObject({
-      status: 422, code: "SPONSOR_NOT_ACTIVE",
+      stage: "CHECK_SPONSOR",
+      original: expect.objectContaining({ status: 422, code: "SPONSOR_NOT_ACTIVE" }),
     });
 
-    state.query.mockResolvedValueOnce({ rows: [databaseState({ registrant_active: true })] });
+    state.query.mockResolvedValueOnce({ rows: [{ active: true }] });
     await expect(registrationPreflight(registrant, sponsor)).rejects.toMatchObject({
-      status: 409, code: "ALREADY_REGISTERED",
+      stage: "CHECK_REGISTRANT",
+      original: expect.objectContaining({ status: 409, code: "ALREADY_REGISTERED" }),
     });
   });
 
   it("reports an unapplied or incomplete history migration explicitly", async () => {
-    state.query.mockResolvedValue({ rows: [databaseState({
-      history_migration: false,
-      history_table: false,
-      history_trigger: false,
-    })] });
+    state.query.mockImplementation(async (sql: string, values?: unknown[]) => {
+      if (sql.includes("schema_migrations")) return { rows: [{ applied: false }] };
+      if (sql.includes("FROM users")) return { rows: [{ active: values?.[0] === sponsor }] };
+      return { rows: [] };
+    });
     await expect(registrationPreflight(registrant, sponsor)).rejects.toMatchObject({
-      status: 503,
-      code: "HISTORY_MIGRATION_MISSING",
-      message: "Registration history dependency is not installed",
+      stage: "CHECK_HISTORY_MIGRATION",
+      original: expect.objectContaining({
+        status: 503,
+        code: "HISTORY_MIGRATION_MISSING",
+        message: "Registration history dependency is not installed",
+      }),
     });
     expect(state.getNetwork).not.toHaveBeenCalled();
   });
@@ -81,9 +86,37 @@ describe("registration preparation preflight", () => {
   it("maps RPC failure without exposing provider internals", async () => {
     state.getNetwork.mockRejectedValue(new Error("private upstream URL detail"));
     await expect(registrationPreflight(registrant, sponsor)).rejects.toMatchObject({
+      stage: "CHECK_RPC",
+    });
+  });
+
+  it("uses schema_migrations.filename and does not swallow SQL errors", async () => {
+    await registrationPreflight(registrant, sponsor);
+    const migrationSql = String(state.query.mock.calls.find(call =>
+      String(call[0]).includes("schema_migrations"))?.[0]);
+    expect(migrationSql).toContain("filename='022_activity_history.sql'");
+    expect(migrationSql).not.toMatch(/\b(?:migration_name|version|name)\b\s*=/);
+
+    state.query.mockImplementation(async (sql: string, values?: unknown[]) => {
+      if (sql.includes("schema_migrations")) throw Object.assign(new Error("column failure"), { code: "42703" });
+      if (sql.includes("FROM users")) return { rows: [{ active: values?.[0] === sponsor }] };
+      return { rows: [] };
+    });
+    await expect(registrationPreflight(registrant, sponsor)).rejects.toMatchObject({
+      stage: "CHECK_HISTORY_MIGRATION",
+      original: expect.objectContaining({ code: "42703" }),
+    });
+  });
+
+  it("maps an unknown placement exception to a stable placement error", () => {
+    const safe = safeRegistrationError(new RegistrationStageFailure(
+      "ENSURE_PLACEMENT",
+      new Error("provider simulation detail"),
+    ));
+    expect(safe).toMatchObject({
       status: 503,
-      code: "RPC_UNAVAILABLE",
-      message: "Registration RPC is unavailable",
+      code: "REGISTRATION_PLACEMENT_UNAVAILABLE",
+      message: "Registration placement is temporarily unavailable",
     });
   });
 });

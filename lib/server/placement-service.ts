@@ -9,6 +9,7 @@ import { keeperLockName, sponsorLockName, withPgAdvisoryLock } from "./distribut
 
 const iface = new Interface(SMART_EARNING_ABI);
 const ADVANCE_STEPS = 256n;
+const REGISTRATION_SEARCH_STEPS = 64n;
 const CONFIRMATION_TIMEOUT_MS = 20_000;
 export const MAX_PLACEMENT_ADVANCE_RETRIES = 8;
 
@@ -22,6 +23,22 @@ type Attempt = {
   id: string; status: string; transaction_hash: string | null;
   transaction_nonce: string | null; submitted_block: string | null;
 };
+
+type PlacementCursorSimulation = {
+  advancePlacementCursor: {
+    staticCall(sponsor: string, maxSteps: bigint): Promise<boolean>;
+  };
+};
+
+export async function isRegistrationPlacementReady(
+  contract: PlacementCursorSimulation,
+  sponsor: string,
+) {
+  return Boolean(await contract.advancePlacementCursor.staticCall(
+    sponsor,
+    REGISTRATION_SEARCH_STEPS,
+  ));
+}
 
 function placementError(error: unknown) {
   let current: unknown = error;
@@ -103,8 +120,13 @@ async function prepareUnderSponsorLock(
     }
 
     try {
-      const data = iface.encodeFunctionData("register", [sponsor]);
-      await provider.call({ to: contractAddress, from: wallet, data });
+      const ready = await isRegistrationPlacementReady(
+        contract as unknown as PlacementCursorSimulation,
+        sponsor,
+      );
+      if (!ready) {
+        throw { data: iface.encodeErrorResult("PlacementSearchNeedsAdvance", [sponsor, 0n]) };
+      }
       await client.query(
         "UPDATE placement_preparation_requests SET status=$2,updated_at=now() WHERE id=$1",
         [prep.id, hashes.length ? "CONFIRMED" : "NOT_REQUIRED"],

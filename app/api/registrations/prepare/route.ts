@@ -5,7 +5,8 @@ import { apiError, assertSameOrigin } from "@/lib/server/http";
 import { ensureRegistrationPlacement } from "@/lib/server/placement-service";
 import { ApiError } from "@/lib/server/http";
 import {
-  logRegistrationFailure, registrationPreflight, safeRegistrationError,
+  logRegistrationFailure, registrationPreflight, RegistrationStageFailure,
+  safeRegistrationError,
 } from "@/lib/server/registration-preflight";
 
 const schema = z.object({
@@ -26,13 +27,18 @@ export async function POST(request: NextRequest) {
     const body = schema.parse(await request.json());
     sponsor = body.sponsor;
     const wallets = await registrationPreflight(session.wallet, body.sponsor);
-    return NextResponse.json(await ensureRegistrationPlacement(
-      wallets.registrant, wallets.sponsor, body.requestKey,
-    ));
+    let placement;
+    try {
+      placement = await ensureRegistrationPlacement(wallets.registrant, wallets.sponsor, body.requestKey);
+    } catch (error) {
+      throw new RegistrationStageFailure("ENSURE_PLACEMENT", error);
+    }
+    return NextResponse.json(placement);
   } catch (error) {
     const safe = safeRegistrationError(error);
     logRegistrationFailure({
-      stage: "PREPARATION", error: safe, registrant, sponsor,
+      stage: error instanceof RegistrationStageFailure ? error.stage : "PREPARE_RESPONSE",
+      error: safe, original: error, registrant, sponsor,
       endpoint: "/api/registrations/prepare",
     });
     return apiError(safe);

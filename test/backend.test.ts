@@ -3,7 +3,9 @@ import { normalizeWallet } from "@/lib/server/auth";
 import { calculateCappedCredit } from "@/lib/server/income-cap-service";
 import { Interface } from "ethers";
 import { SMART_EARNING_ABI } from "@/lib/blockchain/abi";
-import { ensureRegistrationPlacement } from "@/lib/server/placement-service";
+import {
+  ensureRegistrationPlacement, isRegistrationPlacementReady,
+} from "@/lib/server/placement-service";
 
 describe("wallet authentication normalization", () => {
   it("normalizes a valid signed-wallet address and rejects malformed input", () => {
@@ -30,6 +32,13 @@ describe("central earning cap",()=>{
 });
 
 describe("automatic placement preparation", () => {
+  it("checks placement without simulating payment-coupled register()", async () => {
+    const staticCall = async (_sponsor: string, steps: bigint) => steps === 64n;
+    await expect(isRegistrationPlacementReady({
+      advancePlacementCursor: { staticCall },
+    }, "0x0000000000000000000000000000000000000002")).resolves.toBe(true);
+  });
+
   it("keeper advances and retries without asking the registering wallet", async () => {
     const iface = new Interface(SMART_EARNING_ABI);
     const data = iface.encodeErrorResult("PlacementSearchNeedsAdvance", [

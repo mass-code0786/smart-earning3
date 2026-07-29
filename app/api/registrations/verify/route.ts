@@ -27,6 +27,7 @@ export async function POST(request: NextRequest) {
     const safe = safeRegistrationError(error, "REGISTRATION_VERIFICATION_FAILED");
     logRegistrationFailure({
       stage: "VERIFICATION", error: safe, registrant, sponsor,
+      original: error,
       endpoint: "/api/registrations/verify",
     });
     return apiError(safe);
