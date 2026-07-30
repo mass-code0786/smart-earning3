@@ -19,6 +19,7 @@ export type Pm2Process = {
     pm_cwd?: string;
     pm_exec_path?: string;
     DATABASE_URL?: string;
+    PORT?: string;
     NODE_ENV?: string;
     DEPLOYED_GIT_COMMIT?: string;
     DEPLOYED_BUILD_ID?: string;

@@ -3,10 +3,20 @@ import { afterEach, describe, expect, it } from "vitest";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { createRequire } from "node:module";
 import {
   REQUIRED_NEXT_ARTIFACTS, verifyLiveIndexerLogs, verifyLiveIndexerSources,
   verifyNextArtifacts,
 } from "@/lib/server/production-deployment";
+
+const require = createRequire(import.meta.url);
+const {
+  EXPECTED_NGINX_UPSTREAM_PORT,
+  requireProductionPort,
+} = require("../scripts/production-port.cjs") as {
+  EXPECTED_NGINX_UPSTREAM_PORT: string;
+  requireProductionPort: (environment: Record<string, string | undefined>) => string;
+};
 
 const roots: string[] = [];
 function temporaryRelease() {
@@ -25,6 +35,15 @@ afterEach(() => {
 });
 
 describe("atomic production deployment", () => {
+  it("requires the production port to match the Nginx upstream", () => {
+    expect(EXPECTED_NGINX_UPSTREAM_PORT).toBe("3015");
+    expect(requireProductionPort({ PORT: "3015" })).toBe("3015");
+    expect(() => requireProductionPort({})).toThrow("PORT is required");
+    expect(() => requireProductionPort({ PORT: "3000" })).toThrow(
+      "does not match Nginx upstream 3015",
+    );
+  });
+
   it.each([
     ".next/server/app/page_client-reference-manifest.js",
     ".next/server/pages/500.html",
@@ -97,6 +116,10 @@ describe("atomic production deployment", () => {
     const ecosystem = readFileSync(resolve("ecosystem.config.cjs"), "utf8");
     expect(ecosystem).toContain("PM2 startup refused: incomplete Next.js build");
     expect(ecosystem).toContain("DEPLOYED_BUILD_ID");
+    expect(ecosystem).toContain("requireProductionPort");
+    expect(ecosystem).toContain('args: ["start", "--port", productionPort]');
+    expect(deployment).toContain("Running PM2 port mismatch");
+    expect(deployment).toContain("127.0.0.1:${productionPort}");
   });
 
   it("contains no migration, database write, contract, or financial command", () => {

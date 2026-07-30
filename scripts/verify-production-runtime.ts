@@ -7,11 +7,24 @@ import {
 import {
   verifyLiveIndexerLogs, verifyLiveIndexerSources, verifyNextArtifacts,
 } from "../lib/server/production-deployment";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
+const {
+  EXPECTED_NGINX_UPSTREAM_PORT,
+  requireProductionPort,
+} = require("./production-port.cjs") as {
+  EXPECTED_NGINX_UPSTREAM_PORT: string;
+  requireProductionPort: (environment: Record<string, string | undefined>) => string;
+};
 
 function main() {
   const selected = selectProductionPm2Process(readPm2Processes());
   const cwd = selected.process.pm2_env?.pm_cwd;
   if (!cwd) throw new Error("PM2 process does not provide cwd");
+  const port = requireProductionPort({
+    PORT: selected.process.pm2_env?.PORT,
+  });
   const artifacts = verifyNextArtifacts(cwd);
   verifyLiveIndexerSources(cwd);
   const commit = deployedCheckoutCommit(cwd);
@@ -39,6 +52,8 @@ function main() {
     cwd,
     nodeEnv: selected.process.pm2_env?.NODE_ENV,
     hasDatabaseUrl: Boolean(selected.process.pm2_env?.DATABASE_URL),
+    port,
+    nginxUpstreamPort: EXPECTED_NGINX_UPSTREAM_PORT,
     commit,
     buildId: readFileSync(resolve(cwd, ".next/BUILD_ID"), "utf8").trim(),
     processStartedAfterBuild: true,

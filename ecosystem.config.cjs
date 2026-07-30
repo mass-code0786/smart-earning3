@@ -4,12 +4,14 @@ const { resolve } = require("node:path");
 const {
   loadProductionPm2Environment,
 } = require("./scripts/pm2-environment.cjs");
+const { requireProductionPort } = require("./scripts/production-port.cjs");
 
 const projectRoot = "/var/www/smart-earning3";
 const cwd = process.env.SMART_EARNING_RELEASE_CWD || projectRoot;
 const productionEnvironment = loadProductionPm2Environment(
   resolve(projectRoot, ".env"),
 );
+const productionPort = requireProductionPort(productionEnvironment);
 const requiredArtifacts = [
   ".next/BUILD_ID",
   ".next/server/app/page_client-reference-manifest.js",
@@ -37,12 +39,13 @@ module.exports = {
     name: "smart-earning",
     cwd,
     script: "node_modules/next/dist/bin/next",
-    args: "start",
+    args: ["start", "--port", productionPort],
     instances: 1,
     exec_mode: "fork",
     env: {
       ...productionEnvironment,
       NODE_ENV: "production",
+      PORT: productionPort,
       DATABASE_URL: productionEnvironment.DATABASE_URL,
       DEPLOYED_GIT_COMMIT: deployedCommit,
       DEPLOYED_BUILD_ID: deployedBuildId,

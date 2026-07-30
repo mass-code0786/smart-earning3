@@ -17,6 +17,9 @@ const { loadProductionPm2Environment } = require("./pm2-environment.cjs") as {
     environment?: Record<string, string | undefined>,
   ) => Record<string, string | undefined>;
 };
+const { requireProductionPort } = require("./production-port.cjs") as {
+  requireProductionPort: (environment: Record<string, string | undefined>) => string;
+};
 
 const CONFIRM = "--confirm-production-deploy";
 type Stage = { name: string; run: () => void | Promise<void> };
@@ -73,6 +76,7 @@ async function main() {
   let buildId = "";
   let completedAtMs = 0;
   let productionEnvironment: Record<string, string | undefined> = {};
+  let productionPort = "";
 
   const stages: Stage[] = [
     { name: "clean_worktree", run: () => {
@@ -89,7 +93,10 @@ async function main() {
         resolve(PRODUCTION_CWD, ".env"),
       );
       if (!productionEnvironment.DATABASE_URL) throw new Error("DATABASE_URL is missing");
-      process.stdout.write("[deploy] production environment resolved; hasDatabaseUrl=true\n");
+      productionPort = requireProductionPort(productionEnvironment);
+      process.stdout.write(
+        `[deploy] production environment resolved; hasDatabaseUrl=true port=${productionPort}\n`,
+      );
     } },
     { name: "create_isolated_release", run: () => {
       mkdirSync(PRODUCTION_RELEASES_CWD, { recursive: true });
@@ -129,6 +136,7 @@ async function main() {
       if (env?.NODE_ENV !== "production" || !env.DATABASE_URL) {
         throw new Error("Running PM2 environment is incomplete");
       }
+      if (env.PORT !== productionPort) throw new Error("Running PM2 port mismatch");
       if (env.DEPLOYED_GIT_COMMIT !== commit) throw new Error("Running commit mismatch");
       if (env.DEPLOYED_BUILD_ID !== buildId) throw new Error("Running build ID mismatch");
       const pid = selected.process.pid;
@@ -146,7 +154,8 @@ async function main() {
     } },
     { name: "database_readiness", run: () =>
       command("npm", ["run", "verify:production-readiness"], releaseCwd) },
-    { name: "http_health", run: () => waitForHttpHealth("http://127.0.0.1:3000/") },
+    { name: "http_health", run: () =>
+      waitForHttpHealth(`http://127.0.0.1:${productionPort}/`) },
     { name: "indexer_health_mode", run: async () => {
       const selected = selectProductionPm2Process(readPm2Processes(), releaseCwd);
       const logs = output("pm2", ["logs", String(selected.process.name),
