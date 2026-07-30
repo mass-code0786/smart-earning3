@@ -203,9 +203,29 @@ export async function verifyAndActivateRegistration(
         repaired: projection.relationCreated || projection.historyCreated,
       };
     }
-    const duplicateWallet = await client.query("SELECT 1 FROM users WHERE wallet_address=$1", [wallet]);
-    if (duplicateWallet.rowCount) {
-      throw new ApiError(409, "Wallet is already registered", "ALREADY_REGISTERED");
+    const existingUser = await client.query<{ id: string }>(
+      "SELECT id FROM users WHERE lower(wallet_address)=lower($1) FOR UPDATE",
+      [wallet],
+    );
+    let reusableUserId: string | undefined;
+    if (existingUser.rows[0]) {
+      const footprint = await client.query<{ has_projection: boolean }>(
+        `SELECT(
+          EXISTS(SELECT 1 FROM registrations WHERE user_id=$1)
+          OR EXISTS(SELECT 1 FROM referral_relations WHERE user_id=$1)
+          OR EXISTS(SELECT 1 FROM matrix_placements WHERE user_id=$1)
+          OR EXISTS(SELECT 1 FROM magic_wallet_ledger WHERE user_id=$1)
+          OR EXISTS(SELECT 1 FROM income_wallet_ledger WHERE user_id=$1)
+          OR EXISTS(SELECT 1 FROM earning_split_events WHERE user_id=$1)
+          OR EXISTS(SELECT 1 FROM x3_hold_ledger WHERE user_id=$1)
+          OR EXISTS(SELECT 1 FROM package_purchases WHERE user_id=$1)
+        ) has_projection`,
+        [existingUser.rows[0].id],
+      );
+      if (footprint.rows[0]?.has_projection) {
+        throw new ApiError(409, "Wallet has conflicting ownership projections", "OWNERSHIP_CONFLICT");
+      }
+      reusableUserId = existingUser.rows[0].id;
     }
     const sponsorResult = await client.query<{ id: string }>(
       "SELECT id FROM users WHERE wallet_address=$1 AND status='ACTIVE' FOR UPDATE",
@@ -222,12 +242,17 @@ export async function verifyAndActivateRegistration(
       throw new ApiError(422, "Matrix parent is not indexed", "MATRIX_PARENT_NOT_INDEXED");
     }
 
-    const userResult = await client.query<{ id: string }>(
+    const userId = reusableUserId || (await client.query<{ id: string }>(
       `INSERT INTO users(wallet_address,status,activated_at)
        VALUES($1,'ACTIVE',now()) RETURNING id`,
       [wallet],
-    );
-    const userId = userResult.rows[0].id;
+    )).rows[0].id;
+    if (reusableUserId) {
+      await client.query(
+        "UPDATE users SET status='ACTIVE',activated_at=COALESCE(activated_at,now()) WHERE id=$1",
+        [reusableUserId],
+      );
+    }
     const registrationResult = await client.query<{ id: string }>(
       `INSERT INTO registrations(
          user_id,sponsor_user_id,tx_hash,chain_id,amount_token_units,status,block_number,confirmed_at

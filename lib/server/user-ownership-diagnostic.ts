@@ -49,8 +49,8 @@ export async function diagnoseUserOwnership(sponsorInput: string, referralInput:
 
   const userIds = users.rows.map((row) => row.id);
   const [
-    relations, registrations, matrixPlacements, packagePurchases, activities,
-    blockchainTransactions, processedEvents, financialTotals, ledgerRows,
+    relations, teamTotals, x3Ownership, registrations, matrixPlacements, packagePurchases,
+    activities, blockchainTransactions, processedEvents, financialTotals, ledgerRows,
   ] = await Promise.all([
     query(
       `SELECT rr.*,child.wallet_address referral_wallet,sp.wallet_address sponsor_wallet
@@ -58,6 +58,36 @@ export async function diagnoseUserOwnership(sponsorInput: string, referralInput:
        JOIN users sp ON sp.id=rr.sponsor_user_id
        WHERE rr.user_id=ANY($1::uuid[]) OR rr.sponsor_user_id=ANY($1::uuid[])
        ORDER BY rr.created_at,rr.id`,
+      [userIds],
+    ),
+    query(
+      `WITH RECURSIVE team(root_user_id,user_id) AS (
+         SELECT root.id,rr.user_id FROM users root
+         JOIN referral_relations rr ON rr.sponsor_user_id=root.id
+         WHERE root.id=ANY($1::uuid[])
+         UNION
+         SELECT team.root_user_id,rr.user_id FROM team
+         JOIN referral_relations rr ON rr.sponsor_user_id=team.user_id
+       )
+       SELECT u.id user_id,u.wallet_address,
+         (SELECT count(*)::int FROM referral_relations rr WHERE rr.sponsor_user_id=u.id)
+           recomputed_direct_count,
+         (SELECT count(*)::int FROM team WHERE team.root_user_id=u.id) total_team
+       FROM users u WHERE u.id=ANY($1::uuid[]) ORDER BY u.id`,
+      [userIds],
+    ),
+    query(
+      `SELECT h.id hold_id,h.user_id current_user_id,i.owner_user_id expected_user_id,
+              c.user_id cycle_owner_user_id,h.package_id,h.amount::text,h.status,
+              i.source_package_purchase_id,i.slot_id,i.idempotency_key,
+              pp.user_id source_purchase_user_id,mp.user_id matrix_placed_user_id
+       FROM x3_hold_ledger h
+       JOIN x3_income_ledger i ON i.id=h.x3_income_ledger_id
+       JOIN x3_cycles c ON c.id=i.owner_cycle_id
+       LEFT JOIN package_purchases pp ON pp.id=i.source_package_purchase_id
+       LEFT JOIN matrix_placements mp ON mp.user_id=i.owner_user_id
+       WHERE h.user_id=ANY($1::uuid[]) OR i.owner_user_id=ANY($1::uuid[])
+       ORDER BY h.held_at,h.id`,
       [userIds],
     ),
     query(
@@ -136,6 +166,17 @@ export async function diagnoseUserOwnership(sponsorInput: string, referralInput:
        UNION ALL
        SELECT 'earning_split_events',id::text,user_id,capped_gross_credit::text,income_type,idempotency_key,created_at
        FROM earning_split_events WHERE user_id=ANY($1::uuid[])
+       UNION ALL
+       SELECT 'income_credit_ledger',id::text,user_id,credited_amount::text,income_type,idempotency_key,created_at
+       FROM income_credit_ledger WHERE user_id=ANY($1::uuid[])
+       UNION ALL
+       SELECT 'magic_funding_events',id::text,user_id,amount::text,source_type,idempotency_key,created_at
+       FROM magic_funding_events WHERE user_id=ANY($1::uuid[])
+       UNION ALL
+       SELECT 'direct_income_ledger',id::text,sponsor_user_id,amount_token_units::text,
+              'DIRECT_INCOME',idempotency_key,created_at
+       FROM direct_income_ledger
+       WHERE sponsor_user_id=ANY($1::uuid[]) OR source_user_id=ANY($1::uuid[])
        ORDER BY created_at,source,id`,
       [userIds],
     ),
@@ -144,7 +185,15 @@ export async function diagnoseUserOwnership(sponsorInput: string, referralInput:
   if (referralUser && referralUser.sponsor_wallet?.toLowerCase() !== sponsor) {
     mismatches.push("REFERRAL_SPONSOR_MISMATCH");
   }
-  const registrationTxHash = referralUser?.registration_tx_hash || null;
+  const candidateTransactions = (blockchainTransactions.rows as Array<{
+    tx_hash?: string; event_name?: string; status?: string; from_address?: string;
+  }>).filter((row) =>
+    row.event_name === "UserRegistered"
+    && row.status === "CONFIRMED"
+    && row.from_address?.toLowerCase() === referral);
+  if (candidateTransactions.length > 1) mismatches.push("AMBIGUOUS_REGISTRATION_EVENTS");
+  const registrationTxHash = referralUser?.registration_tx_hash
+    || (candidateTransactions.length === 1 ? candidateTransactions[0].tx_hash || null : null);
   let onchain: Record<string, unknown> | null = null;
   if (registrationTxHash) {
     const provider = getProvider();
@@ -183,6 +232,8 @@ export async function diagnoseUserOwnership(sponsorInput: string, referralInput:
         magicWalletCredit: String(decoded.event.args.magicWalletCredit),
         logIndex: decoded.entry.index,
         blockNumber: receipt.blockNumber,
+        blockHash: receipt.blockHash,
+        contractAddress: normalizeWallet(transaction.to || ""),
       };
       if (registeredUser !== referral) mismatches.push("EVENT_REGISTERED_USER_MISMATCH");
       if (eventSponsor !== sponsor) mismatches.push("EVENT_SPONSOR_MISMATCH");
@@ -205,7 +256,9 @@ export async function diagnoseUserOwnership(sponsorInput: string, referralInput:
     blockchainTransactions: blockchainTransactions.rows,
     processedBlockchainEvents: processedEvents.rows,
     balancesByUser: financialTotals.rows,
+    recomputedTeamByUser: teamTotals.rows,
     ledgerRows: ledgerRows.rows,
+    x3HoldOwnershipProof: x3Ownership.rows,
     registrationEvent: onchain,
     mismatches: [...new Set(mismatches)],
   };

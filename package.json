@@ -19,6 +19,7 @@
     "indexer": "tsx scripts/indexer.ts",
     "reconcile:registration:testnet": "tsx scripts/reconcile-registration-tx.ts",
     "diagnose:user-ownership:testnet": "tsx scripts/diagnose-user-ownership.ts",
+    "repair:user-ownership:testnet": "tsx scripts/repair-user-ownership.ts",
     "x3:backfill": "tsx scripts/backfill-x3.ts",
     "history:backfill": "tsx scripts/history-backfill.ts",
     "x3:recovery": "tsx scripts/x3-recovery.ts",
