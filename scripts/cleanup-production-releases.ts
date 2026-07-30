@@ -2,6 +2,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { posix, resolve } from "node:path";
 import {
+  LEGACY_PRODUCTION_RELEASES_CWD,
   PRODUCTION_CWD,
   PRODUCTION_RELEASES_CWD,
   readPm2Processes,
@@ -24,25 +25,29 @@ function main() {
     throw new Error(`Refusing release cleanup without ${CONFIRM}`);
   }
 
-  const releaseRoot = normalized(PRODUCTION_RELEASES_CWD);
+  const releaseRoots = [
+    normalized(PRODUCTION_RELEASES_CWD),
+    normalized(LEGACY_PRODUCTION_RELEASES_CWD),
+  ];
   const active = selectProductionPm2Process(readPm2Processes());
   const activeCwd = normalized(String(active.process.pm2_env?.pm_cwd || ""));
-  const releases: ProductionRelease[] = existsSync(PRODUCTION_RELEASES_CWD)
-    ? readdirSync(PRODUCTION_RELEASES_CWD, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => {
-        const cwd = normalized(resolve(PRODUCTION_RELEASES_CWD, entry.name));
-        if (!cwd.startsWith(`${releaseRoot}/`)) {
-          throw new Error(`Release escaped configured root: ${cwd}`);
-        }
-        const marker = resolve(cwd, SUCCESS_MARKER);
-        return {
-          cwd,
-          successful: existsSync(marker),
-          modifiedAtMs: statSync(existsSync(marker) ? marker : cwd).mtimeMs,
-        };
-      })
-    : [];
+  const releases: ProductionRelease[] = releaseRoots.flatMap((releaseRoot) =>
+    existsSync(releaseRoot)
+      ? readdirSync(releaseRoot, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => {
+          const cwd = normalized(resolve(releaseRoot, entry.name));
+          if (!cwd.startsWith(`${releaseRoot}/`)) {
+            throw new Error(`Release escaped configured root: ${cwd}`);
+          }
+          const marker = resolve(cwd, SUCCESS_MARKER);
+          return {
+            cwd,
+            successful: existsSync(marker),
+            modifiedAtMs: statSync(existsSync(marker) ? marker : cwd).mtimeMs,
+          };
+        })
+      : []);
 
   const removals = planProductionReleaseCleanup(releases, activeCwd);
   process.stdout.write(JSON.stringify({
@@ -56,7 +61,10 @@ function main() {
   }, null, 2) + "\n");
 
   for (const release of removals) {
-    if (release.cwd === activeCwd || !release.cwd.startsWith(`${releaseRoot}/`)) {
+    if (
+      release.cwd === activeCwd
+      || !releaseRoots.some((root) => release.cwd.startsWith(`${root}/`))
+    ) {
       throw new Error(`Refusing unsafe release removal: ${release.cwd}`);
     }
     const result = spawnSync(

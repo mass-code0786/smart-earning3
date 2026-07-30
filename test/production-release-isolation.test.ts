@@ -57,4 +57,14 @@ describe("production release isolation", () => {
       .toBeLessThan(deployment.indexOf('name: "npm_ci"'));
     expect(deployment).toContain(".deployment-success.json");
   });
+
+  it("cleanup covers legacy and external roots while protecting PM2 active cwd", () => {
+    const cleanup = readFileSync(
+      resolve("scripts/cleanup-production-releases.ts"), "utf8",
+    );
+    expect(cleanup).toContain("LEGACY_PRODUCTION_RELEASES_CWD");
+    expect(cleanup).toContain("PRODUCTION_RELEASES_CWD");
+    expect(cleanup).toContain("release.cwd === activeCwd");
+    expect(cleanup).toContain("keepSuccessful: 3");
+  });
 });
