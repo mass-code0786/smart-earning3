@@ -4,7 +4,9 @@ import {
 
 async function main() {
   const selected = selectProductionPm2Process(readPm2Processes());
-  const checkoutCommit = deployedCheckoutCommit(PRODUCTION_CWD);
+  const runningCwd = selected.process.pm2_env?.pm_cwd;
+  if (!runningCwd) throw new Error("Matching PM2 process does not provide pm_cwd");
+  const checkoutCommit = deployedCheckoutCommit(runningCwd);
   const runningCommit = selected.process.pm2_env?.DEPLOYED_GIT_COMMIT;
   if (!runningCommit || runningCommit !== checkoutCommit) {
     throw new Error(
@@ -21,7 +23,7 @@ async function main() {
   const readiness = await getRegistrationSchemaReadiness({ force: true });
   const report = {
     pm2Process: selected.process.name || null,
-    cwd: PRODUCTION_CWD,
+    cwd: runningCwd,
     gitCommit: checkoutCommit,
     database: selected.databaseIdentity,
     readiness,

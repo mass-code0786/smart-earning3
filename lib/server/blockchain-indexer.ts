@@ -22,8 +22,10 @@ import {
 
 const iface = new Interface([...SMART_EARNING_ABI, ...PACKAGE_ABI]);
 const relevantEvents = ["UserRegistered", "PackagePurchased"] as const;
+export const LIVE_INDEXER_MODE = "block_receipt_indexing" as const;
+export const LIVE_INDEXER_SOURCE = "lib/server/blockchain-indexer.ts";
 type IndexerHealth = {
-  mode: "block_receipt_indexing";
+  mode: typeof LIVE_INDEXER_MODE;
   running: boolean;
   chainId: number;
   contractAddress: string | null;
@@ -38,7 +40,7 @@ type IndexerHealth = {
 };
 
 const health: IndexerHealth = {
-  mode: "block_receipt_indexing",
+  mode: LIVE_INDEXER_MODE,
   running: false,
   chainId: CHAIN_ID,
   contractAddress: null,
@@ -223,6 +225,11 @@ async function run() {
 
 export function startBlockchainIndexer() {
   if (worker) return worker;
+  console.info("[blockchain-indexer] startup", {
+    mode: LIVE_INDEXER_MODE,
+    source: LIVE_INDEXER_SOURCE,
+    gitCommit: process.env.DEPLOYED_GIT_COMMIT || "unknown",
+  });
   stopped = false;
   worker = run().catch((error) => {
     health.lastError = error instanceof Error ? error.message : String(error);

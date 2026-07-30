@@ -18,6 +18,8 @@
     "migrate:production": "tsx scripts/migrate-production.ts",
     "verify:production-readiness": "tsx scripts/verify-production-readiness.ts",
     "check:pm2-environment": "tsx scripts/check-pm2-environment.ts",
+    "deploy:production": "tsx scripts/deploy-production.ts",
+    "verify:production-runtime": "tsx scripts/verify-production-runtime.ts",
     "seed:genesis": "tsx scripts/seed-genesis.ts",
     "indexer": "tsx scripts/indexer.ts",
     "reconcile:registration:testnet": "tsx scripts/reconcile-registration-tx.ts",

@@ -8,6 +8,7 @@ artifacts/
 cache/
 evidence/
 deployments/*.json
+releases/
 
 *.log
 *.tsbuildinfo
