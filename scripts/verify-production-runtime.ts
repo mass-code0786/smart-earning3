@@ -5,7 +5,7 @@ import {
   deployedCheckoutCommit, readPm2Processes, selectProductionPm2Process,
 } from "../lib/server/pm2-production";
 import {
-  verifyLiveIndexerSources, verifyNextArtifacts,
+  verifyLiveIndexerLogs, verifyLiveIndexerSources, verifyNextArtifacts,
 } from "../lib/server/production-deployment";
 
 function main() {
@@ -33,12 +33,7 @@ function main() {
     "pm2", ["logs", "smart-earning", "--nostream", "--lines", "200"],
     { cwd, encoding: "utf8" },
   );
-  if (!logs.includes("block_receipt_indexing")) {
-    throw new Error("Indexer block_receipt_indexing startup marker is missing");
-  }
-  if (/method=eth_getLogs/.test(logs)) {
-    throw new Error("Live PM2 logs contain forbidden eth_getLogs activity");
-  }
+  verifyLiveIndexerLogs(logs);
   process.stdout.write(`${JSON.stringify({
     name: selected.process.name,
     cwd,

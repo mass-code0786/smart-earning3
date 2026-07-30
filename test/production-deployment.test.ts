@@ -4,7 +4,8 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
-  REQUIRED_NEXT_ARTIFACTS, verifyLiveIndexerSources, verifyNextArtifacts,
+  REQUIRED_NEXT_ARTIFACTS, verifyLiveIndexerLogs, verifyLiveIndexerSources,
+  verifyNextArtifacts,
 } from "@/lib/server/production-deployment";
 
 const roots: string[] = [];
@@ -63,6 +64,18 @@ describe("atomic production deployment", () => {
     expect(emergency).toMatch(/\.getLogs\s*\(/);
     expect(readFileSync(resolve("instrumentation.ts"), "utf8"))
       .not.toContain("registration-tx-reconciliation");
+  });
+
+  it("checks eth_getLogs only after the latest live-indexer startup marker", () => {
+    expect(() => verifyLiveIndexerLogs(
+      "old method=eth_getLogs limit exceeded\nmode=block_receipt_indexing\nhealthy",
+    )).not.toThrow();
+    expect(() => verifyLiveIndexerLogs(
+      "mode=block_receipt_indexing\nmethod=eth_getLogs limit exceeded",
+    )).toThrow("Current live indexer run");
+    expect(() => verifyLiveIndexerLogs("no startup marker")).toThrow(
+      "startup marker was not observed",
+    );
   });
 
   it("blocks duplicate indexers and rolls back after a failed switched release", () => {

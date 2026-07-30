@@ -45,3 +45,15 @@ export function verifyLiveIndexerSources(releaseCwd: string) {
     throw new Error("Emergency registration reconciliation no longer has its explicit log lookup");
   }
 }
+
+export function verifyLiveIndexerLogs(logs: string) {
+  const marker = "block_receipt_indexing";
+  const markerIndex = logs.lastIndexOf(marker);
+  if (markerIndex < 0) {
+    throw new Error("Indexer block_receipt_indexing startup marker was not observed");
+  }
+  const currentRunLogs = logs.slice(markerIndex);
+  if (/method=eth_getLogs/.test(currentRunLogs)) {
+    throw new Error("Current live indexer run contains forbidden eth_getLogs activity");
+  }
+}

@@ -7,7 +7,7 @@ import {
   selectProductionPm2Process,
 } from "../lib/server/pm2-production";
 import {
-  verifyLiveIndexerSources, verifyNextArtifacts,
+  verifyLiveIndexerLogs, verifyLiveIndexerSources, verifyNextArtifacts,
 } from "../lib/server/production-deployment";
 
 const require = createRequire(import.meta.url);
@@ -151,12 +151,7 @@ async function main() {
       const selected = selectProductionPm2Process(readPm2Processes(), releaseCwd);
       const logs = output("pm2", ["logs", String(selected.process.name),
         "--nostream", "--lines", "200"], releaseCwd);
-      if (!logs.includes("block_receipt_indexing")) {
-        throw new Error("Indexer block_receipt_indexing startup marker was not observed");
-      }
-      if (/method=eth_getLogs/.test(logs)) {
-        throw new Error("Live PM2 logs contain forbidden eth_getLogs activity");
-      }
+      verifyLiveIndexerLogs(logs);
     } },
   ];
 
