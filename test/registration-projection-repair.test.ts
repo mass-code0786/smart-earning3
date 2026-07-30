@@ -21,6 +21,10 @@ const input = {
   txHash: `0x${"12".repeat(32)}`,
   blockNumber: 123,
   confirmedAt: new Date("2026-07-29T00:00:00Z"),
+  blockHash: `0x${"34".repeat(32)}`,
+  logIndex: 7,
+  confirmations: 3,
+  contractAddress: "0x00000000000000000000000000000000000000cc",
 };
 
 describe("idempotent confirmed-registration projection repair", () => {
@@ -50,6 +54,9 @@ describe("idempotent confirmed-registration projection repair", () => {
       .resolves.toEqual({ relationCreated: false, historyCreated: false });
 
     expect(sql.some(text => text.includes("direct_count=("))).toBe(true);
+    expect(sql.some(text => text.includes("UPDATE users SET status='ACTIVE'"))).toBe(true);
+    expect(sql.some(text => text.includes("UPDATE registrations SET status='CONFIRMED'"))).toBe(true);
+    expect(sql.some(text => text.includes("INSERT INTO blockchain_transactions"))).toBe(true);
     expect(sql.join("\n")).not.toMatch(/direct_income_ledger|magic_wallet_ledger|matrix_placements|INSERT INTO users/);
     expect(recordReferralHistory).toHaveBeenCalledTimes(2);
     expect((recordReferralHistory.mock.calls as unknown[][])[0][1]).toMatchObject({

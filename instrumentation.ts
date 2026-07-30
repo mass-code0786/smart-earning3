@@ -20,5 +20,7 @@ export async function register(){
     }
     const{startX3RecoveryWorker}=await import("./lib/server/x3-recovery-worker");
     startX3RecoveryWorker();
+    const{startBlockchainIndexer}=await import("./lib/server/blockchain-indexer");
+    startBlockchainIndexer();
   }
 }

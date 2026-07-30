@@ -1,189 +1,160 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
 import {
-  historicalBlockRanges,
-  indexHistoricalEvents,
-  indexerBlockBatchSize,
+  initializeForwardIndexer,
+  processForwardRanges,
+  safeLatestBlock,
   type IndexerLog,
 } from "@/scripts/indexer-core";
 
 const address = "0x4509301aa843f504936999850f4bcaf57a03cd99";
+const event = (blockNumber: number, suffix: string, index = 0): IndexerLog => ({
+  blockNumber,
+  transactionHash: `0x${suffix.padStart(64, "0")}`,
+  index,
+  topics: ["registered"],
+  data: "0x",
+});
 
-function log(blockNumber: number, suffix: string, index = 0): IndexerLog {
-  return {
-    blockNumber,
-    transactionHash: `0x${suffix.padStart(64, "0")}`,
-    index,
-    topics: [],
-    data: "0x",
-  };
-}
-
-function harness(head: number, logs: IndexerLog[]) {
-  let cursor: number | undefined;
-  const committed: number[] = [];
+function harness(head: number, logs: IndexerLog[] = [], initial?: number) {
+  let checkpoint = initial;
+  const processed = new Set<string>();
+  const commits: number[] = [];
   const requests: Array<{ fromBlock: number; toBlock: number }> = [];
-  return {
-    provider: {
-      getBlockNumber: vi.fn(async () => head),
-      getLogs: vi.fn(async ({ fromBlock, toBlock }: {
-        address: string;
-        fromBlock: number;
-        toBlock: number;
-      }) => {
-        requests.push({ fromBlock, toBlock });
-        return logs.filter((item) => item.blockNumber >= fromBlock && item.blockNumber <= toBlock);
-      }),
-      getBlock: vi.fn(async (blockNumber: number) => ({ hash: `block-${blockNumber}` })),
-    },
-    checkpoints: {
-      getLastBlock: vi.fn(async () => cursor),
-      commitLastBlock: vi.fn(async (
-        _chainId: number,
-        _contractAddress: string,
-        blockNumber: number,
-      ) => {
-        cursor = blockNumber;
-        committed.push(blockNumber);
-      }),
-    },
-    requests,
-    committed,
-    cursor: () => cursor,
+  const provider = {
+    getBlockNumber: vi.fn(async () => head),
+    getLogs: vi.fn(async ({ fromBlock, toBlock }: { fromBlock: number; toBlock: number }) => {
+      requests.push({ fromBlock, toBlock });
+      return logs.filter((log) => log.blockNumber >= fromBlock && log.blockNumber <= toBlock);
+    }),
   };
+  const checkpoints = {
+    getLastBlock: vi.fn(async () => checkpoint),
+    initialize: vi.fn(async (_chain: number, _contract: string, block: number) => {
+      if (checkpoint === undefined) checkpoint = block;
+      return checkpoint;
+    }),
+    commitLastBlock: vi.fn(async (_chain: number, _contract: string, block: number) => {
+      checkpoint = block;
+      commits.push(block);
+    }),
+  };
+  const processedEvents = {
+    has: vi.fn(async (_chain: number, hash: string, index: number) =>
+      processed.has(`${hash.toLowerCase()}:${index}`)),
+    record: vi.fn(async (input: { transactionHash: string; logIndex: number }) => {
+      processed.add(`${input.transactionHash.toLowerCase()}:${input.logIndex}`);
+    }),
+  };
+  return { provider, checkpoints, processedEvents, commits, requests, checkpoint: () => checkpoint };
 }
 
-describe("BSC Testnet indexer batching", () => {
-  it("caps configured and explicit historical ranges at 500 blocks", () => {
-    expect(indexerBlockBatchSize("500")).toBe(500);
-    expect(indexerBlockBatchSize("5000")).toBe(500);
-    expect(historicalBlockRanges(100, 1_349, 5_000)).toEqual([
-      { fromBlock: 100, toBlock: 599 },
-      { fromBlock: 600, toBlock: 1_099 },
-      { fromBlock: 1_100, toBlock: 1_349 },
-    ]);
+const run = (
+  state: ReturnType<typeof harness>,
+  handleLog: (log: IndexerLog, eventName: string) => Promise<void> =
+    vi.fn(async () => undefined),
+) =>
+  processForwardRanges({
+    chainId: 97,
+    contractAddress: address,
+    confirmations: 3,
+    batchSize: 100,
+    provider: state.provider,
+    checkpoints: state.checkpoints,
+    processedEvents: state.processedEvents,
+    eventName: () => "UserRegistered",
+    handleLog,
+    sleep: async () => undefined,
   });
 
-  it("batches across inclusive boundaries without gaps or overlaps", async () => {
-    const state = harness(1_101, []);
-    await indexHistoricalEvents({
-      chainId: 97,
-      contractAddress: address,
-      deploymentBlock: 100,
-      confirmationsRequired: 2,
-      batchSize: 500,
-      provider: state.provider,
-      checkpoints: state.checkpoints,
-      handleLog: vi.fn(),
+describe("forward-only BSC Testnet indexer", () => {
+  it("first run checkpoints safe latest and ignores older events", async () => {
+    const old = event(90, "1");
+    const state = harness(100, [old]);
+    const initialized = await initializeForwardIndexer({
+      chainId: 97, contractAddress: address, confirmations: 3,
+      provider: state.provider, checkpoints: state.checkpoints,
     });
-
-    expect(state.requests).toEqual([
-      { fromBlock: 100, toBlock: 599 },
-      { fromBlock: 600, toBlock: 1_099 },
-      { fromBlock: 1_100, toBlock: 1_100 },
-    ]);
-    expect(state.committed).toEqual([599, 1_099, 1_100]);
+    expect(initialized).toEqual({ checkpoint: 97, safeLatest: 97, initialized: true });
+    const handle = vi.fn();
+    await run(state, handle);
+    expect(state.requests).toEqual([]);
+    expect(handle).not.toHaveBeenCalled();
   });
 
-  it("restarts the failed batch after the last successfully committed cursor", async () => {
-    const events = [log(120, "1"), log(620, "2"), log(630, "3")];
-    const state = harness(700, events);
-    const attempts = new Map<string, number>();
-    const failOnce = vi.fn(async (event: IndexerLog) => {
-      const count = (attempts.get(event.transactionHash) || 0) + 1;
-      attempts.set(event.transactionHash, count);
-      if (event.blockNumber === 630 && count === 1) throw new Error("temporary reconciliation failure");
-    });
-
-    await expect(indexHistoricalEvents({
-      chainId: 97,
-      contractAddress: address,
-      deploymentBlock: 100,
-      confirmationsRequired: 1,
-      batchSize: 500,
-      provider: state.provider,
-      checkpoints: state.checkpoints,
-      handleLog: failOnce,
-    })).rejects.toThrow("temporary reconciliation failure");
-    expect(state.cursor()).toBe(599);
-
-    await indexHistoricalEvents({
-      chainId: 97,
-      contractAddress: address,
-      deploymentBlock: 100,
-      confirmationsRequired: 1,
-      batchSize: 500,
-      provider: state.provider,
-      checkpoints: state.checkpoints,
-      handleLog: failOnce,
-    });
-    expect(state.requests.at(-1)).toEqual({ fromBlock: 600, toBlock: 700 });
-    expect(state.cursor()).toBe(700);
+  it("processes the next confirmed registration and resumes after restart", async () => {
+    const registration = event(98, "2", 4);
+    const state = harness(101, [registration], 97);
+    const handle = vi.fn(async () => undefined);
+    await run(state, handle);
+    expect(handle).toHaveBeenCalledOnce();
+    expect(state.checkpoint()).toBe(98);
+    state.provider.getBlockNumber.mockResolvedValue(103);
+    await run(state, handle);
+    expect(state.requests.at(-1)).toEqual({ fromBlock: 99, toBlock: 100 });
   });
 
-  it("suppresses duplicate RPC log entries within a batch", async () => {
-    const paidRegistration = log(120, "abc", 7);
-    const state = harness(200, [paidRegistration, paidRegistration]);
-    const reconcile = vi.fn(async () => undefined);
-
-    await indexHistoricalEvents({
-      chainId: 97,
-      contractAddress: address,
-      deploymentBlock: 100,
-      confirmationsRequired: 1,
-      provider: state.provider,
-      checkpoints: state.checkpoints,
-      handleLog: reconcile,
-    });
-    expect(reconcile).toHaveBeenCalledTimes(1);
+  it("does not advance a checkpoint after a failed range", async () => {
+    const state = harness(110, [event(105, "3")], 100);
+    await expect(run(state, vi.fn(async () => {
+      throw new Error("projection failed");
+    }))).rejects.toThrow("projection failed");
+    expect(state.checkpoint()).toBe(100);
+    expect(state.commits).toEqual([]);
   });
 
-  it("reconciles an already-paid registration exactly once across a partial restart", async () => {
-    const paid = log(620, "paid", 2);
-    const later = log(630, "later", 3);
-    const state = harness(700, [paid, later]);
-    const indexedTxHashes = new Set<string>();
-    let registrationRows = 0;
-    let failLaterOnce = true;
-    const reconcile = async (event: IndexerLog) => {
-      if (event === later && failLaterOnce) {
-        failLaterOnce = false;
+  it("does not reprocess a duplicate event after a partial restart", async () => {
+    const first = event(101, "4", 1);
+    const second = event(102, "5", 2);
+    const state = harness(105, [first, second], 100);
+    let failSecond = true;
+    const handle = vi.fn(async (log: IndexerLog) => {
+      if (log === second && failSecond) {
+        failSecond = false;
         throw new Error("later event failed");
       }
-      if (!indexedTxHashes.has(event.transactionHash)) {
-        indexedTxHashes.add(event.transactionHash);
-        if (event === paid) registrationRows += 1;
-      }
-    };
-
-    const run = () => indexHistoricalEvents({
-      chainId: 97,
-      contractAddress: address,
-      deploymentBlock: 100,
-      confirmationsRequired: 1,
-      provider: state.provider,
-      checkpoints: state.checkpoints,
-      handleLog: reconcile,
     });
-    await expect(run()).rejects.toThrow("later event failed");
-    await run();
-
-    expect(registrationRows).toBe(1);
-    expect(indexedTxHashes.has(paid.transactionHash)).toBe(true);
+    await expect(run(state, handle)).rejects.toThrow("later event failed");
+    await run(state, handle);
+    expect(handle.mock.calls.filter(([log]) => log === first)).toHaveLength(1);
+    expect(handle.mock.calls.filter(([log]) => log === second)).toHaveLength(2);
   });
 
-  it("never starts before the deployment block even with an older cursor", async () => {
-    const state = harness(150, []);
-    state.checkpoints.getLastBlock.mockResolvedValue(0);
-    await indexHistoricalEvents({
-      chainId: 97,
-      contractAddress: address,
-      deploymentBlock: 100,
-      confirmationsRequired: 1,
-      provider: state.provider,
-      checkpoints: state.checkpoints,
-      handleLog: vi.fn(),
-    });
-    expect(state.requests[0]).toEqual({ fromBlock: 100, toBlock: 150 });
+  it("respects confirmation depth", async () => {
+    expect(safeLatestBlock(100, 3)).toBe(97);
+    const state = harness(100, [event(98, "6")], 97);
+    const handle = vi.fn();
+    await run(state, handle);
+    expect(handle).not.toHaveBeenCalled();
+    expect(state.requests).toEqual([]);
+  });
+
+  it("reduces an RPC-limited range and never skips blocks", async () => {
+    const state = harness(203, [], 100);
+    state.provider.getLogs
+      .mockRejectedValueOnce(Object.assign(new Error("limit exceeded"), { code: -32005 }))
+      .mockResolvedValue([]);
+    await run(state);
+    expect(state.provider.getLogs.mock.calls.map(([filter]) => ({
+      fromBlock: filter.fromBlock, toBlock: filter.toBlock,
+    }))).toEqual([
+      { fromBlock: 101, toBlock: 200 },
+      { fromBlock: 101, toBlock: 150 },
+      { fromBlock: 151, toBlock: 200 },
+    ]);
+    expect(state.checkpoint()).toBe(200);
+  });
+
+  it("manual start block is used only when no saved checkpoint exists", async () => {
+    const fresh = harness(100, [], undefined);
+    expect((await initializeForwardIndexer({
+      chainId: 97, contractAddress: address, confirmations: 3,
+      provider: fresh.provider, checkpoints: fresh.checkpoints, startBlock: 80,
+    })).checkpoint).toBe(80);
+    const resumed = harness(100, [], 91);
+    expect((await initializeForwardIndexer({
+      chainId: 97, contractAddress: address, confirmations: 3,
+      provider: resumed.provider, checkpoints: resumed.checkpoints, startBlock: 80,
+    })).checkpoint).toBe(91);
   });
 });

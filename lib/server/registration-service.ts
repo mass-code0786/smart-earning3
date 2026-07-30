@@ -37,8 +37,23 @@ export async function reconcileExistingRegistrationProjection(
     txHash: string;
     blockNumber: number;
     confirmedAt: Date;
+    blockHash?: string | null;
+    logIndex?: number;
+    confirmations?: number;
+    contractAddress?: string;
   },
 ) {
+  await client.query(
+    `UPDATE users SET status='ACTIVE',activated_at=COALESCE(activated_at,$2)
+     WHERE id=$1 AND (status<>'ACTIVE' OR activated_at IS NULL)`,
+    [input.userId, input.confirmedAt],
+  );
+  await client.query(
+    `UPDATE registrations SET status='CONFIRMED',block_number=COALESCE(block_number,$2),
+       confirmed_at=COALESCE(confirmed_at,$3),failure_reason=NULL
+     WHERE id=$1 AND (status<>'CONFIRMED' OR block_number IS NULL OR confirmed_at IS NULL)`,
+    [input.registrationId, input.blockNumber, input.confirmedAt],
+  );
   const relationInsert = await client.query<{ id: string }>(
     `INSERT INTO referral_relations(user_id,sponsor_user_id,registration_id)
      VALUES($1,$2,$3) ON CONFLICT(user_id) DO NOTHING RETURNING id`,
@@ -83,6 +98,20 @@ export async function reconcileExistingRegistrationProjection(
     ),
     occurredAt: input.confirmedAt,
   });
+  if (input.logIndex !== undefined && input.contractAddress) {
+    await client.query(
+      `INSERT INTO blockchain_transactions(
+         chain_id,tx_hash,block_number,block_hash,from_address,to_address,event_name,
+         log_index,status,confirmations,raw_payload,confirmed_at
+       ) VALUES($1,$2,$3,$4,$5,$6,'UserRegistered',$7,'CONFIRMED',$8,$9,$10)
+       ON CONFLICT(chain_id,tx_hash,log_index) DO NOTHING`,
+      [
+        CHAIN_ID, input.txHash, input.blockNumber, input.blockHash || null, input.wallet,
+        normalizeWallet(input.contractAddress), input.logIndex, input.confirmations || 0,
+        JSON.stringify({ sponsor: input.sponsor, projectionRepair: true }), input.confirmedAt,
+      ],
+    );
+  }
   return {
     relationCreated: Boolean(relationInsert.rows[0]),
     historyCreated: !history.duplicate,
@@ -162,6 +191,10 @@ export async function verifyAndActivateRegistration(
         txHash,
         blockNumber: row.block_number,
         confirmedAt: row.confirmed_at,
+        blockHash: receipt.blockHash,
+        logIndex: log.index,
+        confirmations,
+        contractAddress: config.SMART_EARNING_CONTRACT_ADDRESS,
       });
       return {
         registrationId: row.id,

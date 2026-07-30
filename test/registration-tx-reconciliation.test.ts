@@ -119,10 +119,16 @@ describe("exact BSC Testnet registration transaction reconciliation", () => {
     })).rejects.toMatchObject({ code: "MULTIPLE_REGISTRATION_EVENTS", status: 409 });
   });
 
-  it("retries a block range after an RPC limit exceeded response", async () => {
+  it("halves block ranges automatically after RPC limit exceeded responses", async () => {
     const provider = eventLookupProvider([{ hash: txHash }]);
-    provider.getLogs
-      .mockRejectedValueOnce(Object.assign(new Error("limit exceeded"), { code: -32005 }));
+    const normalGetLogs = provider.getLogs.getMockImplementation()!;
+    provider.getLogs.mockImplementation(async (filter) => {
+      const size = filter.toBlock - filter.fromBlock + 1;
+      if (size > 375) {
+        throw Object.assign(new Error("limit exceeded"), { code: -32005 });
+      }
+      return normalGetLogs(filter);
+    });
 
     await expect(findRegistrationTransactionForWallet(wallet, {
       provider,
@@ -130,7 +136,31 @@ describe("exact BSC Testnet registration transaction reconciliation", () => {
       deploymentBlock: 121722387,
       retryDelayMs: 0,
     })).resolves.toMatchObject({ txHash, wallet: wallet.toLowerCase() });
-    expect(provider.getLogs).toHaveBeenCalledTimes(4);
+    expect(provider.getLogs.mock.calls.slice(0, 4).map(([filter]) =>
+      filter.toBlock - filter.fromBlock + 1)).toEqual([3_000, 1_500, 750, 375]);
+    expect(provider.getBlockNumber).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back to one-block scans when that is the provider limit", async () => {
+    const provider = eventLookupProvider([{ hash: txHash }]);
+    provider.getBlockNumber.mockResolvedValue(121722400);
+    const normalGetLogs = provider.getLogs.getMockImplementation()!;
+    provider.getLogs.mockImplementation(async (filter) => {
+      if (filter.toBlock > filter.fromBlock) {
+        throw Object.assign(new Error("limit exceeded"), { code: -32005 });
+      }
+      return normalGetLogs(filter);
+    });
+
+    await expect(findRegistrationTransactionForWallet(wallet, {
+      provider,
+      contractAddress: contract,
+      deploymentBlock: 121722399,
+      retryDelayMs: 0,
+    })).resolves.toMatchObject({ txHash });
+    expect(provider.getLogs.mock.calls.some(([filter]) =>
+      filter.fromBlock === filter.toBlock)).toBe(true);
+    expect(provider.getBlockNumber).toHaveBeenCalledTimes(1);
   });
 
   it("validates and reconciles one successful paid registration transaction", async () => {

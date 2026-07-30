@@ -12,6 +12,7 @@ const txHashSchema = z.string().regex(/^0x[a-fA-F0-9]{64}$/);
 const iface = new Interface(SMART_EARNING_ABI);
 const REGISTRATION_LOG_BLOCK_CHUNK = 3_000;
 const REGISTRATION_LOG_MAX_RETRIES = 4;
+const REGISTRATION_LOG_CHUNK_STEPS = [3_000, 1_500, 750, 375, 200, 100, 50, 25, 10, 5, 1];
 
 type ExactTransactionProvider = {
   getNetwork(): Promise<{ chainId: bigint | number }>;
@@ -72,22 +73,6 @@ function isRpcRateLimit(error: unknown) {
     || message.includes("limit exceeded")
     || message.includes("rate limit")
     || message.includes("too many requests");
-}
-
-async function getLogsWithRateLimitRetry(
-  provider: RegistrationEventProvider,
-  filter: Parameters<RegistrationEventProvider["getLogs"]>[0],
-  maxRetries: number,
-  retryDelayMs: number,
-) {
-  for (let attempt = 0; ; attempt += 1) {
-    try {
-      return await provider.getLogs(filter);
-    } catch (error) {
-      if (!isRpcRateLimit(error) || attempt >= maxRetries) throw error;
-      await new Promise((resolve) => setTimeout(resolve, retryDelayMs * (2 ** attempt)));
-    }
-  }
 }
 
 type RegistrationVerifier = (
@@ -183,7 +168,7 @@ export async function findRegistrationTransactionForWallet(
     throw new ApiError(500, "UserRegistered event is not configured", "EVENT_NOT_CONFIGURED");
   }
   const topics = iface.encodeFilterTopics(event, [wallet]);
-  const blockChunkSize = dependencies.blockChunkSize ?? REGISTRATION_LOG_BLOCK_CHUNK;
+  let blockChunkSize = dependencies.blockChunkSize ?? REGISTRATION_LOG_BLOCK_CHUNK;
   const maxRetries = dependencies.maxRateLimitRetries ?? REGISTRATION_LOG_MAX_RETRIES;
   const retryDelayMs = dependencies.retryDelayMs ?? 250;
   if (!Number.isSafeInteger(blockChunkSize) || blockChunkSize < 1 || blockChunkSize > 5_000) {
@@ -191,18 +176,38 @@ export async function findRegistrationTransactionForWallet(
   }
 
   const candidates = [];
-  for (
-    let fromBlock = dependencies.deploymentBlock;
-    fromBlock <= latestBlock;
-    fromBlock += blockChunkSize
-  ) {
+  let fromBlock = dependencies.deploymentBlock;
+  let rateLimitAttempt = 0;
+  let oneBlockRetryAttempt = 0;
+  while (fromBlock <= latestBlock) {
     const toBlock = Math.min(fromBlock + blockChunkSize - 1, latestBlock);
-    const logs = await getLogsWithRateLimitRetry(provider, {
-      address: contractAddress,
-      fromBlock,
-      toBlock,
-      topics,
-    }, maxRetries, retryDelayMs);
+    let logs: Awaited<ReturnType<RegistrationEventProvider["getLogs"]>>;
+    try {
+      logs = await provider.getLogs({
+        address: contractAddress,
+        fromBlock,
+        toBlock,
+        topics,
+      });
+      rateLimitAttempt = 0;
+      oneBlockRetryAttempt = 0;
+    } catch (error) {
+      if (!isRpcRateLimit(error)) throw error;
+      await new Promise((resolve) =>
+        setTimeout(resolve, retryDelayMs * (2 ** Math.min(rateLimitAttempt, 5))));
+      rateLimitAttempt += 1;
+      const currentStep = REGISTRATION_LOG_CHUNK_STEPS.findIndex(
+        (size) => size <= blockChunkSize,
+      );
+      const nextSize = REGISTRATION_LOG_CHUNK_STEPS[currentStep + 1];
+      if (nextSize !== undefined) {
+        blockChunkSize = nextSize;
+        continue;
+      }
+      if (oneBlockRetryAttempt >= maxRetries) throw error;
+      oneBlockRetryAttempt += 1;
+      continue;
+    }
 
     for (const log of logs) {
       if (normalizeWallet(log.address) !== contractAddress) continue;
@@ -236,6 +241,7 @@ export async function findRegistrationTransactionForWallet(
         );
       }
     }
+    fromBlock = toBlock + 1;
   }
 
   if (candidates.length === 0) {
