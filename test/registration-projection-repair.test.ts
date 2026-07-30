@@ -49,9 +49,13 @@ describe("idempotent confirmed-registration projection repair", () => {
     };
 
     await expect(reconcileExistingRegistrationProjection(client as never, input))
-      .resolves.toEqual({ relationCreated: true, historyCreated: true });
+      .resolves.toEqual({
+        relationCreated: true, historyCreated: true, placementCreated: false,
+      });
     await expect(reconcileExistingRegistrationProjection(client as never, input))
-      .resolves.toEqual({ relationCreated: false, historyCreated: false });
+      .resolves.toEqual({
+        relationCreated: false, historyCreated: false, placementCreated: false,
+      });
 
     expect(sql.some(text => text.includes("direct_count=("))).toBe(true);
     expect(sql.some(text => text.includes("UPDATE users SET status='ACTIVE'"))).toBe(true);
@@ -66,5 +70,52 @@ describe("idempotent confirmed-registration projection repair", () => {
       txHash: input.txHash,
       idempotencyKey: `referral_relations:relation-ab:DIRECT_REFERRAL_ACTIVATED:${input.sponsor}`,
     });
+  });
+
+  it("inserts a missing matrix placement once and validates the emitted placement", async () => {
+    let placementInserted = false;
+    const client = {
+      query: vi.fn(async (text: string) => {
+        if (text.startsWith("INSERT INTO referral_relations")) {
+          return { rows: [{ id: "relation-ab" }] };
+        }
+        if (text.startsWith("SELECT id,sponsor_user_id")) {
+          return { rows: [{
+            id: "relation-ab", sponsor_user_id: "user-a", registration_id: "registration-b",
+          }] };
+        }
+        if (text === "SELECT id FROM users WHERE wallet_address=$1") {
+          return { rows: [{ id: "matrix-parent" }] };
+        }
+        if (text.includes("INSERT INTO matrix_placements")) {
+          if (placementInserted) return { rows: [] };
+          placementInserted = true;
+          return { rows: [{ id: "placement-b" }] };
+        }
+        if (text.includes("FROM matrix_placements WHERE user_id=$1")) {
+          return { rows: [{
+            parent_user_id: "matrix-parent",
+            position: 1,
+            bfs_index: "42",
+            registration_id: "registration-b",
+          }] };
+        }
+        return { rows: [] };
+      }),
+    };
+    const matrixInput = {
+      ...input,
+      matrixParent: "0x00000000000000000000000000000000000000cc",
+      matrixIndex: 42n,
+      matrixPosition: 1,
+    };
+
+    await expect(reconcileExistingRegistrationProjection(client as never, matrixInput))
+      .resolves.toMatchObject({ placementCreated: true });
+    await expect(reconcileExistingRegistrationProjection(client as never, matrixInput))
+      .resolves.toMatchObject({ placementCreated: false });
+    const sql = client.query.mock.calls.map(([text]) => String(text)).join("\n");
+    expect(sql).toContain("ON CONFLICT(user_id) DO NOTHING");
+    expect(sql).not.toMatch(/direct_income_ledger|magic_wallet_ledger/);
   });
 });

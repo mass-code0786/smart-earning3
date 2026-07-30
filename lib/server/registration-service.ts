@@ -41,6 +41,9 @@ export async function reconcileExistingRegistrationProjection(
     logIndex?: number;
     confirmations?: number;
     contractAddress?: string;
+    matrixParent?: string;
+    matrixIndex?: bigint;
+    matrixPosition?: number;
   },
 ) {
   await client.query(
@@ -69,6 +72,53 @@ export async function reconcileExistingRegistrationProjection(
       relation.sponsor_user_id !== input.sponsorUserId ||
       relation.registration_id !== input.registrationId) {
     throw new ApiError(409, "Existing referral relation conflicts with the confirmed event", "REFERRAL_CONFLICT");
+  }
+
+  let placementCreated = false;
+  if (
+    input.matrixParent !== undefined
+    && input.matrixIndex !== undefined
+    && input.matrixPosition !== undefined
+  ) {
+    const parent = await client.query<{ id: string }>(
+      "SELECT id FROM users WHERE wallet_address=$1",
+      [input.matrixParent],
+    );
+    if (!parent.rows[0]) {
+      throw new ApiError(422, "Matrix parent is not indexed", "MATRIX_PARENT_NOT_INDEXED");
+    }
+    const inserted = await client.query<{ id: string }>(
+      `INSERT INTO matrix_placements(
+         user_id,parent_user_id,position,bfs_index,registration_id
+       ) VALUES($1,$2,$3,$4,$5)
+       ON CONFLICT(user_id) DO NOTHING RETURNING id`,
+      [
+        input.userId, parent.rows[0].id, input.matrixPosition,
+        input.matrixIndex.toString(), input.registrationId,
+      ],
+    );
+    const placement = await client.query<{
+      parent_user_id: string; position: number; bfs_index: string; registration_id: string;
+    }>(
+      `SELECT parent_user_id,position,bfs_index::text,registration_id
+       FROM matrix_placements WHERE user_id=$1`,
+      [input.userId],
+    );
+    const row = placement.rows[0];
+    if (
+      !row
+      || row.parent_user_id !== parent.rows[0].id
+      || row.position !== input.matrixPosition
+      || row.bfs_index !== input.matrixIndex.toString()
+      || row.registration_id !== input.registrationId
+    ) {
+      throw new ApiError(
+        409,
+        "Existing matrix placement conflicts with the confirmed event",
+        "MATRIX_PROJECTION_CONFLICT",
+      );
+    }
+    placementCreated = Boolean(inserted.rows[0]);
   }
 
   await client.query(
@@ -115,6 +165,7 @@ export async function reconcileExistingRegistrationProjection(
   return {
     relationCreated: Boolean(relationInsert.rows[0]),
     historyCreated: !history.duplicate,
+    placementCreated,
   };
 }
 
@@ -195,12 +246,16 @@ export async function verifyAndActivateRegistration(
         logIndex: log.index,
         confirmations,
         contractAddress: config.SMART_EARNING_CONTRACT_ADDRESS,
+        matrixParent,
+        matrixIndex,
+        matrixPosition,
       });
       return {
         registrationId: row.id,
         status: row.status,
         duplicate: true,
-        repaired: projection.relationCreated || projection.historyCreated,
+        repaired: projection.relationCreated || projection.historyCreated
+          || projection.placementCreated,
       };
     }
     const existingUser = await client.query<{ id: string }>(

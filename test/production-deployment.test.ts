@@ -92,9 +92,8 @@ describe("atomic production deployment", () => {
     expect(() => verifyLiveIndexerLogs(
       "mode=block_receipt_indexing\nmethod=eth_getLogs limit exceeded",
     )).toThrow("Current live indexer run");
-    expect(() => verifyLiveIndexerLogs("no startup marker")).toThrow(
-      "startup marker was not observed",
-    );
+    expect(verifyLiveIndexerLogs("startup marker rotated out of recent logs"))
+      .toEqual({ markerObserved: false });
   });
 
   it("blocks duplicate indexers and rolls back after a failed switched release", () => {

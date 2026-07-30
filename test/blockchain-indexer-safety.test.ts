@@ -27,4 +27,11 @@ describe("live blockchain indexer safety", () => {
     expect(source).not.toContain("ReferralCreated");
     expect(source).not.toContain("Upgraded");
   });
+
+  it("starts a new checkpoint before the contract deployment block", () => {
+    const source = readFileSync(resolve("lib/server/blockchain-indexer.ts"), "utf8");
+    expect(source).toContain("SMART_EARNING_DEPLOYMENT_BLOCK");
+    expect(source).toContain("deploymentBlock - 1");
+    expect(source).toContain("configuredInitialCheckpoint");
+  });
 });

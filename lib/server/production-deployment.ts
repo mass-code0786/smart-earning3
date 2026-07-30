@@ -49,11 +49,10 @@ export function verifyLiveIndexerSources(releaseCwd: string) {
 export function verifyLiveIndexerLogs(logs: string) {
   const marker = "block_receipt_indexing";
   const markerIndex = logs.lastIndexOf(marker);
-  if (markerIndex < 0) {
-    throw new Error("Indexer block_receipt_indexing startup marker was not observed");
-  }
+  if (markerIndex < 0) return { markerObserved: false };
   const currentRunLogs = logs.slice(markerIndex);
   if (/method=eth_getLogs/.test(currentRunLogs)) {
     throw new Error("Current live indexer run contains forbidden eth_getLogs activity");
   }
+  return { markerObserved: true };
 }

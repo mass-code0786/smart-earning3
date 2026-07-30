@@ -27,6 +27,9 @@ function main() {
   });
   const artifacts = verifyNextArtifacts(cwd);
   verifyLiveIndexerSources(cwd);
+  if (selected.process.pm2_env?.BLOCKCHAIN_INDEXER_MODE !== "block_receipt_indexing") {
+    throw new Error("Running PM2 indexer mode is not block_receipt_indexing");
+  }
   const commit = deployedCheckoutCommit(cwd);
   if (selected.process.pm2_env?.DEPLOYED_GIT_COMMIT !== commit) {
     throw new Error("Running PM2 commit does not match its release checkout");
@@ -46,7 +49,7 @@ function main() {
     "pm2", ["logs", "smart-earning", "--nostream", "--lines", "200"],
     { cwd, encoding: "utf8" },
   );
-  verifyLiveIndexerLogs(logs);
+  const logVerification = verifyLiveIndexerLogs(logs);
   process.stdout.write(`${JSON.stringify({
     name: selected.process.name,
     cwd,
@@ -58,6 +61,7 @@ function main() {
     buildId: readFileSync(resolve(cwd, ".next/BUILD_ID"), "utf8").trim(),
     processStartedAfterBuild: true,
     indexerMode: "block_receipt_indexing",
+    startupMarkerInRecentLogs: logVerification.markerObserved,
   }, null, 2)}\n`);
 }
 

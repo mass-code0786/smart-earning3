@@ -1,6 +1,8 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
 import { Interface } from "ethers";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { SMART_EARNING_ABI } from "@/lib/blockchain/abi";
 import {
   findRegistrationTransactionForWallet,
@@ -53,6 +55,17 @@ function fixture(overrides: {
 }
 
 describe("exact BSC Testnet registration transaction reconciliation", () => {
+  it("keeps the registration indexing diagnostic read-only", () => {
+    const source = readFileSync(
+      resolve("scripts/diagnose-registration-indexing.ts"),
+      "utf8",
+    );
+    expect(source).toContain('mode: "READ_ONLY"');
+    expect(source).toContain("blockchain_indexer_state");
+    expect(source).toContain("blockchain_processed_events");
+    expect(source).not.toMatch(/\bINSERT\b|\bUPDATE\b|\bDELETE\b/);
+  });
+
   function eventLookupProvider(events: Array<{ hash: string; eventWallet?: string; status?: number }>) {
     return {
       getNetwork: vi.fn(async () => ({ chainId: 97n })),
@@ -90,6 +103,9 @@ describe("exact BSC Testnet registration transaction reconciliation", () => {
       blockNumber: 121722400,
       wallet: wallet.toLowerCase(),
       sponsor: sponsor.toLowerCase(),
+      matrixParent: parent.toLowerCase(),
+      matrixIndex: "1",
+      matrixPosition: 0,
       contractAddress: contract.toLowerCase(),
     });
     expect(provider.getLogs).toHaveBeenCalledWith(expect.objectContaining({
@@ -178,6 +194,9 @@ describe("exact BSC Testnet registration transaction reconciliation", () => {
       txHash,
       wallet: wallet.toLowerCase(),
       sponsor: sponsor.toLowerCase(),
+      matrixParent: parent.toLowerCase(),
+      matrixIndex: "1",
+      matrixPosition: 0,
       registrationId: "registration-1",
       status: "CONFIRMED",
       alreadyReconciled: false,
@@ -256,6 +275,8 @@ describe("exact BSC Testnet registration transaction reconciliation", () => {
       history_count: 0,
       sponsor_direct_count: 0,
       placement_count: 1,
+      matrix_parent_indexed: true,
+      expected_placement_exists: true,
       direct_income_count: 1,
       magic_credit_count: 1,
       missing: ["referral_relation", "direct_referral_history"],
@@ -276,6 +297,9 @@ describe("exact BSC Testnet registration transaction reconciliation", () => {
         direct_income_count: 1,
         magic_credit_count: 1,
       },
+      matrixParent: parent.toLowerCase(),
+      matrixIndex: "1",
+      matrixPosition: 0,
     });
     expect(verifyRegistration).not.toHaveBeenCalled();
   });

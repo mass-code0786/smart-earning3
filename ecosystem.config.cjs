@@ -49,6 +49,7 @@ module.exports = {
       DATABASE_URL: productionEnvironment.DATABASE_URL,
       DEPLOYED_GIT_COMMIT: deployedCommit,
       DEPLOYED_BUILD_ID: deployedBuildId,
+      BLOCKCHAIN_INDEXER_MODE: "block_receipt_indexing",
     },
   }],
 };

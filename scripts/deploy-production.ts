@@ -137,6 +137,9 @@ async function main() {
         throw new Error("Running PM2 environment is incomplete");
       }
       if (env.PORT !== productionPort) throw new Error("Running PM2 port mismatch");
+      if (env.BLOCKCHAIN_INDEXER_MODE !== "block_receipt_indexing") {
+        throw new Error("Running PM2 indexer mode mismatch");
+      }
       if (env.DEPLOYED_GIT_COMMIT !== commit) throw new Error("Running commit mismatch");
       if (env.DEPLOYED_BUILD_ID !== buildId) throw new Error("Running build ID mismatch");
       const pid = selected.process.pid;
@@ -160,7 +163,11 @@ async function main() {
       const selected = selectProductionPm2Process(readPm2Processes(), releaseCwd);
       const logs = output("pm2", ["logs", String(selected.process.name),
         "--nostream", "--lines", "200"], releaseCwd);
-      verifyLiveIndexerLogs(logs);
+      const verification = verifyLiveIndexerLogs(logs);
+      process.stdout.write(
+        `[deploy] indexer mode=block_receipt_indexing` +
+        ` startupMarkerInRecentLogs=${verification.markerObserved}\n`,
+      );
     } },
   ];
 

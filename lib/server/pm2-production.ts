@@ -23,6 +23,7 @@ export type Pm2Process = {
     NODE_ENV?: string;
     DEPLOYED_GIT_COMMIT?: string;
     DEPLOYED_BUILD_ID?: string;
+    BLOCKCHAIN_INDEXER_MODE?: string;
     pm_uptime?: number;
     [key: string]: unknown;
   };

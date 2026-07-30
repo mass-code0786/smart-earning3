@@ -80,11 +80,19 @@ type RegistrationVerifier = (
   txHash: string,
 ) => Promise<{ registrationId: string; status: string; duplicate: boolean }>;
 
-export async function inspectRegistrationProjection(wallet: string, sponsor: string, txHash: string) {
+export async function inspectRegistrationProjection(
+  wallet: string,
+  sponsor: string,
+  txHash: string,
+  matrixParent: string,
+  matrixIndex: bigint,
+  matrixPosition: number,
+) {
   const result = await query<{
     user_exists: boolean; registration_exists: boolean; relation_exists: boolean;
     relation_count: number; history_exists: boolean; history_count: number;
     sponsor_direct_count: number | null; placement_count: number;
+    matrix_parent_indexed: boolean; expected_placement_exists: boolean;
     direct_income_count: number; magic_credit_count: number;
   }>(
     `SELECT
@@ -117,11 +125,25 @@ export async function inspectRegistrationProjection(wallet: string, sponsor: str
          sponsor_direct_count,
        (SELECT count(*)::int FROM matrix_placements mp JOIN users u ON u.id=mp.user_id
         WHERE lower(u.wallet_address)=lower($1)) placement_count,
+       EXISTS(
+         SELECT 1 FROM users WHERE lower(wallet_address)=lower($5)
+       ) matrix_parent_indexed,
+       EXISTS(
+         SELECT 1 FROM matrix_placements mp
+         JOIN users child ON child.id=mp.user_id
+         JOIN users parent ON parent.id=mp.parent_user_id
+         WHERE lower(child.wallet_address)=lower($1)
+           AND lower(parent.wallet_address)=lower($5)
+           AND mp.bfs_index=$6 AND mp.position=$7
+       ) expected_placement_exists,
        (SELECT count(*)::int FROM direct_income_ledger d JOIN users u ON u.id=d.source_user_id
         WHERE lower(u.wallet_address)=lower($1) AND lower(d.tx_hash)=lower($3)) direct_income_count,
        (SELECT count(*)::int FROM magic_wallet_ledger m JOIN users u ON u.id=m.user_id
         WHERE lower(u.wallet_address)=lower($1) AND m.idempotency_key=$4) magic_credit_count`,
-    [wallet, sponsor, txHash, `registration:${txHash.toLowerCase()}:magic`],
+    [
+      wallet, sponsor, txHash, `registration:${txHash.toLowerCase()}:magic`,
+      matrixParent, matrixIndex.toString(), matrixPosition,
+    ],
   );
   const state = result.rows[0];
   return {
@@ -131,6 +153,8 @@ export async function inspectRegistrationProjection(wallet: string, sponsor: str
       !state?.registration_exists && "registration",
       !state?.relation_exists && "referral_relation",
       !state?.history_exists && "direct_referral_history",
+      !state?.matrix_parent_indexed && "matrix_parent",
+      !state?.expected_placement_exists && "matrix_placement",
     ].filter(Boolean),
   };
 }
@@ -231,6 +255,9 @@ export async function findRegistrationTransactionForWallet(
         blockNumber: log.blockNumber,
         wallet: registrant,
         sponsor: normalizeWallet(String(parsed.args.sponsor)),
+        matrixParent: normalizeWallet(String(parsed.args.matrixParent)),
+        matrixIndex: BigInt(parsed.args.matrixIndex).toString(),
+        matrixPosition: Number(parsed.args.matrixPosition),
         contractAddress,
       });
       if (candidates.length > 1) {
@@ -319,6 +346,9 @@ export async function reconcileRegistrationTransaction(
 
   const eventWallet = normalizeWallet(String(registrationEvent.args.user));
   const eventSponsor = normalizeWallet(String(registrationEvent.args.sponsor));
+  const eventMatrixParent = normalizeWallet(String(registrationEvent.args.matrixParent));
+  const eventMatrixIndex = BigInt(registrationEvent.args.matrixIndex);
+  const eventMatrixPosition = Number(registrationEvent.args.matrixPosition);
   if (eventWallet !== intendedWallet) {
     throw new ApiError(403, "Registration event belongs to another wallet", "WALLET_MISMATCH");
   }
@@ -329,11 +359,15 @@ export async function reconcileRegistrationTransaction(
   if (dependencies.dryRun) {
     const projection = await (dependencies.inspectProjection ?? inspectRegistrationProjection)(
       intendedWallet, eventSponsor, txHash,
+      eventMatrixParent, eventMatrixIndex, eventMatrixPosition,
     );
     return {
       txHash,
       wallet: intendedWallet,
       sponsor: eventSponsor,
+      matrixParent: eventMatrixParent,
+      matrixIndex: eventMatrixIndex.toString(),
+      matrixPosition: eventMatrixPosition,
       dryRun: true as const,
       projection,
     };
@@ -347,6 +381,9 @@ export async function reconcileRegistrationTransaction(
     txHash,
     wallet: intendedWallet,
     sponsor: eventSponsor,
+    matrixParent: eventMatrixParent,
+    matrixIndex: eventMatrixIndex.toString(),
+    matrixPosition: eventMatrixPosition,
     registrationId: result.registrationId,
     status: result.status,
     alreadyReconciled: result.duplicate,

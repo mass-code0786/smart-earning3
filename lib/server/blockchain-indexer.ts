@@ -70,10 +70,17 @@ function positiveInteger(name: string, fallback: number) {
 export function blockchainIndexerConfig() {
   const mode = (process.env.BLOCKCHAIN_INDEXER_START_MODE || "latest").trim().toLowerCase();
   if (mode !== "latest") throw new Error("BLOCKCHAIN_INDEXER_START_MODE must be latest");
+  const configuredStart = configuredStartBlock();
+  const deploymentBlock = Number(process.env.SMART_EARNING_DEPLOYMENT_BLOCK);
+  if (!Number.isSafeInteger(deploymentBlock) || deploymentBlock < 1) {
+    throw new Error("SMART_EARNING_DEPLOYMENT_BLOCK must be a positive integer");
+  }
   return {
     confirmations: positiveInteger("BLOCKCHAIN_CONFIRMATIONS", 3),
     pollMs: positiveInteger("BLOCKCHAIN_INDEXER_POLL_MS", 5_000),
-    startBlock: configuredStartBlock(),
+    // A checkpoint represents the last processed block. Starting one block
+    // before deployment ensures the deployment block itself is inspected.
+    startBlock: configuredStart ?? deploymentBlock - 1,
   };
 }
 
@@ -229,6 +236,7 @@ export function startBlockchainIndexer() {
     mode: LIVE_INDEXER_MODE,
     source: LIVE_INDEXER_SOURCE,
     gitCommit: process.env.DEPLOYED_GIT_COMMIT || "unknown",
+    configuredInitialCheckpoint: blockchainIndexerConfig().startBlock,
   });
   stopped = false;
   worker = run().catch((error) => {
