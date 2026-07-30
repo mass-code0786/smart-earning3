@@ -20,10 +20,12 @@ export function selectProductionPm2Process(
   processes: Pm2Process[],
   expectedCwd = PRODUCTION_CWD,
 ) {
-  const matches = processes.filter((process) => process.pm2_env?.pm_cwd === expectedCwd);
+  const matches = processes.filter((process) =>
+    process.name === "smart-earning"
+    && process.pm2_env?.pm_cwd === expectedCwd);
   if (matches.length !== 1) {
     throw new Error(
-      `Expected exactly one PM2 process with cwd ${expectedCwd}; found ${matches.length}`,
+      `Expected exactly one smart-earning PM2 process with cwd ${expectedCwd}; found ${matches.length}`,
     );
   }
   const selected = matches[0];

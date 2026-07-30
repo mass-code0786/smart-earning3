@@ -1,9 +1,13 @@
 const { execFileSync } = require("node:child_process");
+const { resolve } = require("node:path");
+const {
+  loadProductionPm2Environment,
+} = require("./scripts/pm2-environment.cjs");
 
 const cwd = "/var/www/smart-earning3";
-if (!process.env.DATABASE_URL) {
-  throw new Error("PM2 startup refused: DATABASE_URL must be set in the process environment");
-}
+const productionEnvironment = loadProductionPm2Environment(
+  resolve(cwd, ".env"),
+);
 const deployedCommit = execFileSync("git", ["rev-parse", "HEAD"], {
   cwd,
   encoding: "utf8",
@@ -18,8 +22,9 @@ module.exports = {
     instances: 1,
     exec_mode: "fork",
     env: {
+      ...productionEnvironment,
       NODE_ENV: "production",
-      DATABASE_URL: process.env.DATABASE_URL,
+      DATABASE_URL: productionEnvironment.DATABASE_URL,
       DEPLOYED_GIT_COMMIT: deployedCommit,
     },
   }],
