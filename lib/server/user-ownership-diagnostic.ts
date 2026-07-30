@@ -230,6 +230,7 @@ export async function diagnoseUserOwnership(sponsorInput: string, referralInput:
   const requiredConfirmations = getServerConfig().CONFIRMATIONS_REQUIRED;
   const configuredContract = normalizeWallet(getServerConfig().SMART_EARNING_CONTRACT_ADDRESS);
   const decodedUserRegisteredEvents: Array<Record<string, unknown>> = [];
+  const candidateReceipts: Array<Record<string, unknown>> = [];
   const lookupFailures: Array<Record<string, unknown>> = [];
   let receiptsFound = 0;
   if (candidateTransactionHashes.length) {
@@ -247,12 +248,28 @@ export async function diagnoseUserOwnership(sponsorInput: string, referralInput:
   for (const candidate of candidateTransactionHashes) {
     let transaction;
     let receipt;
+    const receiptDiagnostic: Record<string, unknown> = {
+      transactionHash: candidate.transactionHash,
+      sources: candidate.sources,
+      transactionFetchStatus: "PENDING",
+      receiptFetchStatus: "PENDING",
+      receiptStatus: null,
+      transactionSender: null,
+      destinationContract: null,
+      confirmations: null,
+      decodedUserRegisteredEventCount: 0,
+      rejectionReasons: [],
+    };
+    candidateReceipts.push(receiptDiagnostic);
     try {
       [transaction, receipt] = await Promise.all([
         provider.getTransaction(candidate.transactionHash),
         provider.getTransactionReceipt(candidate.transactionHash),
       ]);
     } catch (error) {
+      receiptDiagnostic.transactionFetchStatus = "FAILED";
+      receiptDiagnostic.receiptFetchStatus = "FAILED";
+      receiptDiagnostic.rejectionReasons = ["receipt failed"];
       lookupFailures.push({
         transactionHash: candidate.transactionHash,
         lookup: "transaction receipt",
@@ -260,6 +277,14 @@ export async function diagnoseUserOwnership(sponsorInput: string, referralInput:
       });
       continue;
     }
+    receiptDiagnostic.transactionFetchStatus = transaction ? "FOUND" : "NOT_FOUND";
+    receiptDiagnostic.receiptFetchStatus = receipt ? "FOUND" : "NOT_FOUND";
+    receiptDiagnostic.transactionSender = transaction
+      ? normalizeWallet(transaction.from)
+      : null;
+    receiptDiagnostic.destinationContract = transaction?.to
+      ? normalizeWallet(transaction.to)
+      : null;
     if (!transaction) {
       lookupFailures.push({
         transactionHash: candidate.transactionHash, lookup: "registration tx hash",
@@ -267,6 +292,7 @@ export async function diagnoseUserOwnership(sponsorInput: string, referralInput:
       });
     }
     if (!receipt) {
+      receiptDiagnostic.rejectionReasons = ["receipt failed"];
       lookupFailures.push({
         transactionHash: candidate.transactionHash, lookup: "transaction receipt",
         reason: "Receipt was not found by the configured chain RPC",
@@ -274,6 +300,10 @@ export async function diagnoseUserOwnership(sponsorInput: string, referralInput:
       continue;
     }
     receiptsFound += 1;
+    receiptDiagnostic.receiptStatus = receipt.status;
+    receiptDiagnostic.confirmations = latestBlock === null
+      ? null
+      : latestBlock - receipt.blockNumber + 1;
     let decodedCount = 0;
     for (const entry of receipt.logs) {
       try {
@@ -281,9 +311,10 @@ export async function diagnoseUserOwnership(sponsorInput: string, referralInput:
         if (!event || event.name !== "UserRegistered") continue;
         decodedCount += 1;
         const confirmations = latestBlock === null ? 0 : latestBlock - receipt.blockNumber + 1;
-        decodedUserRegisteredEvents.push({
+        const decodedEvent: Record<string, unknown> = {
           transactionHash: candidate.transactionHash,
           transactionSender: transaction ? normalizeWallet(transaction.from) : null,
+          destinationContract: transaction?.to ? normalizeWallet(transaction.to) : null,
           registeredUser: normalizeWallet(String(event.args.user)),
           sponsor: normalizeWallet(String(event.args.sponsor)),
           matrixParent: normalizeWallet(String(event.args.matrixParent)),
@@ -299,12 +330,28 @@ export async function diagnoseUserOwnership(sponsorInput: string, referralInput:
           confirmations,
           confirmed: receipt.status === 1 && confirmations >= requiredConfirmations,
           sources: candidate.sources,
-        });
+        };
+        const rejectionReasons: string[] = [];
+        if (decodedEvent.transactionSender !== referral) rejectionReasons.push("sender mismatch");
+        if (decodedEvent.registeredUser !== referral) rejectionReasons.push("event.user mismatch");
+        if (decodedEvent.sponsor !== sponsor) rejectionReasons.push("event.sponsor mismatch");
+        if (decodedEvent.contractAddress !== configuredContract) rejectionReasons.push("contract mismatch");
+        if (receipt.status !== 1) rejectionReasons.push("receipt failed");
+        if (decodedEvent.confirmed !== true) rejectionReasons.push("not confirmed");
+        decodedEvent.rejectionReasons = rejectionReasons;
+        decodedUserRegisteredEvents.push(decodedEvent);
       } catch {
         // Other contract logs in the same receipt are expected not to match this ABI event.
       }
     }
+    receiptDiagnostic.decodedUserRegisteredEventCount = decodedCount;
     if (!decodedCount) {
+      receiptDiagnostic.rejectionReasons = [
+        ...(receipt.status !== 1 ? ["receipt failed"] : []),
+        "decode failed",
+        ...(latestBlock === null
+          || latestBlock - receipt.blockNumber + 1 < requiredConfirmations ? ["not confirmed"] : []),
+      ];
       lookupFailures.push({
         transactionHash: candidate.transactionHash, lookup: "ABI decode",
         reason: "Receipt contains no UserRegistered log decodable by the configured ABI",
@@ -350,6 +397,10 @@ export async function diagnoseUserOwnership(sponsorInput: string, referralInput:
     eventDiscovery: {
       requiredConfirmedEvents: 1,
       confirmedMatchingEventCount: confirmedMatchingEvents.length,
+      candidateTransactionHashes,
+      candidateReceipts,
+      decodedUserRegisteredEvents,
+      matchingConfirmedEvents: confirmedMatchingEvents,
       lookups: {
         blockchain_transactions: {
           found: blockchainTransactions.rows.length,

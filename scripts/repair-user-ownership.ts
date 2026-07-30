@@ -14,9 +14,18 @@ async function main() {
       "Usage: npm run repair:user-ownership:testnet -- --sponsor=0x... --referral=0x... [--apply]",
     );
   }
-  const { repairUserOwnership } = await import("../lib/server/user-ownership-repair");
+  const { diagnoseUserOwnership } = await import("../lib/server/user-ownership-diagnostic");
+  const { printDiagnosticThenCreateRepairPlan } = await import(
+    "../lib/server/user-ownership-repair-observability"
+  );
+  const { assertOwnershipRepairAllowlist, repairUserOwnership } = await import(
+    "../lib/server/user-ownership-repair"
+  );
   try {
-    const result = await repairUserOwnership({ sponsor, referral, apply });
+    const wallets = assertOwnershipRepairAllowlist(sponsor, referral);
+    const diagnostic = await diagnoseUserOwnership(wallets.sponsor, wallets.referral);
+    printDiagnosticThenCreateRepairPlan(diagnostic, (output) => process.stdout.write(output));
+    const result = await repairUserOwnership({ ...wallets, apply });
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     if (!apply) process.stdout.write("Dry run only. Re-run with --apply after reviewing every proposed row.\n");
   } finally {
