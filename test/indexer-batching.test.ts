@@ -2,159 +2,194 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   initializeForwardIndexer,
-  processForwardRanges,
+  processConfirmedBlocks,
   safeLatestBlock,
+  type IndexerBlock,
   type IndexerLog,
+  type IndexerReceipt,
 } from "@/scripts/indexer-core";
 
-const address = "0x4509301aa843f504936999850f4bcaf57a03cd99";
-const event = (blockNumber: number, suffix: string, index = 0): IndexerLog => ({
-  blockNumber,
-  transactionHash: `0x${suffix.padStart(64, "0")}`,
-  index,
-  topics: ["registered"],
-  data: "0x",
-});
+const contract = "0x4509301aa843f504936999850f4bcaf57a03cd99";
+const unrelated = "0x0000000000000000000000000000000000000001";
+const hash = (suffix: string) => `0x${suffix.padStart(64, "0")}`;
 
-function harness(head: number, logs: IndexerLog[] = [], initial?: number) {
-  let checkpoint = initial;
+function log(block: number, tx: string, index: number, topic: string): IndexerLog {
+  return {
+    address: contract, blockNumber: block, transactionHash: tx,
+    index, topics: [topic], data: "0x",
+  };
+}
+
+function harness(input: {
+  head: number;
+  checkpoint?: number;
+  blocks?: Record<number, IndexerBlock>;
+  receipts?: Record<string, IndexerReceipt>;
+}) {
+  let checkpoint = input.checkpoint;
   const processed = new Set<string>();
-  const commits: number[] = [];
-  const requests: Array<{ fromBlock: number; toBlock: number }> = [];
   const provider = {
-    getBlockNumber: vi.fn(async () => head),
-    getLogs: vi.fn(async ({ fromBlock, toBlock }: { fromBlock: number; toBlock: number }) => {
-      requests.push({ fromBlock, toBlock });
-      return logs.filter((log) => log.blockNumber >= fromBlock && log.blockNumber <= toBlock);
+    getBlockNumber: vi.fn(async () => input.head),
+    getBlockWithTransactions: vi.fn(async (blockNumber: number) => {
+      const block = input.blocks?.[blockNumber];
+      if (!block) return { number: blockNumber, transactions: [] };
+      return block;
+    }),
+    getTransactionReceipt: vi.fn(async (txHash: string) => {
+      const receipt = input.receipts?.[txHash];
+      if (!receipt) throw new Error("missing receipt fixture");
+      return receipt;
     }),
   };
   const checkpoints = {
     getLastBlock: vi.fn(async () => checkpoint),
-    initialize: vi.fn(async (_chain: number, _contract: string, block: number) => {
+    initialize: vi.fn(async (_chain: number, _address: string, block: number) => {
       if (checkpoint === undefined) checkpoint = block;
       return checkpoint;
     }),
-    commitLastBlock: vi.fn(async (_chain: number, _contract: string, block: number) => {
+    commitLastBlock: vi.fn(async (_chain: number, _address: string, block: number) => {
       checkpoint = block;
-      commits.push(block);
     }),
   };
   const processedEvents = {
-    has: vi.fn(async (_chain: number, hash: string, index: number) =>
-      processed.has(`${hash.toLowerCase()}:${index}`)),
-    record: vi.fn(async (input: { transactionHash: string; logIndex: number }) => {
-      processed.add(`${input.transactionHash.toLowerCase()}:${input.logIndex}`);
+    has: vi.fn(async (_chain: number, txHash: string, index: number) =>
+      processed.has(`${txHash.toLowerCase()}:${index}`)),
+    record: vi.fn(async (event: { transactionHash: string; logIndex: number }) => {
+      processed.add(`${event.transactionHash.toLowerCase()}:${event.logIndex}`);
     }),
   };
-  return { provider, checkpoints, processedEvents, commits, requests, checkpoint: () => checkpoint };
+  return { provider, checkpoints, processedEvents, checkpoint: () => checkpoint };
 }
 
-const run = (
+function run(
   state: ReturnType<typeof harness>,
-  handleLog: (log: IndexerLog, eventName: string) => Promise<void> =
+  handler: (log: IndexerLog, eventName: string, receipt: IndexerReceipt) => Promise<void> =
     vi.fn(async () => undefined),
-) =>
-  processForwardRanges({
-    chainId: 97,
-    contractAddress: address,
-    confirmations: 3,
-    batchSize: 100,
-    provider: state.provider,
-    checkpoints: state.checkpoints,
+) {
+  return processConfirmedBlocks({
+    chainId: 97, contractAddress: contract, confirmations: 3,
+    provider: state.provider, checkpoints: state.checkpoints,
     processedEvents: state.processedEvents,
-    eventName: () => "UserRegistered",
-    handleLog,
-    sleep: async () => undefined,
+    eventName: (entry) => entry.topics[0] === "registered"
+      ? "UserRegistered"
+      : entry.topics[0] === "package" ? "PackagePurchased" : undefined,
+    handleLog: handler,
   });
+}
 
-describe("forward-only BSC Testnet indexer", () => {
-  it("first run checkpoints safe latest and ignores older events", async () => {
-    const old = event(90, "1");
-    const state = harness(100, [old]);
-    const initialized = await initializeForwardIndexer({
-      chainId: 97, contractAddress: address, confirmations: 3,
+describe("block receipt live indexer", () => {
+  it("first run checkpoints safe latest and ignores old blocks", async () => {
+    const state = harness({ head: 100 });
+    await expect(initializeForwardIndexer({
+      chainId: 97, contractAddress: contract, confirmations: 3,
       provider: state.provider, checkpoints: state.checkpoints,
-    });
-    expect(initialized).toEqual({ checkpoint: 97, safeLatest: 97, initialized: true });
-    const handle = vi.fn();
-    await run(state, handle);
-    expect(state.requests).toEqual([]);
-    expect(handle).not.toHaveBeenCalled();
+    })).resolves.toEqual({ checkpoint: 97, safeLatest: 97, initialized: true });
+    await run(state);
+    expect(state.provider.getBlockWithTransactions).not.toHaveBeenCalled();
   });
 
-  it("processes the next confirmed registration and resumes after restart", async () => {
-    const registration = event(98, "2", 4);
-    const state = harness(101, [registration], 97);
-    const handle = vi.fn(async () => undefined);
-    await run(state, handle);
-    expect(handle).toHaveBeenCalledOnce();
+  it("processes new UserRegistered and PackagePurchased receipt logs", async () => {
+    const registrationTx = hash("1");
+    const packageTx = hash("2");
+    const state = harness({
+      head: 101, checkpoint: 97,
+      blocks: {
+        98: {
+          number: 98,
+          transactions: [
+            { hash: registrationTx, to: contract },
+            { hash: packageTx, to: contract.toUpperCase() },
+          ],
+        },
+      },
+      receipts: {
+        [registrationTx]: {
+          status: 1, transactionHash: registrationTx, blockNumber: 98,
+          logs: [log(98, registrationTx, 1, "registered")],
+        },
+        [packageTx]: {
+          status: 1, transactionHash: packageTx, blockNumber: 98,
+          logs: [log(98, packageTx, 2, "package")],
+        },
+      },
+    });
+    const handler = vi.fn(async (
+      _log: IndexerLog,
+      _eventName: string,
+      _receipt: IndexerReceipt,
+    ) => undefined);
+    await run(state, handler);
+    expect(handler.mock.calls.map(([, name]) => name))
+      .toEqual(["UserRegistered", "PackagePurchased"]);
     expect(state.checkpoint()).toBe(98);
-    state.provider.getBlockNumber.mockResolvedValue(103);
-    await run(state, handle);
-    expect(state.requests.at(-1)).toEqual({ fromBlock: 99, toBlock: 100 });
   });
 
-  it("does not advance a checkpoint after a failed range", async () => {
-    const state = harness(110, [event(105, "3")], 100);
-    await expect(run(state, vi.fn(async () => {
-      throw new Error("projection failed");
-    }))).rejects.toThrow("projection failed");
-    expect(state.checkpoint()).toBe(100);
-    expect(state.commits).toEqual([]);
-  });
-
-  it("does not reprocess a duplicate event after a partial restart", async () => {
-    const first = event(101, "4", 1);
-    const second = event(102, "5", 2);
-    const state = harness(105, [first, second], 100);
-    let failSecond = true;
-    const handle = vi.fn(async (log: IndexerLog) => {
-      if (log === second && failSecond) {
-        failSecond = false;
-        throw new Error("later event failed");
-      }
+  it("does not fetch receipts for unrelated transactions", async () => {
+    const state = harness({
+      head: 101, checkpoint: 97,
+      blocks: {
+        98: { number: 98, transactions: [{ hash: hash("3"), to: unrelated }] },
+      },
     });
-    await expect(run(state, handle)).rejects.toThrow("later event failed");
-    await run(state, handle);
-    expect(handle.mock.calls.filter(([log]) => log === first)).toHaveLength(1);
-    expect(handle.mock.calls.filter(([log]) => log === second)).toHaveLength(2);
+    await run(state);
+    expect(state.provider.getTransactionReceipt).not.toHaveBeenCalled();
+  });
+
+  it("does not advance after a failed block fetch", async () => {
+    const state = harness({ head: 101, checkpoint: 97 });
+    state.provider.getBlockWithTransactions.mockRejectedValueOnce(new Error("temporary block error"));
+    await expect(run(state)).rejects.toThrow("temporary block error");
+    expect(state.checkpoint()).toBe(97);
+  });
+
+  it("does not advance after a failed receipt fetch", async () => {
+    const tx = hash("4");
+    const state = harness({
+      head: 101, checkpoint: 97,
+      blocks: { 98: { number: 98, transactions: [{ hash: tx, to: contract }] } },
+    });
+    await expect(run(state)).rejects.toThrow("missing receipt fixture");
+    expect(state.checkpoint()).toBe(97);
+  });
+
+  it("restart resumes after the saved checkpoint without skipping blocks", async () => {
+    const state = harness({ head: 103, checkpoint: 98 });
+    await run(state);
+    expect(state.provider.getBlockWithTransactions.mock.calls.map(([block]) => block))
+      .toEqual([99, 100]);
+    expect(state.checkpoint()).toBe(100);
+  });
+
+  it("duplicate processed logs are harmless", async () => {
+    const tx = hash("5");
+    const state = harness({
+      head: 101, checkpoint: 97,
+      blocks: { 98: { number: 98, transactions: [{ hash: tx, to: contract }] } },
+      receipts: {
+        [tx]: {
+          status: 1, transactionHash: tx, blockNumber: 98,
+          logs: [log(98, tx, 1, "registered"), log(98, tx, 1, "registered")],
+        },
+      },
+    });
+    const handler = vi.fn(async () => undefined);
+    await run(state, handler);
+    expect(handler).toHaveBeenCalledOnce();
   });
 
   it("respects confirmation depth", async () => {
     expect(safeLatestBlock(100, 3)).toBe(97);
-    const state = harness(100, [event(98, "6")], 97);
-    const handle = vi.fn();
-    await run(state, handle);
-    expect(handle).not.toHaveBeenCalled();
-    expect(state.requests).toEqual([]);
-  });
-
-  it("reduces an RPC-limited range and never skips blocks", async () => {
-    const state = harness(203, [], 100);
-    state.provider.getLogs
-      .mockRejectedValueOnce(Object.assign(new Error("limit exceeded"), { code: -32005 }))
-      .mockResolvedValue([]);
+    const state = harness({ head: 100, checkpoint: 97 });
     await run(state);
-    expect(state.provider.getLogs.mock.calls.map(([filter]) => ({
-      fromBlock: filter.fromBlock, toBlock: filter.toBlock,
-    }))).toEqual([
-      { fromBlock: 101, toBlock: 200 },
-      { fromBlock: 101, toBlock: 150 },
-      { fromBlock: 151, toBlock: 200 },
-    ]);
-    expect(state.checkpoint()).toBe(200);
+    expect(state.provider.getBlockWithTransactions).not.toHaveBeenCalled();
   });
 
-  it("manual start block is used only when no saved checkpoint exists", async () => {
-    const fresh = harness(100, [], undefined);
-    expect((await initializeForwardIndexer({
-      chainId: 97, contractAddress: address, confirmations: 3,
-      provider: fresh.provider, checkpoints: fresh.checkpoints, startBlock: 80,
-    })).checkpoint).toBe(80);
-    const resumed = harness(100, [], 91);
-    expect((await initializeForwardIndexer({
-      chainId: 97, contractAddress: address, confirmations: 3,
-      provider: resumed.provider, checkpoints: resumed.checkpoints, startBlock: 80,
-    })).checkpoint).toBe(91);
+  it("saved checkpoint overrides a manual first-start block", async () => {
+    const state = harness({ head: 100, checkpoint: 90 });
+    const initialized = await initializeForwardIndexer({
+      chainId: 97, contractAddress: contract, confirmations: 3,
+      provider: state.provider, checkpoints: state.checkpoints, startBlock: 80,
+    });
+    expect(initialized.checkpoint).toBe(90);
   });
 });

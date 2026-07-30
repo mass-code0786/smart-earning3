@@ -1,26 +1,29 @@
 import { Interface } from "ethers";
 import { PACKAGE_ABI, SMART_EARNING_ABI } from "@/lib/blockchain/abi";
-import { getProvider } from "@/lib/blockchain/provider";
+import {
+  indexerRpcUrls,
+  RateLimitedRpcErrorLogger,
+  ReadOnlyIndexerRpc,
+} from "@/lib/blockchain/indexer-rpc";
 import { CHAIN_ID, getServerConfig } from "./config";
 import { query } from "./db";
 import { verifyAndActivateRegistration } from "./registration-service";
 import { verifyPackagePurchase } from "./package-service";
 import {
   configuredStartBlock,
-  indexerBlockBatchSize,
   initializeForwardIndexer,
-  processForwardRanges,
+  processConfirmedBlocks,
   safeLatestBlock,
   type IndexerCheckpointStore,
   type IndexerLog,
+  type IndexerReceipt,
   type ProcessedEventStore,
 } from "@/scripts/indexer-core";
 
 const iface = new Interface([...SMART_EARNING_ABI, ...PACKAGE_ABI]);
 const relevantEvents = ["UserRegistered", "PackagePurchased"] as const;
-const topics = [relevantEvents.map((name) => iface.getEvent(name)!.topicHash)];
-
 type IndexerHealth = {
+  mode: "block_receipt_indexing";
   running: boolean;
   chainId: number;
   contractAddress: string | null;
@@ -29,9 +32,13 @@ type IndexerHealth = {
   blocksBehind: number | null;
   lastSuccessfulScanTime: string | null;
   lastError: string | null;
+  currentRpcEndpointRedacted: string | null;
+  rpcFailoverCount: number;
+  currentRetryDelayMs: number;
 };
 
 const health: IndexerHealth = {
+  mode: "block_receipt_indexing",
   running: false,
   chainId: CHAIN_ID,
   contractAddress: null,
@@ -40,6 +47,9 @@ const health: IndexerHealth = {
   blocksBehind: null,
   lastSuccessfulScanTime: null,
   lastError: null,
+  currentRpcEndpointRedacted: null,
+  rpcFailoverCount: 0,
+  currentRetryDelayMs: 0,
 };
 let worker: Promise<void> | undefined;
 let stopped = false;
@@ -62,7 +72,6 @@ export function blockchainIndexerConfig() {
     confirmations: positiveInteger("BLOCKCHAIN_CONFIRMATIONS", 3),
     pollMs: positiveInteger("BLOCKCHAIN_INDEXER_POLL_MS", 5_000),
     startBlock: configuredStartBlock(),
-    batchSize: indexerBlockBatchSize(),
   };
 }
 
@@ -117,7 +126,7 @@ const processedEvents: ProcessedEventStore = {
   },
 };
 
-function parsedEventName(log: IndexerLog) {
+export function decodedIndexerEventName(log: IndexerLog) {
   try {
     const name = iface.parseLog(log)?.name;
     return relevantEvents.includes(name as typeof relevantEvents[number]) ? name : undefined;
@@ -126,7 +135,7 @@ function parsedEventName(log: IndexerLog) {
   }
 }
 
-async function handleLog(log: IndexerLog, eventName: string) {
+async function handleLog(log: IndexerLog, eventName: string, _receipt: IndexerReceipt) {
   const event = iface.parseLog(log);
   if (!event) return;
   if (eventName === "UserRegistered") {
@@ -148,9 +157,23 @@ const sleepUntilPoll = (milliseconds: number) => new Promise<void>((resolve) => 
 async function run() {
   const server = getServerConfig();
   const config = blockchainIndexerConfig();
-  const provider = getProvider();
+  let activeBlock: number | null = null;
+  const errorLogger = new RateLimitedRpcErrorLogger();
+  const provider = new ReadOnlyIndexerRpc(indexerRpcUrls(), {
+    onRetry(details) {
+      health.currentRpcEndpointRedacted = provider.currentEndpointRedacted;
+      health.rpcFailoverCount = provider.rpcFailoverCount;
+      health.currentRetryDelayMs = details.nextRetryDelayMs;
+      errorLogger.log({ blockNumber: activeBlock, ...details });
+    },
+    onSuccess(method) {
+      health.currentRetryDelayMs = 0;
+      errorLogger.clear(method);
+    },
+  });
   const contractAddress = server.SMART_EARNING_CONTRACT_ADDRESS.toLowerCase();
   health.contractAddress = contractAddress;
+  health.currentRpcEndpointRedacted = provider.currentEndpointRedacted;
   health.running = true;
   const initialized = await initializeForwardIndexer({
     chainId: CHAIN_ID, contractAddress, confirmations: config.confirmations,
@@ -166,29 +189,34 @@ async function run() {
 
   while (!stopped) {
     try {
-      const result = await processForwardRanges({
+      const priorCheckpoint = await checkpoints.getLastBlock(CHAIN_ID, contractAddress);
+      activeBlock = priorCheckpoint === undefined ? null : priorCheckpoint + 1;
+      const result = await processConfirmedBlocks({
         chainId: CHAIN_ID, contractAddress, confirmations: config.confirmations,
-        batchSize: config.batchSize, provider, checkpoints, processedEvents, topics,
-        eventName: parsedEventName, handleLog,
-        onRange: ({ fromBlock, toBlock, eventCount }) =>
-          console.info(`[blockchain-indexer] processed range=${fromBlock}-${toBlock} events=${eventCount}`),
-        onRetry: ({ fromBlock, toBlock, chunkSize, error }) =>
-          console.warn(
-            `[blockchain-indexer] retry range=${fromBlock}-${toBlock} reduced_chunk=${chunkSize}`,
-            error,
-          ),
+        provider, checkpoints, processedEvents,
+        eventName: decodedIndexerEventName, handleLog,
+        onBlock: ({ blockNumber, matchingTransactions, eventCount }) => {
+          activeBlock = blockNumber + 1;
+          console.info(
+            `[blockchain-indexer] processed block=${blockNumber}` +
+            ` contract_txs=${matchingTransactions} events=${eventCount}`,
+          );
+        },
       });
       health.lastProcessedBlock = result.checkpoint;
       health.safeLatestBlock = result.safeLatest;
       health.blocksBehind = Math.max(0, result.safeLatest - result.checkpoint);
       health.lastSuccessfulScanTime = new Date().toISOString();
       health.lastError = null;
+      health.currentRpcEndpointRedacted = provider.currentEndpointRedacted;
+      health.rpcFailoverCount = provider.rpcFailoverCount;
       console.info(`[blockchain-indexer] checkpoint=${result.checkpoint} safe_latest=${result.safeLatest}`);
     } catch (error) {
       health.lastError = error instanceof Error ? error.message : String(error);
-      console.error("[blockchain-indexer] scan failed; checkpoint unchanged", error);
+      health.currentRetryDelayMs = 30_000;
     }
-    if (!stopped) await sleepUntilPoll(config.pollMs);
+    const delay = health.lastError ? 30_000 : config.pollMs;
+    if (!stopped) await sleepUntilPoll(delay);
   }
   health.running = false;
 }
@@ -224,7 +252,7 @@ export async function blockchainIndexerHealth(): Promise<IndexerHealth> {
   try {
     const [state, latest] = await Promise.all([
       checkpoints.getLastBlock(snapshot.chainId, snapshot.contractAddress),
-      getProvider().getBlockNumber(),
+      new ReadOnlyIndexerRpc(indexerRpcUrls()).getBlockNumber(),
     ]);
     const safe = safeLatestBlock(latest, blockchainIndexerConfig().confirmations);
     return {

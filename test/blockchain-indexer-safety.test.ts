@@ -11,6 +11,15 @@ describe("live blockchain indexer safety", () => {
     expect(source).toContain("verifyPackagePurchase");
   });
 
+  it("normal live path never calls eth_getLogs or getLogs", () => {
+    const worker = readFileSync(resolve("lib/server/blockchain-indexer.ts"), "utf8");
+    const core = readFileSync(resolve("scripts/indexer-core.ts"), "utf8");
+    const rpc = readFileSync(resolve("lib/blockchain/indexer-rpc.ts"), "utf8");
+    expect(`${worker}\n${core}\n${rpc}`).not.toMatch(/eth_getLogs|\.getLogs\s*\(/);
+    expect(rpc).toContain('"eth_getBlockByNumber"');
+    expect(rpc).toContain('"eth_getTransactionReceipt"');
+  });
+
   it("uses only exact relevant events already present in the ABI", () => {
     const source = readFileSync(resolve("lib/server/blockchain-indexer.ts"), "utf8");
     expect(source).toContain('"UserRegistered"');

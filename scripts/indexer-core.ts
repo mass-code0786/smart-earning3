@@ -1,8 +1,15 @@
-export const DEFAULT_INDEXER_BLOCK_BATCH_SIZE = 100;
-export const MAX_INDEXER_BLOCK_BATCH_SIZE = 200;
-export const MIN_INDEXER_BLOCK_BATCH_SIZE = 1;
+export type IndexerTransaction = {
+  hash: string;
+  to: string | null;
+};
+
+export type IndexerBlock = {
+  number: number;
+  transactions: IndexerTransaction[];
+};
 
 export type IndexerLog = {
+  address: string;
   blockNumber: number;
   transactionHash: string;
   index: number;
@@ -10,14 +17,17 @@ export type IndexerLog = {
   data: string;
 };
 
+export type IndexerReceipt = {
+  status: number;
+  transactionHash: string;
+  blockNumber: number;
+  logs: IndexerLog[];
+};
+
 export type IndexerProvider = {
   getBlockNumber(): Promise<number>;
-  getLogs(filter: {
-    address: string;
-    fromBlock: number;
-    toBlock: number;
-    topics?: Array<string | string[] | null>;
-  }): Promise<IndexerLog[]>;
+  getBlockWithTransactions(blockNumber: number): Promise<IndexerBlock>;
+  getTransactionReceipt(transactionHash: string): Promise<IndexerReceipt>;
 };
 
 export type IndexerCheckpointStore = {
@@ -38,30 +48,8 @@ export type ProcessedEventStore = {
   }): Promise<void>;
 };
 
-export function indexerBlockBatchSize(value = process.env.INDEXER_BLOCK_BATCH_SIZE) {
-  if (value === undefined || value.trim() === "") return DEFAULT_INDEXER_BLOCK_BATCH_SIZE;
-  const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed) || parsed < 1) {
-    throw new Error("INDEXER_BLOCK_BATCH_SIZE must be a positive integer");
-  }
-  return Math.min(parsed, MAX_INDEXER_BLOCK_BATCH_SIZE);
-}
-
 export function safeLatestBlock(latest: number, confirmations: number) {
   return Math.max(0, latest - confirmations);
-}
-
-export function isReducibleRpcError(error: unknown) {
-  const candidate = error as {
-    code?: string | number; status?: number; message?: string;
-    error?: { code?: string | number; message?: string };
-  };
-  const code = candidate?.code ?? candidate?.error?.code;
-  const message = `${candidate?.message || ""} ${candidate?.error?.message || ""}`.toLowerCase();
-  return code === -32005 || code === "-32005" || candidate?.status === 429
-    || message.includes("429") || message.includes("timeout")
-    || message.includes("limit exceeded") || message.includes("rate limit")
-    || message.includes("too many requests");
 }
 
 export function configuredStartBlock(value = process.env.BLOCKCHAIN_INDEXER_START_BLOCK) {
@@ -77,7 +65,7 @@ export async function initializeForwardIndexer(input: {
   chainId: number;
   contractAddress: string;
   confirmations: number;
-  provider: IndexerProvider;
+  provider: Pick<IndexerProvider, "getBlockNumber">;
   checkpoints: IndexerCheckpointStore;
   startBlock?: number;
 }) {
@@ -86,90 +74,72 @@ export async function initializeForwardIndexer(input: {
   const latest = await input.provider.getBlockNumber();
   const safeLatest = safeLatestBlock(latest, input.confirmations);
   if (existing !== undefined) return { checkpoint: existing, safeLatest, initialized: false };
-  const requested = input.startBlock;
-  const initial = requested === undefined ? safeLatest : Math.min(requested, safeLatest);
+  const initial = input.startBlock === undefined
+    ? safeLatest
+    : Math.min(input.startBlock, safeLatest);
   const checkpoint = await input.checkpoints.initialize(input.chainId, address, initial);
   return { checkpoint, safeLatest, initialized: true };
 }
 
-const delay = (milliseconds: number) =>
-  new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
-
-export async function processForwardRanges(input: {
+export async function processConfirmedBlocks(input: {
   chainId: number;
   contractAddress: string;
   confirmations: number;
-  batchSize: number;
-  maxRetries?: number;
   provider: IndexerProvider;
   checkpoints: IndexerCheckpointStore;
   processedEvents: ProcessedEventStore;
-  topics?: Array<string | string[] | null>;
   eventName(log: IndexerLog): string | undefined;
-  handleLog(log: IndexerLog, eventName: string): Promise<void>;
-  onRange?(result: { fromBlock: number; toBlock: number; eventCount: number }): void;
-  onRetry?(result: { fromBlock: number; toBlock: number; chunkSize: number; error: unknown }): void;
-  sleep?: (milliseconds: number) => Promise<void>;
+  handleLog(log: IndexerLog, eventName: string, receipt: IndexerReceipt): Promise<void>;
+  onBlock?(result: { blockNumber: number; matchingTransactions: number; eventCount: number }): void;
 }) {
   const address = input.contractAddress.toLowerCase();
-  let checkpoint = await input.checkpoints.getLastBlock(input.chainId, address);
-  if (checkpoint === undefined) throw new Error("Blockchain indexer is not initialized");
-  const latest = await input.provider.getBlockNumber();
-  const safeLatest = safeLatestBlock(latest, input.confirmations);
-  let chunkSize = Math.min(input.batchSize, MAX_INDEXER_BLOCK_BATCH_SIZE);
+  const savedCheckpoint = await input.checkpoints.getLastBlock(input.chainId, address);
+  if (savedCheckpoint === undefined) throw new Error("Blockchain indexer is not initialized");
+  let checkpoint: number = savedCheckpoint;
+  const safeLatest = safeLatestBlock(
+    await input.provider.getBlockNumber(),
+    input.confirmations,
+  );
   let eventCount = 0;
 
   while (checkpoint < safeLatest) {
-    const fromBlock = checkpoint + 1;
-    let toBlock = Math.min(fromBlock + chunkSize - 1, safeLatest);
-    let logs: IndexerLog[] | undefined;
-    let attempt = 0;
-    while (!logs) {
-      try {
-        logs = await input.provider.getLogs({
-          address, fromBlock, toBlock, topics: input.topics,
+    const blockNumber = checkpoint + 1;
+    const block = await input.provider.getBlockWithTransactions(blockNumber);
+    if (block.number !== blockNumber) {
+      throw new Error(`RPC returned block ${block.number} while ${blockNumber} was requested`);
+    }
+    const matching = block.transactions.filter(
+      (transaction) => transaction.to?.toLowerCase() === address,
+    );
+    let blockEvents = 0;
+    for (const transaction of matching) {
+      const receipt = await input.provider.getTransactionReceipt(transaction.hash);
+      if (receipt.status !== 1) continue;
+      for (const log of receipt.logs) {
+        if (log.address.toLowerCase() !== address) continue;
+        const name = input.eventName(log);
+        if (!name) continue;
+        if (await input.processedEvents.has(input.chainId, log.transactionHash, log.index)) continue;
+        await input.handleLog(log, name, receipt);
+        await input.processedEvents.record({
+          chainId: input.chainId,
+          contractAddress: address,
+          transactionHash: log.transactionHash.toLowerCase(),
+          logIndex: log.index,
+          blockNumber: log.blockNumber,
+          eventName: name,
         });
-      } catch (error) {
-        if (!isReducibleRpcError(error) || attempt >= (input.maxRetries ?? 5)) throw error;
-        chunkSize = Math.max(MIN_INDEXER_BLOCK_BATCH_SIZE, Math.floor(chunkSize / 2));
-        toBlock = Math.min(fromBlock + chunkSize - 1, safeLatest);
-        input.onRetry?.({ fromBlock, toBlock, chunkSize, error });
-        await (input.sleep ?? delay)(Math.min(500 * 2 ** attempt, 8_000));
-        attempt += 1;
+        blockEvents += 1;
       }
     }
-
-    logs.sort((a, b) => a.blockNumber - b.blockNumber || a.index - b.index);
-    let rangeEvents = 0;
-    for (const log of logs) {
-      const name = input.eventName(log);
-      if (!name) continue;
-      if (await input.processedEvents.has(input.chainId, log.transactionHash, log.index)) continue;
-      await input.handleLog(log, name);
-      await input.processedEvents.record({
-        chainId: input.chainId,
-        contractAddress: address,
-        transactionHash: log.transactionHash.toLowerCase(),
-        logIndex: log.index,
-        blockNumber: log.blockNumber,
-        eventName: name,
-      });
-      rangeEvents += 1;
-    }
-    await input.checkpoints.commitLastBlock(input.chainId, address, toBlock);
-    checkpoint = toBlock;
-    eventCount += rangeEvents;
-    input.onRange?.({ fromBlock, toBlock, eventCount: rangeEvents });
+    await input.checkpoints.commitLastBlock(input.chainId, address, blockNumber);
+    checkpoint = blockNumber;
+    eventCount += blockEvents;
+    input.onBlock?.({
+      blockNumber,
+      matchingTransactions: matching.length,
+      eventCount: blockEvents,
+    });
   }
   return { checkpoint, safeLatest, eventCount };
-}
-
-// Retained as a compatibility helper for existing tests/callers. New runtime code is forward-only.
-export function historicalBlockRanges(fromBlock: number, toBlock: number, batchSize: number) {
-  const ranges: Array<{ fromBlock: number; toBlock: number }> = [];
-  const size = Math.min(indexerBlockBatchSize(String(batchSize)), MAX_INDEXER_BLOCK_BATCH_SIZE);
-  for (let start = fromBlock; start <= toBlock; start += size) {
-    ranges.push({ fromBlock: start, toBlock: Math.min(start + size - 1, toBlock) });
-  }
-  return ranges;
 }

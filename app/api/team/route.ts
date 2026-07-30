@@ -6,8 +6,12 @@ import { getTeam } from "@/lib/server/team-query-service";
 export async function GET() {
   try {
     const session = await requireSession();
-    return NextResponse.json(await getTeam(session.wallet));
+    return NextResponse.json(await getTeam(session.wallet), {
+      headers: { "Cache-Control": "private, no-store" },
+    });
   } catch (error) {
-    return apiError(error);
+    const response = apiError(error);
+    response.headers.set("Cache-Control", "private, no-store");
+    return response;
   }
 }

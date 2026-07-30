@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -19,6 +19,7 @@ import { BoosterCountdown, type BoosterEligibility } from "@/components/booster-
 type DashboardData = {
   wallet_address: string;
   direct_count: number;
+  total_team: number;
 };
 
 type X3Package = {
@@ -124,14 +125,6 @@ export default function RealDashboard() {
     void load();
   }, []);
 
-  const teamWallets = useMemo(() => {
-    if (!data) return 0;
-    return new Set([
-      ...data.x3.flatMap((item) => item.slots.map((slot) => slot.wallet.toLowerCase())),
-      ...data.x4.flatMap((item) => item.slots.map((slot) => slot.wallet.toLowerCase())),
-    ]).size;
-  }, [data]);
-
   return (
     <SmartEarningPageShell home>
       {!data ? (
@@ -141,7 +134,7 @@ export default function RealDashboard() {
         </section>
       ) : (
         <div className="home-page">
-          <TeamSummary user={data.user} totalTeam={teamWallets} />
+          <TeamSummary user={data.user} totalTeam={data.user.total_team} />
           <section className="home-hero-composition" aria-label="Home actions">
             <div className="home-action-grid">
               <HomeAction href="/packages" label="Buy Package" icon={PackagePlus} />

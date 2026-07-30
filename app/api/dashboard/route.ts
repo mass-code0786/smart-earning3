@@ -6,8 +6,13 @@ import { apiError } from "@/lib/server/http";
 export async function GET() {
   try {
     const session = await requireSession();
-    return NextResponse.json({ user: await userDashboard(session.wallet) });
+    return NextResponse.json(
+      { user: await userDashboard(session.wallet) },
+      { headers: { "Cache-Control": "private, no-store" } },
+    );
   } catch (error) {
-    return apiError(error);
+    const response = apiError(error);
+    response.headers.set("Cache-Control", "private, no-store");
+    return response;
   }
 }

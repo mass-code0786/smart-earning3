@@ -1,27 +1,48 @@
+import { normalizeWallet } from "./auth";
 import { query } from "./db";
 
 export async function userDashboard(wallet: string) {
+  const authenticatedWallet = normalizeWallet(wallet);
   const userResult = await query<{
     id: string;
     wallet_address: string;
-    direct_count: number;
     sponsor_wallet: string | null;
     tx_hash: string | null;
     registration_status: string | null;
   }>(
-    `SELECT u.id,u.wallet_address,u.direct_count,s.wallet_address sponsor_wallet,
+    `SELECT u.id,u.wallet_address,s.wallet_address sponsor_wallet,
             r.tx_hash,r.status registration_status
      FROM users u
      LEFT JOIN referral_relations rr ON rr.user_id=u.id
      LEFT JOIN users s ON s.id=rr.sponsor_user_id
      LEFT JOIN registrations r ON r.user_id=u.id
      WHERE lower(u.wallet_address)=lower($1)`,
-    [wallet],
+    [authenticatedWallet],
   );
   const user = userResult.rows[0];
   if (!user) return null;
 
-  const [magic, direct, today, histories, levels, financial, earningHistory] = await Promise.all([
+  const [team, magic, direct, today, histories, levels, financial, earningHistory] = await Promise.all([
+    query<{
+      direct_members: number;
+      total_team: number;
+    }>(
+      `WITH RECURSIVE account_team AS (
+         SELECT rr.user_id
+         FROM referral_relations rr
+         WHERE rr.sponsor_user_id=$1
+         UNION
+         SELECT rr.user_id
+         FROM referral_relations rr
+         JOIN account_team parent ON parent.user_id=rr.sponsor_user_id
+       )
+       SELECT
+         (SELECT count(*)::int FROM referral_relations direct
+          WHERE direct.sponsor_user_id=$1) direct_members,
+         count(*)::int total_team
+       FROM account_team`,
+      [user.id],
+    ),
     query<{ balance: string }>(
       `SELECT COALESCE(SUM(CASE direction WHEN 'CREDIT' THEN amount_token_units ELSE -amount_token_units END),0)::text balance
        FROM magic_wallet_ledger WHERE user_id=$1`,
@@ -79,7 +100,19 @@ export async function userDashboard(wallet: string) {
   ]);
 
   return {
-    ...user,
+    id: user.id,
+    wallet_address: user.wallet_address,
+    registration_status: user.registration_status,
+    tx_hash: user.tx_hash,
+    direct_count: team.rows[0]?.direct_members || 0,
+    total_team: team.rows[0]?.total_team || 0,
+    accountStatistics: {
+      directMembers: team.rows[0]?.direct_members || 0,
+      totalTeam: team.rows[0]?.total_team || 0,
+    },
+    sponsor: user.sponsor_wallet ? {
+      walletAddress: user.sponsor_wallet,
+    } : null,
     magicBalance: magic.rows[0].balance,
     directIncomeTotal: direct.rows[0].total,
     directIncomeToday: today.rows[0].total,
