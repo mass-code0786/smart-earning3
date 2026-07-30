@@ -319,7 +319,7 @@ BEGIN
     previous_units:=current_units-CASE WHEN NEW.direction='CREDIT' THEN NEW.amount ELSE -NEW.amount END;
     INSERT INTO activity_history(user_wallet,user_id,category,event_type,title,amount,direction,previous_balance,
       new_balance,status,source_table,source_record_id,idempotency_key,metadata,occurred_at)
-    VALUES(owner_wallet,NEW.user_id,'WALLET','INCOME_WALLET_'||NEW.direction,'Income Wallet '||lower(NEW.direction),
+    VALUES(owner_wallet,NEW.user_id,'WALLET','INCOME_WALLET_'||NEW.direction,'Income Wallet '||lower(NEW.direction::text),
       NEW.amount/1000000.0,NEW.direction::text,previous_units/1000000.0,current_units/1000000.0,'CONFIRMED',
       'income_wallet_ledger',NEW.id::text,'income_wallet_ledger:'||NEW.id||':INCOME_WALLET_'||NEW.direction||':'||owner_wallet,
       NEW.metadata||jsonb_build_object('walletType','INCOME','sourceEvent',NEW.reason),NEW.created_at)
@@ -332,7 +332,7 @@ BEGIN
     previous_units:=current_units-CASE WHEN NEW.direction='CREDIT' THEN NEW.amount_token_units ELSE -NEW.amount_token_units END;
     INSERT INTO activity_history(user_wallet,user_id,category,event_type,title,amount,direction,previous_balance,
       new_balance,status,tx_hash,source_table,source_record_id,idempotency_key,metadata,occurred_at)
-    VALUES(owner_wallet,NEW.user_id,'WALLET','BOOSTER_WALLET_'||NEW.direction,'Booster Wallet '||lower(NEW.direction),
+    VALUES(owner_wallet,NEW.user_id,'WALLET','BOOSTER_WALLET_'||NEW.direction,'Booster Wallet '||lower(NEW.direction::text),
       NEW.amount_token_units/1000000.0,NEW.direction::text,previous_units/1000000.0,current_units/1000000.0,'CONFIRMED',
       lower(NEW.metadata->>'txHash'),'booster_wallet_ledger',NEW.id::text,
       'booster_wallet_ledger:'||NEW.id||':BOOSTER_WALLET_'||NEW.direction||':'||owner_wallet,
@@ -346,7 +346,7 @@ BEGIN
     previous_units:=current_units-CASE WHEN NEW.direction='CREDIT' THEN NEW.amount_token_units ELSE -NEW.amount_token_units END;
     INSERT INTO activity_history(user_wallet,user_id,category,event_type,title,amount,direction,previous_balance,
       new_balance,status,tx_hash,source_table,source_record_id,idempotency_key,metadata,occurred_at)
-    VALUES(owner_wallet,NEW.user_id,'WALLET','MAGIC_WALLET_'||NEW.direction,'Wallet ledger '||lower(NEW.direction),
+    VALUES(owner_wallet,NEW.user_id,'WALLET','MAGIC_WALLET_'||NEW.direction,'Wallet ledger '||lower(NEW.direction::text),
       NEW.amount_token_units/1000000.0,NEW.direction::text,previous_units/1000000.0,current_units/1000000.0,'CONFIRMED',
       lower(NEW.metadata->>'txHash'),'magic_wallet_ledger',NEW.id::text,
       'magic_wallet_ledger:'||NEW.id||':MAGIC_WALLET_'||NEW.direction||':'||owner_wallet,

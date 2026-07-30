@@ -14,6 +14,11 @@ const cookieState = vi.hoisted(() => ({
 }));
 
 vi.mock("next/headers", () => ({
+  headers: async () => ({
+    get: (name: string) => name === "x-connected-wallet"
+      ? "0x5cbdd86a2fa8dc4bddd8a8f69dba48572eec07fb"
+      : null,
+  }),
   cookies: async () => ({
     get: (name: string) => name === "se_session" && cookieState.token
       ? { name, value: cookieState.token }

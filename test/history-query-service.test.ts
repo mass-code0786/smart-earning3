@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-const query=vi.fn();
+const query=vi.hoisted(()=>vi.fn());
 vi.mock("@/lib/server/db",()=>({query}));
+import { getHistory } from "@/lib/server/history-query-service";
 
 const wallet="0x1234567890abcdef1234567890abcdef12345678";
 const row=(index:number)=>({
@@ -19,7 +20,6 @@ describe("database-backed history read model",()=>{
  beforeEach(()=>query.mockReset());
  it("returns normalized source, package and transaction fields",async()=>{
   query.mockResolvedValueOnce({rows:[row(1)]});
-  const{getHistory}=await import("@/lib/server/history-query-service");
   const result=await getHistory(wallet);
   expect(result.items[0]).toMatchObject({
    category:"DIRECT_INCOME",eventType:"DIRECT_INCOME_CREDITED",amount:"3.200000000000000000",
@@ -29,7 +29,6 @@ describe("database-backed history read model",()=>{
  });
  it("uses occurredAt plus UUID for opaque cursor pagination",async()=>{
   query.mockResolvedValueOnce({rows:Array.from({length:21},(_,index)=>row(index))});
-  const{getHistory}=await import("@/lib/server/history-query-service");
   const first=await getHistory(wallet);
   expect(first.items).toHaveLength(20);expect(first.nextCursor).toBeTruthy();
   query.mockResolvedValueOnce({rows:[]});
@@ -39,7 +38,6 @@ describe("database-backed history read model",()=>{
  });
  it("applies every supported filter after wallet authorization",async()=>{
   query.mockResolvedValueOnce({rows:[]});
-  const{getHistory}=await import("@/lib/server/history-query-service");
   await getHistory(wallet,{category:"direct_income",eventType:"direct_income_credited",status:"confirmed",
    fromDate:"2026-01-01",toDate:"2026-01-31",sourceWallet:"0xabcdefabcdefabcdefabcdefabcdefabcdefabcd",
    txHash:`0x${"ab".repeat(32)}`,packageNumber:3,limit:200});
@@ -50,7 +48,6 @@ describe("database-backed history read model",()=>{
   expect(String(query.mock.calls[0][0])).toContain("lower(user_wallet)=lower($1)");
  });
  it("rejects removed categories before querying",async()=>{
-  const{getHistory}=await import("@/lib/server/history-query-service");
   await expect(getHistory(wallet,{category:"X4"})).rejects.toMatchObject({code:"INVALID_CATEGORY"});
   expect(query).not.toHaveBeenCalled();
  });
