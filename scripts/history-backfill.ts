@@ -1,8 +1,8 @@
-import { loadEnvConfig } from "@next/env";
+import { loadAuthoritativeEnvironment } from "../lib/server/production-environment";
 import { backfillHistory } from "../lib/server/history-backfill-service";
 import { getPool } from "../lib/server/db";
 
-loadEnvConfig(process.cwd());
+loadAuthoritativeEnvironment(process.cwd());
 const args = process.argv.slice(2);
 const value = (name: string) => args.find(arg => arg.startsWith(`--${name}=`))?.split("=",2)[1] || null;
 

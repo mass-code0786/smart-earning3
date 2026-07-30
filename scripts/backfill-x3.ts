@@ -1,7 +1,9 @@
 import { getPool, transaction } from "../lib/server/db";
 import { processX3PackagePurchase } from "../lib/server/x3-service";
 import { X3_PACKAGE_PRICES } from "../lib/server/x3-math";
+import { loadAuthoritativeEnvironment } from "../lib/server/production-environment";
 
+loadAuthoritativeEnvironment(process.cwd());
 const apply=process.argv.includes("--apply");
 
 async function main(){

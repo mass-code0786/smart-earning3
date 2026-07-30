@@ -1,4 +1,4 @@
-import{query,getPool}from"../lib/server/db";import{loadEnvConfig}from"@next/env";loadEnvConfig(process.cwd());
+import{query,getPool}from"../lib/server/db";import{loadAuthoritativeEnvironment}from"../lib/server/production-environment";loadAuthoritativeEnvironment(process.cwd());
 async function main(){const rows=await Promise.all([
  query(`SELECT count(*)::int count,COALESCE(sum(p.amount_token_units/8),0)::text amount FROM package_purchases p WHERE p.status='CONFIRMED' AND p.amount_token_units>=8000000`),
  query(`SELECT count(*)::int count,COALESCE(sum(gross_amount),0)::text amount FROM x4_income_history WHERE level_number=1`),

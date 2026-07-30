@@ -1,7 +1,7 @@
 -- Durable, append-only history read model.
 -- Rollback: disable the activity_history_* triggers first. Preserve
 -- activity_history for audit/export; do not drop it automatically.
-CREATE TABLE activity_history (
+CREATE TABLE IF NOT EXISTS activity_history (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_wallet varchar(42) NOT NULL,
   user_id uuid REFERENCES users(id),
@@ -46,16 +46,54 @@ CREATE TABLE activity_history (
   CONSTRAINT activity_history_sponsor_wallet_lower CHECK(sponsor_wallet IS NULL OR sponsor_wallet=lower(sponsor_wallet))
 );
 
-CREATE INDEX activity_history_wallet_occurred_idx ON activity_history(lower(user_wallet),occurred_at DESC,id DESC);
-CREATE INDEX activity_history_category_occurred_idx ON activity_history(category,occurred_at DESC);
-CREATE INDEX activity_history_event_occurred_idx ON activity_history(event_type,occurred_at DESC);
-CREATE INDEX activity_history_source_wallet_idx ON activity_history(lower(source_wallet)) WHERE source_wallet IS NOT NULL;
-CREATE INDEX activity_history_tx_hash_idx ON activity_history(tx_hash) WHERE tx_hash IS NOT NULL;
-CREATE INDEX activity_history_package_idx ON activity_history(package_number) WHERE package_number IS NOT NULL;
-CREATE INDEX activity_history_status_idx ON activity_history(status);
-CREATE INDEX activity_history_source_record_idx ON activity_history(source_record_id);
-CREATE INDEX activity_history_created_idx ON activity_history(created_at DESC);
+ALTER TABLE activity_history ADD COLUMN IF NOT EXISTS id uuid DEFAULT gen_random_uuid();
+ALTER TABLE activity_history ADD COLUMN IF NOT EXISTS user_wallet varchar(42);
+ALTER TABLE activity_history ADD COLUMN IF NOT EXISTS user_id uuid REFERENCES users(id);
+ALTER TABLE activity_history ADD COLUMN IF NOT EXISTS category varchar(40);
+ALTER TABLE activity_history ADD COLUMN IF NOT EXISTS event_type varchar(80);
+ALTER TABLE activity_history ADD COLUMN IF NOT EXISTS title varchar(160);
+ALTER TABLE activity_history ADD COLUMN IF NOT EXISTS status varchar(32);
+ALTER TABLE activity_history ADD COLUMN IF NOT EXISTS idempotency_key varchar(300);
+ALTER TABLE activity_history ADD COLUMN IF NOT EXISTS metadata jsonb DEFAULT '{}'::jsonb;
+ALTER TABLE activity_history ADD COLUMN IF NOT EXISTS occurred_at timestamptz;
+ALTER TABLE activity_history ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now();
+ALTER TABLE activity_history ADD COLUMN IF NOT EXISTS description text;
+ALTER TABLE activity_history ADD COLUMN IF NOT EXISTS amount numeric(38,18);
+ALTER TABLE activity_history ADD COLUMN IF NOT EXISTS currency varchar(16) DEFAULT 'USDT';
+ALTER TABLE activity_history ADD COLUMN IF NOT EXISTS direction varchar(8);
+ALTER TABLE activity_history ADD COLUMN IF NOT EXISTS source_wallet varchar(42);
+ALTER TABLE activity_history ADD COLUMN IF NOT EXISTS source_user_id uuid REFERENCES users(id);
+ALTER TABLE activity_history ADD COLUMN IF NOT EXISTS sponsor_wallet varchar(42);
+ALTER TABLE activity_history ADD COLUMN IF NOT EXISTS referral_level integer;
+ALTER TABLE activity_history ADD COLUMN IF NOT EXISTS package_number integer;
+ALTER TABLE activity_history ADD COLUMN IF NOT EXISTS package_amount numeric(38,18);
+ALTER TABLE activity_history ADD COLUMN IF NOT EXISTS matrix_type varchar(24);
+ALTER TABLE activity_history ADD COLUMN IF NOT EXISTS matrix_package_number integer;
+ALTER TABLE activity_history ADD COLUMN IF NOT EXISTS cycle_number integer;
+ALTER TABLE activity_history ADD COLUMN IF NOT EXISTS recycle_number integer;
+ALTER TABLE activity_history ADD COLUMN IF NOT EXISTS position_number integer;
+ALTER TABLE activity_history ADD COLUMN IF NOT EXISTS previous_balance numeric(38,18);
+ALTER TABLE activity_history ADD COLUMN IF NOT EXISTS new_balance numeric(38,18);
+ALTER TABLE activity_history ADD COLUMN IF NOT EXISTS fee_amount numeric(38,18);
+ALTER TABLE activity_history ADD COLUMN IF NOT EXISTS net_amount numeric(38,18);
+ALTER TABLE activity_history ADD COLUMN IF NOT EXISTS tx_hash varchar(66);
+ALTER TABLE activity_history ADD COLUMN IF NOT EXISTS block_number bigint;
+ALTER TABLE activity_history ADD COLUMN IF NOT EXISTS log_index integer;
+ALTER TABLE activity_history ADD COLUMN IF NOT EXISTS source_table varchar(80);
+ALTER TABLE activity_history ADD COLUMN IF NOT EXISTS source_record_id varchar(160);
 
+CREATE INDEX IF NOT EXISTS activity_history_wallet_occurred_idx ON activity_history(lower(user_wallet),occurred_at DESC,id DESC);
+CREATE INDEX IF NOT EXISTS activity_history_category_occurred_idx ON activity_history(category,occurred_at DESC);
+CREATE INDEX IF NOT EXISTS activity_history_event_occurred_idx ON activity_history(event_type,occurred_at DESC);
+CREATE INDEX IF NOT EXISTS activity_history_source_wallet_idx ON activity_history(lower(source_wallet)) WHERE source_wallet IS NOT NULL;
+CREATE INDEX IF NOT EXISTS activity_history_tx_hash_idx ON activity_history(tx_hash) WHERE tx_hash IS NOT NULL;
+CREATE INDEX IF NOT EXISTS activity_history_package_idx ON activity_history(package_number) WHERE package_number IS NOT NULL;
+CREATE INDEX IF NOT EXISTS activity_history_status_idx ON activity_history(status);
+CREATE INDEX IF NOT EXISTS activity_history_source_record_idx ON activity_history(source_record_id);
+CREATE INDEX IF NOT EXISTS activity_history_created_idx ON activity_history(created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS activity_history_idempotency_key_idx ON activity_history(idempotency_key);
+
+DROP TRIGGER IF EXISTS activity_history_append_only ON activity_history;
 CREATE TRIGGER activity_history_append_only
 BEFORE UPDATE OR DELETE ON activity_history
 FOR EACH ROW EXECUTE FUNCTION reject_ledger_mutation();
@@ -318,35 +356,51 @@ BEGIN
   RETURN NEW;
 END $$;
 
+DROP TRIGGER IF EXISTS activity_history_package ON package_purchases;
 CREATE TRIGGER activity_history_package AFTER INSERT OR UPDATE OF status ON package_purchases
 FOR EACH ROW EXECUTE FUNCTION write_activity_history_from_source();
+DROP TRIGGER IF EXISTS activity_history_package_attempt ON package_purchase_attempts;
 CREATE TRIGGER activity_history_package_attempt AFTER INSERT ON package_purchase_attempts
 FOR EACH ROW EXECUTE FUNCTION write_activity_history_from_source();
+DROP TRIGGER IF EXISTS activity_history_booster_topup ON booster_top_up_history;
 CREATE TRIGGER activity_history_booster_topup AFTER INSERT ON booster_top_up_history
 FOR EACH ROW EXECUTE FUNCTION write_activity_history_from_source();
+DROP TRIGGER IF EXISTS activity_history_booster_income ON booster_income_history;
 CREATE TRIGGER activity_history_booster_income AFTER INSERT ON booster_income_history
 FOR EACH ROW EXECUTE FUNCTION write_activity_history_from_source();
+DROP TRIGGER IF EXISTS activity_history_referral ON referral_relations;
 CREATE TRIGGER activity_history_referral AFTER INSERT ON referral_relations
 FOR EACH ROW EXECUTE FUNCTION write_activity_history_from_source();
+DROP TRIGGER IF EXISTS activity_history_direct_income ON direct_income_ledger;
 CREATE TRIGGER activity_history_direct_income AFTER INSERT ON direct_income_ledger
 FOR EACH ROW EXECUTE FUNCTION write_activity_history_from_source();
+DROP TRIGGER IF EXISTS activity_history_magic_income ON magic_income_ledger;
 CREATE TRIGGER activity_history_magic_income AFTER INSERT ON magic_income_ledger
 FOR EACH ROW EXECUTE FUNCTION write_activity_history_from_source();
+DROP TRIGGER IF EXISTS activity_history_x3_income ON x3_income_ledger;
 CREATE TRIGGER activity_history_x3_income AFTER INSERT ON x3_income_ledger
 FOR EACH ROW EXECUTE FUNCTION write_activity_history_from_source();
+DROP TRIGGER IF EXISTS activity_history_x3_recycle ON x3_recycle_events;
 CREATE TRIGGER activity_history_x3_recycle AFTER INSERT ON x3_recycle_events
 FOR EACH ROW EXECUTE FUNCTION write_activity_history_from_source();
+DROP TRIGGER IF EXISTS activity_history_autopool_position ON autopool_positions;
 CREATE TRIGGER activity_history_autopool_position AFTER INSERT ON autopool_positions
 FOR EACH ROW EXECUTE FUNCTION write_activity_history_from_source();
+DROP TRIGGER IF EXISTS activity_history_autopool_income ON autopool_income_history;
 CREATE TRIGGER activity_history_autopool_income AFTER INSERT ON autopool_income_history
 FOR EACH ROW EXECUTE FUNCTION write_activity_history_from_source();
+DROP TRIGGER IF EXISTS activity_history_dividend ON daily_dividend_allocations;
 CREATE TRIGGER activity_history_dividend AFTER INSERT ON daily_dividend_allocations
 FOR EACH ROW EXECUTE FUNCTION write_activity_history_from_source();
+DROP TRIGGER IF EXISTS activity_history_withdrawal ON auto_withdrawals;
 CREATE TRIGGER activity_history_withdrawal AFTER INSERT OR UPDATE OF status ON auto_withdrawals
 FOR EACH ROW EXECUTE FUNCTION write_activity_history_from_source();
+DROP TRIGGER IF EXISTS activity_history_income_wallet ON income_wallet_ledger;
 CREATE TRIGGER activity_history_income_wallet AFTER INSERT ON income_wallet_ledger
 FOR EACH ROW EXECUTE FUNCTION write_activity_history_from_source();
+DROP TRIGGER IF EXISTS activity_history_booster_wallet ON booster_wallet_ledger;
 CREATE TRIGGER activity_history_booster_wallet AFTER INSERT ON booster_wallet_ledger
 FOR EACH ROW EXECUTE FUNCTION write_activity_history_from_source();
+DROP TRIGGER IF EXISTS activity_history_magic_wallet ON magic_wallet_ledger;
 CREATE TRIGGER activity_history_magic_wallet AFTER INSERT ON magic_wallet_ledger
 FOR EACH ROW EXECUTE FUNCTION write_activity_history_from_source();

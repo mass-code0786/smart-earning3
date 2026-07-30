@@ -5,6 +5,7 @@ const state = vi.hoisted(() => ({
   query: vi.fn(),
   getNetwork: vi.fn(),
   getCode: vi.fn(),
+  requireSchemaReady: vi.fn(),
 }));
 
 vi.mock("@/lib/server/db", async importOriginal => ({
@@ -13,6 +14,9 @@ vi.mock("@/lib/server/db", async importOriginal => ({
 }));
 vi.mock("@/lib/blockchain/provider", () => ({
   getProvider: () => ({ getNetwork: state.getNetwork, getCode: state.getCode }),
+}));
+vi.mock("@/lib/server/registration-schema-readiness", () => ({
+  requireRegistrationSchemaReady: (...args: unknown[]) => state.requireSchemaReady(...args),
 }));
 vi.mock("@/lib/server/config", async importOriginal => ({
   ...await importOriginal<typeof import("@/lib/server/config")>(),
@@ -43,6 +47,7 @@ describe("registration preparation preflight", () => {
     });
     state.getNetwork.mockResolvedValue({ chainId: 97n });
     state.getCode.mockResolvedValue("0x6000");
+    state.requireSchemaReady.mockResolvedValue({ registrationReady: true });
   });
 
   it("allows a new registrant with an active sponsor and complete dependencies", async () => {
@@ -67,11 +72,10 @@ describe("registration preparation preflight", () => {
   });
 
   it("reports an unapplied or incomplete history migration explicitly", async () => {
-    state.query.mockImplementation(async (sql: string, values?: unknown[]) => {
-      if (sql.includes("schema_migrations")) return { rows: [{ applied: false }] };
-      if (sql.includes("FROM users")) return { rows: [{ active: values?.[0] === sponsor }] };
-      return { rows: [] };
-    });
+    state.requireSchemaReady.mockRejectedValue(Object.assign(
+      new Error("Registration history dependency is not installed"),
+      { status: 503, code: "HISTORY_MIGRATION_MISSING" },
+    ));
     await expect(registrationPreflight(registrant, sponsor)).rejects.toMatchObject({
       stage: "CHECK_HISTORY_MIGRATION",
       original: expect.objectContaining({
@@ -91,20 +95,20 @@ describe("registration preparation preflight", () => {
   });
 
   it("uses schema_migrations.filename and does not swallow SQL errors", async () => {
-    await registrationPreflight(registrant, sponsor);
-    const migrationSql = String(state.query.mock.calls.find(call =>
-      String(call[0]).includes("schema_migrations"))?.[0]);
-    expect(migrationSql).toContain("filename='022_activity_history.sql'");
-    expect(migrationSql).not.toMatch(/\b(?:migration_name|version|name)\b\s*=/);
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const migrationSql = readFileSync(
+      resolve("lib/server/registration-schema-readiness.ts"), "utf8",
+    );
+    expect(migrationSql).toContain("filename=$1");
 
-    state.query.mockImplementation(async (sql: string, values?: unknown[]) => {
-      if (sql.includes("schema_migrations")) throw Object.assign(new Error("column failure"), { code: "42703" });
-      if (sql.includes("FROM users")) return { rows: [{ active: values?.[0] === sponsor }] };
-      return { rows: [] };
-    });
+    state.requireSchemaReady.mockRejectedValue(Object.assign(
+      new Error("Database schema is incompatible"),
+      { status: 503, code: "DATABASE_SCHEMA_INCOMPATIBLE" },
+    ));
     await expect(registrationPreflight(registrant, sponsor)).rejects.toMatchObject({
       stage: "CHECK_HISTORY_MIGRATION",
-      original: expect.objectContaining({ code: "42703" }),
+      original: expect.objectContaining({ code: "DATABASE_SCHEMA_INCOMPATIBLE" }),
     });
   });
 

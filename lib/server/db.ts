@@ -7,6 +7,8 @@ export type DatabaseErrorCode =
   | "AUTHENTICATION_FAILED"
   | "DATABASE_MISSING"
   | "MIGRATION_MISSING"
+  | "PERMISSION_DENIED"
+  | "SCHEMA_INCOMPATIBLE"
   | "CONNECTION_TIMEOUT"
   | "CERTIFICATE_VERIFICATION_FAILED"
   | "DATABASE_ERROR";
@@ -100,14 +102,15 @@ export function classifyDatabaseError(error: unknown): DatabaseConnectionError {
   if (code === "3D000") {
     return new DatabaseConnectionError("DATABASE_MISSING", "Configured PostgreSQL database does not exist", { cause: error });
   }
-  if (
-    ["42P01", "42703", "42883", "42704"].includes(code || "")
-    || message.includes("schema_migrations")
-    || message.includes("auth_nonces")
-    || message.includes("activity_history")
-    || message.includes("write_activity_history_from_source")
-  ) {
-    return new DatabaseConnectionError("MIGRATION_MISSING", "Required PostgreSQL migrations are missing", { cause: error });
+  if (code === "42501") {
+    return new DatabaseConnectionError(
+      "PERMISSION_DENIED", "PostgreSQL permission was denied", { cause: error },
+    );
+  }
+  if (["42P01", "42703", "42883", "42704"].includes(code || "")) {
+    return new DatabaseConnectionError(
+      "SCHEMA_INCOMPATIBLE", "PostgreSQL schema is incompatible", { cause: error },
+    );
   }
   if (code === "ETIMEDOUT" || code === "CONNECT_TIMEOUT" || message.includes("timeout")) {
     return new DatabaseConnectionError("CONNECTION_TIMEOUT", "PostgreSQL connection timed out", { cause: error });

@@ -1,7 +1,7 @@
-import { loadEnvConfig } from "@next/env";
+import { loadAuthoritativeEnvironment } from "../lib/server/production-environment";
 import deployment from "../deployments/bsc-testnet.json";
 
-loadEnvConfig(process.cwd());
+loadAuthoritativeEnvironment(process.cwd());
 
 async function main() {
   const txArgument = process.argv.slice(2).find((value) => value.startsWith("--tx="));

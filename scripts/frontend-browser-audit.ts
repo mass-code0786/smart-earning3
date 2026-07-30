@@ -1,9 +1,9 @@
 import { mkdir, writeFile } from "node:fs/promises";
-import { loadEnvConfig } from "@next/env";
+import { loadAuthoritativeEnvironment } from "../lib/server/production-environment";
 import { SignJWT } from "jose";
 import { chromium, type BrowserContext, type Page, type Route } from "playwright-core";
 import { Client } from "pg";
-loadEnvConfig(process.cwd());
+loadAuthoritativeEnvironment(process.cwd());
 
 const origin=process.env.BROWSER_AUDIT_ORIGIN||"http://127.0.0.1:3010";
 const output="evidence/final-browser-audit";

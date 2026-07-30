@@ -1,8 +1,8 @@
 import { writeFile } from "node:fs/promises";
-import { loadEnvConfig } from "@next/env";
+import { loadAuthoritativeEnvironment } from "../lib/server/production-environment";
 import { getPool } from "../lib/server/db";
 import { auditX3Recovery, classifyStaleRecoveryMetadata } from "../lib/server/x3-recovery-audit-service";
-loadEnvConfig(process.cwd());
+loadAuthoritativeEnvironment(process.cwd());
 
 async function main(){
   const repair=process.argv.includes("--classify-stale");

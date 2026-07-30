@@ -4,6 +4,7 @@ import { normalizeWallet } from "./auth";
 import { CHAIN_ID, getServerConfig, ServerConfigError } from "./config";
 import { DatabaseConnectionError, query } from "./db";
 import { ApiError } from "./http";
+import { requireRegistrationSchemaReady } from "./registration-schema-readiness";
 
 export type RegistrationStage =
   | "CHECK_REGISTRANT" | "CHECK_SPONSOR" | "CHECK_HISTORY_MIGRATION"
@@ -66,32 +67,7 @@ export async function registrationPreflight(registrantInput: string, sponsorInpu
     );
   }
 
-  const migration = await atStage("CHECK_HISTORY_MIGRATION", () => query<{ applied: boolean }>(
-    `SELECT EXISTS(
-       SELECT 1 FROM schema_migrations WHERE filename='022_activity_history.sql'
-     ) applied`,
-  ));
-  if (!migration.rows[0]?.applied) {
-    throw new RegistrationStageFailure(
-      "CHECK_HISTORY_MIGRATION",
-      new ApiError(503, "Registration history dependency is not installed", "HISTORY_MIGRATION_MISSING"),
-    );
-  }
-
-  const objects = await atStage("CHECK_HISTORY_OBJECTS", () => query<{
-    history_table: boolean;
-    history_trigger: boolean;
-  }>(
-    `SELECT
-       to_regclass('public.activity_history') IS NOT NULL history_table,
-       to_regprocedure('write_activity_history_from_source()') IS NOT NULL history_trigger`,
-  ));
-  if (!objects.rows[0]?.history_table || !objects.rows[0]?.history_trigger) {
-    throw new RegistrationStageFailure(
-      "CHECK_HISTORY_OBJECTS",
-      new ApiError(503, "Registration history dependency is not installed", "HISTORY_MIGRATION_MISSING"),
-    );
-  }
+  await atStage("CHECK_HISTORY_MIGRATION", requireRegistrationSchemaReady);
 
   const config = getServerConfig();
   const provider = getProvider();
@@ -128,12 +104,13 @@ export function safeRegistrationError(
     return new ApiError(503, "Registration service is not configured", "CONTRACT_NOT_CONFIGURED");
   }
   if (original instanceof DatabaseConnectionError) {
-    const migration = original.databaseCode === "MIGRATION_MISSING";
-    return new ApiError(
-      503,
-      migration ? "Required registration database migration is missing" : "Registration database is unavailable",
-      migration ? "HISTORY_MIGRATION_MISSING" : "REGISTRATION_DATABASE_UNAVAILABLE",
-    );
+    if (original.databaseCode === "PERMISSION_DENIED") {
+      return new ApiError(503, "Database permission denied", "DATABASE_PERMISSION_DENIED");
+    }
+    if (original.databaseCode === "SCHEMA_INCOMPATIBLE") {
+      return new ApiError(503, "Database schema is incompatible", "DATABASE_SCHEMA_INCOMPATIBLE");
+    }
+    return new ApiError(503, "Registration database is unavailable", "DATABASE_UNAVAILABLE");
   }
   if (error instanceof RegistrationStageFailure) {
     if (error.stage === "CHECK_RPC") {

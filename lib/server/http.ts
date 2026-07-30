@@ -47,6 +47,18 @@ export function apiError(error: unknown) {
   }
   if (error instanceof DatabaseConnectionError) {
     console.error(`[database:${error.databaseCode}] ${error.message}`);
+    if (error.databaseCode === "PERMISSION_DENIED") {
+      return NextResponse.json(
+        { error: "Database permission denied", code: "DATABASE_PERMISSION_DENIED" },
+        { status: 503 },
+      );
+    }
+    if (error.databaseCode === "SCHEMA_INCOMPATIBLE") {
+      return NextResponse.json(
+        { error: "Database schema incompatible", code: "DATABASE_SCHEMA_INCOMPATIBLE" },
+        { status: 503 },
+      );
+    }
     return NextResponse.json(
       { error: "Database service unavailable", code: "DATABASE_UNAVAILABLE" },
       { status: 503 },

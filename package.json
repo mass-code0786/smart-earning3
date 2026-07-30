@@ -15,6 +15,8 @@
     "preflight:deploy:testnet": "node --env-file=.env scripts/preflight-testnet-deployment.cjs",
     "check:deployment:testnet": "node --env-file=.env scripts/check-testnet-deployment.cjs",
     "migrate": "tsx scripts/migrate.ts",
+    "migrate:production": "tsx scripts/migrate-production.ts",
+    "verify:production-readiness": "tsx scripts/verify-production-readiness.ts",
     "seed:genesis": "tsx scripts/seed-genesis.ts",
     "indexer": "tsx scripts/indexer.ts",
     "reconcile:registration:testnet": "tsx scripts/reconcile-registration-tx.ts",

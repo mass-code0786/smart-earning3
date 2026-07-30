@@ -1,8 +1,8 @@
-import { loadEnvConfig } from "@next/env";
+import { loadAuthoritativeEnvironment } from "../lib/server/production-environment";
 import { startBlockchainIndexer, stopBlockchainIndexer } from "../lib/server/blockchain-indexer";
 import { getPool } from "../lib/server/db";
 
-loadEnvConfig(process.cwd());
+loadAuthoritativeEnvironment(process.cwd());
 
 async function main() {
   startBlockchainIndexer();

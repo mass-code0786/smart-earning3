@@ -1,7 +1,7 @@
-import { loadEnvConfig } from "@next/env";
+import { loadAuthoritativeEnvironment } from "../lib/server/production-environment";
 import { getPool } from "../lib/server/db";
 
-loadEnvConfig(process.cwd());
+loadAuthoritativeEnvironment(process.cwd());
 const value = (name: string) => process.argv.slice(2)
   .find((item) => item.startsWith(`--${name}=`))?.slice(name.length + 3);
 

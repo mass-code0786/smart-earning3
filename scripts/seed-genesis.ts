@@ -1,6 +1,8 @@
 import { normalizeWallet } from "../lib/server/auth";
 import { transaction, getPool } from "../lib/server/db";
+import { loadAuthoritativeEnvironment } from "../lib/server/production-environment";
 
+loadAuthoritativeEnvironment(process.cwd());
 async function main() {
   if (!process.env.GENESIS_WALLET) throw new Error("GENESIS_WALLET is required");
   const wallet = normalizeWallet(process.env.GENESIS_WALLET);
