@@ -32,6 +32,17 @@ describe("user ownership diagnostic safety", () => {
     ]);
   });
 
+  it("discovers all candidate hashes before enforcing the single-event gate", () => {
+    const service = readFileSync(resolve("lib/server/user-ownership-diagnostic.ts"), "utf8");
+    expect(service).toContain('addCandidate(row.tx_hash, "registration tx hash")');
+    expect(service).toContain('addCandidate(row.tx_hash, "blockchain_transactions")');
+    expect(service).toContain(
+      'addCandidate(row.transaction_hash, "processed blockchain events")',
+    );
+    expect(service).toContain("decodedUserRegisteredEvents.push");
+    expect(service).toContain("confirmedMatchingEvents.length === 1");
+  });
+
   it("registration projection keeps registered and sponsor IDs in distinct positions", () => {
     const source = readFileSync(resolve("lib/server/registration-service.ts"), "utf8");
     expect(source).toContain("[userId, sponsorResult.rows[0].id, txHash");

@@ -1,6 +1,7 @@
 import { Interface } from "ethers";
 import { SMART_EARNING_ABI } from "@/lib/blockchain/abi";
 import { getProvider } from "@/lib/blockchain/provider";
+import { getServerConfig } from "./config";
 import { normalizeWallet } from "./auth";
 import { query } from "./db";
 
@@ -122,19 +123,37 @@ export async function diagnoseUserOwnership(sponsorInput: string, referralInput:
     query(
       `SELECT * FROM blockchain_transactions
        WHERE lower(from_address) IN(lower($1),lower($2))
+          OR lower(raw_payload->>'user') IN(lower($1),lower($2))
           OR lower(raw_payload->>'sponsor') IN(lower($1),lower($2))
+          OR lower(raw_payload->>'matrixParent') IN(lower($1),lower($2))
+          OR lower(tx_hash) IN(
+            SELECT lower(r.tx_hash) FROM registrations r
+            WHERE r.user_id=ANY($3::uuid[]) OR r.sponsor_user_id=ANY($3::uuid[])
+          )
        ORDER BY created_at,id`,
-      [sponsor, referral],
+      [sponsor, referral, userIds],
     ),
     query(
       `SELECT pe.* FROM blockchain_processed_events pe
-       JOIN blockchain_transactions bt
-         ON bt.chain_id=pe.chain_id AND lower(bt.tx_hash)=lower(pe.transaction_hash)
-        AND bt.log_index=pe.log_index
-       WHERE lower(bt.from_address) IN(lower($1),lower($2))
-          OR lower(bt.raw_payload->>'sponsor') IN(lower($1),lower($2))
+       WHERE pe.event_name='UserRegistered' AND (
+         lower(pe.transaction_hash) IN(
+           SELECT lower(r.tx_hash) FROM registrations r
+           WHERE r.user_id=ANY($3::uuid[]) OR r.sponsor_user_id=ANY($3::uuid[])
+         )
+         OR EXISTS(
+           SELECT 1 FROM blockchain_transactions bt
+           WHERE bt.chain_id=pe.chain_id
+             AND lower(bt.tx_hash)=lower(pe.transaction_hash)
+             AND (
+               lower(bt.from_address) IN(lower($1),lower($2))
+               OR lower(bt.raw_payload->>'user') IN(lower($1),lower($2))
+               OR lower(bt.raw_payload->>'sponsor') IN(lower($1),lower($2))
+               OR lower(bt.raw_payload->>'matrixParent') IN(lower($1),lower($2))
+             )
+         )
+       )
        ORDER BY pe.block_number,pe.log_index`,
-      [sponsor, referral],
+      [sponsor, referral, userIds],
     ),
     query(
       `SELECT u.id user_id,u.wallet_address,
@@ -185,62 +204,133 @@ export async function diagnoseUserOwnership(sponsorInput: string, referralInput:
   if (referralUser && referralUser.sponsor_wallet?.toLowerCase() !== sponsor) {
     mismatches.push("REFERRAL_SPONSOR_MISMATCH");
   }
-  const candidateTransactions = (blockchainTransactions.rows as Array<{
-    tx_hash?: string; event_name?: string; status?: string; from_address?: string;
-  }>).filter((row) =>
-    row.event_name === "UserRegistered"
-    && row.status === "CONFIRMED"
-    && row.from_address?.toLowerCase() === referral);
-  if (candidateTransactions.length > 1) mismatches.push("AMBIGUOUS_REGISTRATION_EVENTS");
-  const registrationTxHash = referralUser?.registration_tx_hash
-    || (candidateTransactions.length === 1 ? candidateTransactions[0].tx_hash || null : null);
-  let onchain: Record<string, unknown> | null = null;
-  if (registrationTxHash) {
-    const provider = getProvider();
-    const [transaction, receipt] = await Promise.all([
-      provider.getTransaction(registrationTxHash),
-      provider.getTransactionReceipt(registrationTxHash),
-    ]);
-    const decoded = receipt?.logs.map((entry) => {
+  const hashSources = new Map<string, Set<string>>();
+  const addCandidate = (value: unknown, source: string) => {
+    const hash = String(value || "").toLowerCase();
+    if (!/^0x[0-9a-f]{64}$/.test(hash)) return;
+    const sources = hashSources.get(hash) || new Set<string>();
+    sources.add(source);
+    hashSources.set(hash, sources);
+  };
+  for (const row of registrations.rows as Array<Record<string, unknown>>) {
+    addCandidate(row.tx_hash, "registration tx hash");
+  }
+  for (const row of blockchainTransactions.rows as Array<Record<string, unknown>>) {
+    addCandidate(row.tx_hash, "blockchain_transactions");
+  }
+  for (const row of processedEvents.rows as Array<Record<string, unknown>>) {
+    addCandidate(row.transaction_hash, "processed blockchain events");
+  }
+  const candidateTransactionHashes = [...hashSources].map(([transactionHash, sources]) => ({
+    transactionHash,
+    sources: [...sources].sort(),
+  }));
+  const provider = getProvider();
+  let latestBlock: number | null = null;
+  const requiredConfirmations = getServerConfig().CONFIRMATIONS_REQUIRED;
+  const configuredContract = normalizeWallet(getServerConfig().SMART_EARNING_CONTRACT_ADDRESS);
+  const decodedUserRegisteredEvents: Array<Record<string, unknown>> = [];
+  const lookupFailures: Array<Record<string, unknown>> = [];
+  let receiptsFound = 0;
+  if (candidateTransactionHashes.length) {
+    try {
+      latestBlock = await provider.getBlockNumber();
+    } catch (error) {
+      lookupFailures.push({
+        lookup: "transaction receipt",
+        reason: `Latest block lookup failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      });
+    }
+  }
+  for (const candidate of candidateTransactionHashes) {
+    let transaction;
+    let receipt;
+    try {
+      [transaction, receipt] = await Promise.all([
+        provider.getTransaction(candidate.transactionHash),
+        provider.getTransactionReceipt(candidate.transactionHash),
+      ]);
+    } catch (error) {
+      lookupFailures.push({
+        transactionHash: candidate.transactionHash,
+        lookup: "transaction receipt",
+        reason: error instanceof Error ? error.message : String(error),
+      });
+      continue;
+    }
+    if (!transaction) {
+      lookupFailures.push({
+        transactionHash: candidate.transactionHash, lookup: "registration tx hash",
+        reason: "Transaction was not found by the configured chain RPC",
+      });
+    }
+    if (!receipt) {
+      lookupFailures.push({
+        transactionHash: candidate.transactionHash, lookup: "transaction receipt",
+        reason: "Receipt was not found by the configured chain RPC",
+      });
+      continue;
+    }
+    receiptsFound += 1;
+    let decodedCount = 0;
+    for (const entry of receipt.logs) {
       try {
         const event = iface.parseLog(entry);
-        return event?.name === "UserRegistered" ? { entry, event } : null;
+        if (!event || event.name !== "UserRegistered") continue;
+        decodedCount += 1;
+        const confirmations = latestBlock === null ? 0 : latestBlock - receipt.blockNumber + 1;
+        decodedUserRegisteredEvents.push({
+          transactionHash: candidate.transactionHash,
+          transactionSender: transaction ? normalizeWallet(transaction.from) : null,
+          registeredUser: normalizeWallet(String(event.args.user)),
+          sponsor: normalizeWallet(String(event.args.sponsor)),
+          matrixParent: normalizeWallet(String(event.args.matrixParent)),
+          matrixIndex: String(event.args.matrixIndex),
+          matrixPosition: Number(event.args.matrixPosition),
+          directSponsorIncome: String(event.args.directSponsorIncome),
+          magicWalletCredit: String(event.args.magicWalletCredit),
+          logIndex: entry.index,
+          blockNumber: receipt.blockNumber,
+          blockHash: receipt.blockHash,
+          contractAddress: normalizeWallet(entry.address),
+          receiptStatus: receipt.status,
+          confirmations,
+          confirmed: receipt.status === 1 && confirmations >= requiredConfirmations,
+          sources: candidate.sources,
+        });
       } catch {
-        return null;
+        // Other contract logs in the same receipt are expected not to match this ABI event.
       }
-    }).find(Boolean);
-    if (!transaction || !receipt || !decoded?.event) {
-      mismatches.push("REGISTRATION_EVENT_NOT_FOUND");
-    } else {
-      const registeredUser = normalizeWallet(String(decoded.event.args.user));
-      const eventSponsor = normalizeWallet(String(decoded.event.args.sponsor));
-      onchain = {
-        transactionHash: registrationTxHash,
-        transactionSender: normalizeWallet(transaction.from),
-        eventName: decoded.event.name,
-        indexedParameters: ["user", "sponsor", "matrixParent"],
-        parameterOrder: [
-          "user", "sponsor", "matrixParent", "matrixIndex", "matrixPosition",
-          "directSponsorIncome", "magicWalletCredit",
-        ],
-        registeredUser,
-        sponsor: eventSponsor,
-        matrixParent: normalizeWallet(String(decoded.event.args.matrixParent)),
-        matrixIndex: String(decoded.event.args.matrixIndex),
-        matrixPosition: Number(decoded.event.args.matrixPosition),
-        directSponsorIncome: String(decoded.event.args.directSponsorIncome),
-        magicWalletCredit: String(decoded.event.args.magicWalletCredit),
-        logIndex: decoded.entry.index,
-        blockNumber: receipt.blockNumber,
-        blockHash: receipt.blockHash,
-        contractAddress: normalizeWallet(transaction.to || ""),
-      };
-      if (registeredUser !== referral) mismatches.push("EVENT_REGISTERED_USER_MISMATCH");
-      if (eventSponsor !== sponsor) mismatches.push("EVENT_SPONSOR_MISMATCH");
-      if (normalizeWallet(transaction.from) !== referral) mismatches.push("TRANSACTION_SENDER_MISMATCH");
     }
+    if (!decodedCount) {
+      lookupFailures.push({
+        transactionHash: candidate.transactionHash, lookup: "ABI decode",
+        reason: "Receipt contains no UserRegistered log decodable by the configured ABI",
+      });
+    }
+  }
+  const confirmedMatchingEvents = decodedUserRegisteredEvents.filter((value) =>
+    value.confirmed === true
+    && value.contractAddress === configuredContract
+    && value.registeredUser === referral
+    && value.sponsor === sponsor
+    && value.transactionSender === referral);
+  if (confirmedMatchingEvents.length > 1) mismatches.push("AMBIGUOUS_REGISTRATION_EVENTS");
+  let onchain: Record<string, unknown> | null = null;
+  if (confirmedMatchingEvents.length === 1) {
+    onchain = {
+      ...confirmedMatchingEvents[0],
+      eventName: "UserRegistered",
+      indexedParameters: ["user", "sponsor", "matrixParent"],
+      parameterOrder: [
+        "user", "sponsor", "matrixParent", "matrixIndex", "matrixPosition",
+        "directSponsorIncome", "magicWalletCredit",
+      ],
+    };
   } else {
-    mismatches.push("REFERRAL_REGISTRATION_NOT_FOUND");
+    mismatches.push("REGISTRATION_EVENT_NOT_FOUND");
   }
 
   return {
@@ -255,6 +345,44 @@ export async function diagnoseUserOwnership(sponsorInput: string, referralInput:
     activityHistory: activities.rows,
     blockchainTransactions: blockchainTransactions.rows,
     processedBlockchainEvents: processedEvents.rows,
+    candidateTransactionHashes,
+    decodedUserRegisteredEvents,
+    eventDiscovery: {
+      requiredConfirmedEvents: 1,
+      confirmedMatchingEventCount: confirmedMatchingEvents.length,
+      lookups: {
+        blockchain_transactions: {
+          found: blockchainTransactions.rows.length,
+          failed: blockchainTransactions.rows.length === 0,
+        },
+        "processed blockchain events": {
+          found: processedEvents.rows.length,
+          failed: processedEvents.rows.length === 0,
+        },
+        "decoded receipt": {
+          found: receiptsFound,
+          failed: receiptsFound === 0,
+        },
+        "registration tx hash": {
+          found: candidateTransactionHashes.filter((candidate) =>
+            candidate.sources.includes("registration tx hash")).length,
+          failed: !candidateTransactionHashes.some((candidate) =>
+            candidate.sources.includes("registration tx hash")),
+        },
+        "transaction receipt": {
+          found: receiptsFound,
+          failed: receiptsFound !== candidateTransactionHashes.length,
+        },
+        "ABI decode": {
+          found: decodedUserRegisteredEvents.length,
+          failed: decodedUserRegisteredEvents.length === 0,
+        },
+      },
+      lookupFailures,
+      conclusion: confirmedMatchingEvents.length === 1
+        ? "Exactly one confirmed UserRegistered event matched"
+        : `Expected exactly one confirmed UserRegistered event; found ${confirmedMatchingEvents.length}`,
+    },
     balancesByUser: financialTotals.rows,
     recomputedTeamByUser: teamTotals.rows,
     ledgerRows: ledgerRows.rows,
