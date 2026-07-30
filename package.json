@@ -19,6 +19,7 @@
     "verify:production-readiness": "tsx scripts/verify-production-readiness.ts",
     "check:pm2-environment": "tsx scripts/check-pm2-environment.ts",
     "deploy:production": "tsx scripts/deploy-production.ts",
+    "cleanup:production-releases": "tsx scripts/cleanup-production-releases.ts",
     "verify:production-runtime": "tsx scripts/verify-production-runtime.ts",
     "seed:genesis": "tsx scripts/seed-genesis.ts",
     "indexer": "tsx scripts/indexer.ts",

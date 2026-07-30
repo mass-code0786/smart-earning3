@@ -3,13 +3,15 @@ import { posix, resolve } from "node:path";
 import { redactDatabaseIdentity } from "./production-environment";
 
 export const PRODUCTION_CWD = "/var/www/smart-earning3";
-export const PRODUCTION_RELEASES_CWD = `${PRODUCTION_CWD}/releases`;
+export const PRODUCTION_RELEASES_CWD = "/var/www/smart-earning3-releases";
+export const LEGACY_PRODUCTION_RELEASES_CWD = `${PRODUCTION_CWD}/releases`;
 
 export function isProductionReleaseCwd(cwd: string | undefined) {
   if (!cwd) return false;
   const normalized = posix.normalize(cwd.replaceAll("\\", "/"));
   return normalized === PRODUCTION_CWD
-    || normalized.startsWith(`${PRODUCTION_RELEASES_CWD}/`);
+    || normalized.startsWith(`${PRODUCTION_RELEASES_CWD}/`)
+    || normalized.startsWith(`${LEGACY_PRODUCTION_RELEASES_CWD}/`);
 }
 
 export type Pm2Process = {

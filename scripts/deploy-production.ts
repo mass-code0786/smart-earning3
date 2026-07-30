@@ -1,6 +1,6 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
-import { mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
   PRODUCTION_CWD, PRODUCTION_RELEASES_CWD, readPm2Processes,
@@ -102,6 +102,12 @@ async function main() {
       mkdirSync(PRODUCTION_RELEASES_CWD, { recursive: true });
       command("git", ["worktree", "add", "--detach", releaseCwd, commit], PRODUCTION_CWD);
     } },
+    { name: "release_source", run: () => {
+      const deployment = resolve(releaseCwd, "deployments/bsc-testnet.json");
+      if (!existsSync(deployment)) {
+        throw new Error("Release is missing deployments/bsc-testnet.json");
+      }
+    } },
     { name: "npm_ci", run: () => command("npm", ["ci", "--include=dev"], releaseCwd) },
     { name: "typecheck", run: () => command(
       "npm", ["run", "typecheck"], releaseCwd, productionEnvironment,
@@ -168,6 +174,13 @@ async function main() {
         `[deploy] indexer mode=block_receipt_indexing` +
         ` startupMarkerInRecentLogs=${verification.markerObserved}\n`,
       );
+    } },
+    { name: "mark_release_success", run: () => {
+      writeFileSync(resolve(releaseCwd, ".deployment-success.json"), JSON.stringify({
+        commit,
+        buildId,
+        completedAt: new Date().toISOString(),
+      }, null, 2) + "\n", { encoding: "utf8", flag: "wx" });
     } },
   ];
 
