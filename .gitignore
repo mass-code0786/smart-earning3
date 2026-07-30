@@ -8,6 +8,7 @@ artifacts/
 cache/
 evidence/
 deployments/*.json
+!deployments/bsc-testnet.json
 releases/
 
 *.log
