@@ -33,4 +33,22 @@ describe("read-only registration indexing diagnostic", () => {
       "registrationBlockPosition", "missingProjectionRows", "finalDiagnosis",
     ]) expect(source).toContain(value);
   });
+
+  it("bounds every external subsystem and reports scan progress", () => {
+    expect(source).toContain("RPC_TIMEOUT_MS");
+    expect(source).toContain("EVENT_DISCOVERY_TIMEOUT_MS");
+    expect(source).toContain("DATABASE_TIMEOUT_MS");
+    expect(source).toContain("SET LOCAL statement_timeout");
+    expect(source).toContain("RPC: querying UserRegistered logs");
+    expect(source).toContain("database: reading diagnostic projection rows and checkpoints");
+  });
+
+  it("closes diagnostic resources and assigns an exit code on every outcome", () => {
+    expect(source).toContain("diagnosticClient.release(true)");
+    expect(source).toContain("diagnosticPool.end()");
+    expect(source).toContain("diagnosticProvider.destroy()");
+    expect(source).toContain("process.exitCode = 0");
+    expect(source).toContain("process.exitCode = 2");
+    expect(source).toContain('code: "DIAGNOSTIC_FAILED"');
+  });
 });
