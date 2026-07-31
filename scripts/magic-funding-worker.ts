@@ -16,7 +16,10 @@ async function run(){
  }catch(error){await recordHeartbeat({workerName:name,instanceId:instance,status:"FAILED",intervalSeconds:seconds,failed:1,error});throw error}
 }
 async function execute(){if(active||stopping)return;active=run();try{await active}finally{active=null}}
-await recordHeartbeat({workerName:name,instanceId:instance,status:"STARTING",intervalSeconds:seconds});
-await execute();const timer=setInterval(()=>void execute().catch(console.error),seconds*1000);
-async function stop(){if(stopping)return;stopping=true;clearInterval(timer);await active?.catch(()=>undefined);await recordHeartbeat({workerName:name,instanceId:instance,status:"STOPPED",intervalSeconds:seconds});await getPool().end();process.exit(0)}
-process.once("SIGINT",()=>void stop());process.once("SIGTERM",()=>void stop());
+async function main(){
+ await recordHeartbeat({workerName:name,instanceId:instance,status:"STARTING",intervalSeconds:seconds});
+ await execute();const timer=setInterval(()=>void execute().catch(console.error),seconds*1000);
+ async function stop(){if(stopping)return;stopping=true;clearInterval(timer);await active?.catch(()=>undefined);await recordHeartbeat({workerName:name,instanceId:instance,status:"STOPPED",intervalSeconds:seconds});await getPool().end();process.exit(0)}
+ process.once("SIGINT",()=>void stop());process.once("SIGTERM",()=>void stop());
+}
+main().catch(error=>{console.error(error);process.exit(1)});
