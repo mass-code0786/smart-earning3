@@ -34,22 +34,49 @@ const deployedCommit = execFileSync("git", ["rev-parse", "HEAD"], {
   encoding: "utf8",
 }).trim();
 
+const common = {
+  cwd,
+  instances: 1,
+  exec_mode: "fork",
+  autorestart: true,
+  restart_delay: 5_000,
+  exp_backoff_restart_delay: 100,
+  max_restarts: 20,
+  min_uptime: "10s",
+  kill_timeout: 30_000,
+  listen_timeout: 15_000,
+  env: {
+    ...productionEnvironment,
+    NODE_ENV: "production",
+    DATABASE_URL: productionEnvironment.DATABASE_URL,
+    DEPLOYED_GIT_COMMIT: deployedCommit,
+    DEPLOYED_BUILD_ID: deployedBuildId,
+    BLOCKCHAIN_INDEXER_MODE: "block_receipt_indexing",
+  },
+};
+const worker = (name, file) => ({
+  ...common,
+  name,
+  script: "node_modules/tsx/dist/cli.mjs",
+  args: [file],
+});
+
 module.exports = {
   apps: [{
+    ...common,
     name: "smart-earning",
-    cwd,
     script: "node_modules/next/dist/bin/next",
     args: ["start", "--port", productionPort],
-    instances: 1,
-    exec_mode: "fork",
     env: {
-      ...productionEnvironment,
-      NODE_ENV: "production",
+      ...common.env,
       PORT: productionPort,
-      DATABASE_URL: productionEnvironment.DATABASE_URL,
-      DEPLOYED_GIT_COMMIT: deployedCommit,
-      DEPLOYED_BUILD_ID: deployedBuildId,
-      BLOCKCHAIN_INDEXER_MODE: "block_receipt_indexing",
     },
-  }],
+  },
+  worker("smart-earning-indexer", "scripts/indexer.ts"),
+  worker("smart-earning-x3-recovery", "scripts/x3-recovery-worker.ts"),
+  worker("smart-earning-booster", "scripts/booster-worker.ts"),
+  worker("smart-earning-dividend", "scripts/dividend-worker.ts"),
+  worker("smart-earning-withdrawal", "scripts/withdrawal-worker.ts"),
+  worker("smart-earning-magic-funding", "scripts/magic-funding-worker.ts"),
+  ],
 };

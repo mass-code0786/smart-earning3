@@ -37,9 +37,7 @@ export async function register(){
       fingerprint:schemaReadiness.fingerprint,
     });
     await startRegistrationSchemaReadinessMonitor();
-    const{startX3RecoveryWorker}=await import("./lib/server/x3-recovery-worker");
-    startX3RecoveryWorker();
-    const{startBlockchainIndexer}=await import("./lib/server/blockchain-indexer");
-    startBlockchainIndexer();
+    // Financial workers and the blockchain indexer are standalone, single-instance
+    // PM2 applications. The web runtime must never own background processing.
   }
 }

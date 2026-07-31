@@ -1,0 +1,9 @@
+// @vitest-environment node
+import{describe,expect,it}from"vitest";
+import{readFileSync}from"node:fs";import{resolve}from"node:path";
+describe("production worker supervision",()=>{
+ it("assigns every runtime to exactly one forked PM2 process",()=>{const source=readFileSync(resolve("ecosystem.config.cjs"),"utf8");for(const name of["smart-earning-indexer","smart-earning-x3-recovery","smart-earning-booster","smart-earning-dividend","smart-earning-withdrawal","smart-earning-magic-funding"])expect(source.match(new RegExp(`worker\\(\"${name}\"`,"g"))).toHaveLength(1);expect(source).toContain("instances: 1");expect(source).toContain('exec_mode: "fork"');expect(source).toContain("autorestart: true");expect(source).toContain("kill_timeout: 30_000")});
+ it("does not start workers from the Next.js runtime",()=>{const source=readFileSync(resolve("instrumentation.ts"),"utf8");expect(source).not.toMatch(/startX3RecoveryWorker\s*\(/);expect(source).not.toMatch(/startBlockchainIndexer\s*\(/)});
+ it("recovers the withdrawal crash window without rebroadcasting",()=>{const source=readFileSync(resolve("lib/server/withdrawal-broadcast-service.ts"),"utf8");expect(source).toContain("'BROADCASTING'");expect(source).toContain("processedWithdrawals(reservationHash)");expect(source).toContain("status='CONFIRMED'");expect(source).toContain("recoveredAfterCrash:true")});
+ it("gives every financial loop overlap prevention and graceful drain",()=>{for(const file of["booster-worker.ts","dividend-worker.ts","withdrawal-worker.ts","magic-funding-worker.ts"]){const source=readFileSync(resolve("scripts",file),"utf8");expect(source).toContain("if(active||stopping)return");expect(source).toContain("await active?.catch");expect(source).toContain('process.once("SIGTERM"')}});
+});

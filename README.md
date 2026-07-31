@@ -37,9 +37,8 @@ The command creates a new uniquely named PostgreSQL database, starts Hardhat on
 `127.0.0.1:8545` with chain ID `31337`, deploys Mock USDT and the unified
 SmartEarning contract, funds deterministic local accounts, executes the
 registration/package/referral/Booster/withdrawal scenario, starts the
-production frontend/backend on `127.0.0.1:3020`, and starts the application
-workers through the normal Next.js instrumentation hook. Press Ctrl+C to stop
-the processes.
+production frontend/backend on `127.0.0.1:3020`. The self-terminating verifier
+does not start production financial workers. Press Ctrl+C to stop the processes.
 
 For a self-terminating CI verification run:
 
