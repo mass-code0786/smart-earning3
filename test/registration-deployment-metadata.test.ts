@@ -29,6 +29,23 @@ describe("authoritative registration deployment metadata", () => {
       .toThrow("SMART_EARNING_DEPLOYMENT_BLOCK");
   });
 
+  it("uses tracked deployment metadata when the optional block assertion is absent", () => {
+    expect(smartEarningDeployment({
+      SMART_EARNING_CHAIN_ID: String(deployment.chainId),
+      SMART_EARNING_CONTRACT_ADDRESS: deployment.address,
+    }).blockNumber).toBe(deployment.blockNumber);
+  });
+
+  it.each(["zero", "0", "-1", "1.5"])(
+    "names an invalid deployment block assertion for %s",
+    (value) => {
+      expect(() => smartEarningDeployment({ SMART_EARNING_DEPLOYMENT_BLOCK: value }))
+        .toThrow(
+          "SMART_EARNING_DEPLOYMENT_BLOCK must be a positive integer when set",
+        );
+    },
+  );
+
   it("keeps production and disposable E2E metadata isolated", () => {
     const local = {
       chainId: 31337,

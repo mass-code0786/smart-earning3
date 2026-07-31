@@ -66,8 +66,16 @@ export function smartEarningDeployment(
   if (envAddress && envAddress.toLowerCase() !== selected.address) {
     conflicts.push("SMART_EARNING_CONTRACT_ADDRESS");
   }
-  if (envBlock && Number(envBlock) !== selected.blockNumber) {
-    conflicts.push("SMART_EARNING_DEPLOYMENT_BLOCK");
+  if (envBlock) {
+    const parsedBlock = Number(envBlock);
+    if (!Number.isSafeInteger(parsedBlock) || parsedBlock < 1) {
+      throw new Error(
+        "Invalid indexer configuration: SMART_EARNING_DEPLOYMENT_BLOCK " +
+        "must be a positive integer when set; the variable may be omitted because " +
+        "deployments/bsc-testnet.json is authoritative",
+      );
+    }
+    if (parsedBlock !== selected.blockNumber) conflicts.push("SMART_EARNING_DEPLOYMENT_BLOCK");
   }
   if (conflicts.length) {
     throw new Error(
