@@ -27,6 +27,12 @@ async function main(){
     .deploy(await token.getAddress(),addresses[1],addresses[0],addresses[2],addresses[8]);
   await smart.waitForDeployment();
   const tokenAddress=await token.getAddress(),smartAddress=await smart.getAddress();
+  const smartDeployment=await smart.deploymentTransaction()?.wait();
+  if(!smartDeployment)throw new Error("Smart Earning deployment receipt missing");
+  const localDeploymentMetadata=JSON.stringify({
+    chainId:31337,address:smartAddress,txHash:smartDeployment.hash,
+    blockNumber:smartDeployment.blockNumber,genesis:addresses[1],
+  });
   const keeperRole=await smart.KEEPER_ROLE(),executorRole=await smart.WITHDRAWAL_EXECUTOR_ROLE();
   await(await smart.grantRole(keeperRole,addresses[3])).wait();
   await(await smart.grantRole(executorRole,addresses[7])).wait();
@@ -37,6 +43,8 @@ async function main(){
   Object.assign(process.env,{
     SMART_EARNING_CONTRACT_ADDRESS:smartAddress,BSC_TESTNET_USDT_ADDRESS:tokenAddress,
     NEXT_PUBLIC_SMART_EARNING_CONTRACT_ADDRESS:smartAddress,NEXT_PUBLIC_BSC_TESTNET_USDT_ADDRESS:tokenAddress,
+    SMART_EARNING_DEPLOYMENT_BLOCK:String(smartDeployment.blockNumber),
+    LOCAL_E2E_DEPLOYMENT_METADATA:localDeploymentMetadata,
     GENESIS_WALLET:addresses[1],TREASURY_WALLET:addresses[2],CONFIRMATIONS_REQUIRED:"1",
   });
   const treasuryStart=BigInt(await token.balanceOf(addresses[2]));
@@ -120,6 +128,8 @@ async function main(){
   fs.writeFileSync(path.resolve("evidence/local-e2e/runtime.env"),
     [`LOCAL_E2E=true`,`SMART_EARNING_CHAIN_ID=31337`,`BSC_TESTNET_RPC_URL=${RPC}`,
       `BSC_TESTNET_USDT_ADDRESS=${tokenAddress}`,`SMART_EARNING_CONTRACT_ADDRESS=${smartAddress}`,
+      `SMART_EARNING_DEPLOYMENT_BLOCK=${smartDeployment.blockNumber}`,
+      `LOCAL_E2E_DEPLOYMENT_METADATA=${localDeploymentMetadata}`,
       `TREASURY_WALLET=${addresses[2]}`,`GENESIS_WALLET=${addresses[1]}`,
       `NEXT_PUBLIC_BSC_TESTNET_USDT_ADDRESS=${tokenAddress}`,
       `NEXT_PUBLIC_SMART_EARNING_CONTRACT_ADDRESS=${smartAddress}`,
