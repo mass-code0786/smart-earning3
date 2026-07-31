@@ -13,6 +13,22 @@ import type { PoolClient } from "pg";
 const hashSchema = z.string().regex(/^0x[a-fA-F0-9]{64}$/);
 const iface = new Interface(SMART_EARNING_ABI);
 
+async function ensureConfirmedMatrixParent(
+  client: PoolClient,
+  wallet: string,
+  confirmedAt: Date,
+) {
+  const parent = await client.query<{ id: string }>(
+    `INSERT INTO users(wallet_address,status,activated_at)
+     VALUES($1,'ACTIVE',$2)
+     ON CONFLICT(wallet_address) DO UPDATE SET
+       status='ACTIVE',activated_at=COALESCE(users.activated_at,EXCLUDED.activated_at)
+     RETURNING id`,
+    [wallet, confirmedAt],
+  );
+  return parent.rows[0].id;
+}
+
 function registrationEvent(receipt: TransactionReceipt) {
   for (const log of receipt.logs) {
     try {
@@ -148,13 +164,9 @@ export async function reconcileExistingRegistrationProjection(
     && input.matrixIndex !== undefined
     && input.matrixPosition !== undefined
   ) {
-    const parent = await client.query<{ id: string }>(
-      "SELECT id FROM users WHERE wallet_address=$1",
-      [input.matrixParent],
+    const parentUserId = await ensureConfirmedMatrixParent(
+      client, input.matrixParent, input.confirmedAt,
     );
-    if (!parent.rows[0]) {
-      throw new ApiError(422, "Matrix parent is not indexed", "MATRIX_PARENT_NOT_INDEXED");
-    }
     const inserted = await client.query<{ id: string }>(
       `INSERT INTO matrix_placements(
          user_id,parent_user_id,position,bfs_index,registration_id,sponsor_user_id,
@@ -162,7 +174,7 @@ export async function reconcileExistingRegistrationProjection(
        ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
        ON CONFLICT(user_id) DO NOTHING RETURNING id`,
       [
-        input.userId, parent.rows[0].id, input.matrixPosition,
+        input.userId, parentUserId, input.matrixPosition,
         input.matrixIndex.toString(), input.registrationId, input.sponsorUserId,
         input.txHash, input.blockNumber, input.logIndex,
       ],
@@ -177,7 +189,7 @@ export async function reconcileExistingRegistrationProjection(
     const row = placement.rows[0];
     if (
       !row
-      || row.parent_user_id !== parent.rows[0].id
+      || row.parent_user_id !== parentUserId
       || row.position !== input.matrixPosition
       || row.bfs_index !== input.matrixIndex.toString()
       || row.registration_id !== input.registrationId
@@ -364,13 +376,7 @@ export async function verifyAndActivateRegistration(
     if (!sponsorResult.rows[0]) {
       throw new ApiError(422, "Sponsor is not active in the index", "SPONSOR_NOT_INDEXED");
     }
-    const parentResult = await client.query<{ id: string }>(
-      "SELECT id FROM users WHERE wallet_address=$1",
-      [matrixParent],
-    );
-    if (!parentResult.rows[0]) {
-      throw new ApiError(422, "Matrix parent is not indexed", "MATRIX_PARENT_NOT_INDEXED");
-    }
+    const parentUserId = await ensureConfirmedMatrixParent(client, matrixParent, new Date());
 
     const userId = reusableUserId || (await client.query<{ id: string }>(
       `INSERT INTO users(wallet_address,status,activated_at)
@@ -416,7 +422,7 @@ export async function verifyAndActivateRegistration(
         transaction_hash,block_number,log_index
        ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
       [
-        userId,parentResult.rows[0].id,matrixPosition,matrixIndex.toString(),registrationId,
+        userId,parentUserId,matrixPosition,matrixIndex.toString(),registrationId,
         sponsorResult.rows[0].id,txHash,receipt.blockNumber,log.index,
       ],
     );

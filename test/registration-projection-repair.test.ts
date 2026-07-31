@@ -135,7 +135,7 @@ describe("idempotent confirmed-registration projection repair", () => {
             id: "relation-ab", sponsor_user_id: "user-a", registration_id: "registration-b",
           }] };
         }
-        if (text === "SELECT id FROM users WHERE wallet_address=$1") {
+        if (text.startsWith("INSERT INTO users(wallet_address,status,activated_at)")) {
           return { rows: [{ id: "matrix-parent" }] };
         }
         if (text.includes("INSERT INTO matrix_placements")) {
@@ -166,6 +166,8 @@ describe("idempotent confirmed-registration projection repair", () => {
     await expect(reconcileExistingRegistrationProjection(client as never, matrixInput))
       .resolves.toMatchObject({ placementCreated: false });
     const sql = client.query.mock.calls.map(([text]) => String(text)).join("\n");
+    expect(sql).toContain("INSERT INTO users(wallet_address,status,activated_at)");
+    expect(sql).toContain("ON CONFLICT(wallet_address) DO UPDATE");
     expect(sql).toContain("ON CONFLICT(user_id) DO NOTHING");
     expect(sql).not.toMatch(/direct_income_ledger|magic_wallet_ledger/);
   });
