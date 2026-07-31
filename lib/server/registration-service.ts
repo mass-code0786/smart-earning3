@@ -44,6 +44,10 @@ export async function reconcileExistingRegistrationProjection(
     matrixParent?: string;
     matrixIndex?: bigint;
     matrixPosition?: number;
+    registrationValue?: bigint;
+    directIncome?: bigint;
+    directGross?: bigint;
+    magicCredit?: bigint;
   },
 ) {
   await client.query(
@@ -51,6 +55,70 @@ export async function reconcileExistingRegistrationProjection(
      WHERE id=$1 AND (status<>'ACTIVE' OR activated_at IS NULL)`,
     [input.userId, input.confirmedAt],
   );
+  let financialCreated = false;
+  if (
+    input.registrationValue !== undefined
+    && input.directIncome !== undefined
+    && input.directGross !== undefined
+    && input.magicCredit !== undefined
+  ) {
+    await client.query(
+      `INSERT INTO user_package_states(
+         user_id,registration_value,total_eligible_value,total_earning_cap,total_earned,remaining_cap
+       ) VALUES($1,$2,$2,$3,0,$3) ON CONFLICT(user_id) DO NOTHING`,
+      [
+        input.userId, input.registrationValue.toString(),
+        (input.registrationValue * 5n).toString(),
+      ],
+    );
+    await client.query(
+      `INSERT INTO earning_cap_ledger(
+         user_id,source_type,source_reference,eligible_value,cap_increase,total_cap_after
+       ) VALUES($1,'REGISTRATION',$2,$3,$4,$4)
+       ON CONFLICT(source_type,source_reference) DO NOTHING`,
+      [
+        input.userId, input.registrationId, input.registrationValue.toString(),
+        (input.registrationValue * 5n).toString(),
+      ],
+    );
+    const magic = await client.query(
+      `INSERT INTO magic_wallet_ledger(
+         user_id,registration_id,direction,amount_token_units,reason,idempotency_key,metadata
+       ) VALUES($1,$2,'CREDIT',$3,'REGISTRATION_CREDIT',$4,$5)
+       ON CONFLICT(idempotency_key) DO NOTHING RETURNING id`,
+      [
+        input.userId, input.registrationId, input.magicCredit.toString(),
+        `registration:${input.txHash}:magic`, JSON.stringify({ txHash: input.txHash }),
+      ],
+    );
+    const cappedDirect = await creditGrossEarning({
+      userId: input.sponsorUserId,
+      incomeType: "DIRECT_INCOME",
+      sourceReference: input.registrationId,
+      grossAmount: input.directGross,
+      idempotencyKey: `registration:${input.txHash}:direct-cap`,
+      magicAlreadyOnchain: true,
+    }, client);
+    if (cappedDirect.credited !== input.directIncome) {
+      throw new ApiError(409, "On-chain and indexed earning cap disagree", "CAP_RECONCILIATION_FAILED");
+    }
+    let directCreated = false;
+    if (input.directIncome > 0n) {
+      const direct = await client.query(
+        `INSERT INTO direct_income_ledger(
+           sponsor_user_id,source_user_id,registration_id,amount_token_units,tx_hash,idempotency_key
+         ) VALUES($1,$2,$3,$4,$5,$6)
+         ON CONFLICT(idempotency_key) DO NOTHING RETURNING id`,
+        [
+          input.sponsorUserId, input.userId, input.registrationId,
+          input.directIncome.toString(), input.txHash,
+          `registration:${input.txHash}:direct`,
+        ],
+      );
+      directCreated = Boolean(direct.rows[0]);
+    }
+    financialCreated = Boolean(magic.rows[0]) || !cappedDirect.duplicate || directCreated;
+  }
   await client.query(
     `UPDATE registrations SET status='CONFIRMED',block_number=COALESCE(block_number,$2),
        confirmed_at=COALESCE(confirmed_at,$3),failure_reason=NULL
@@ -168,6 +236,7 @@ export async function reconcileExistingRegistrationProjection(
     relationCreated: Boolean(relationInsert.rows[0]),
     historyCreated: !history.duplicate,
     placementCreated,
+    financialCreated,
   };
 }
 
@@ -251,13 +320,17 @@ export async function verifyAndActivateRegistration(
         matrixParent,
         matrixIndex,
         matrixPosition,
+        registrationValue: magicCredit * 2n,
+        directIncome,
+        directGross: magicCredit,
+        magicCredit,
       });
       return {
         registrationId: row.id,
         status: row.status,
         duplicate: true,
         repaired: projection.relationCreated || projection.historyCreated
-          || projection.placementCreated,
+          || projection.placementCreated || projection.financialCreated,
       };
     }
     const existingUser = await client.query<{ id: string }>(

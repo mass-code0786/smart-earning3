@@ -6,6 +6,11 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/dashboard",
   useRouter: () => ({ replace: vi.fn(), push }),
 }));
+vi.mock("@/lib/client/wallet", () => ({
+  getInjectedProvider: () => ({
+    request: async () => ["0x000000000000000000000000000000000000dead"],
+  }),
+}));
 
 import RealDashboard from "@/components/real-dashboard";
 

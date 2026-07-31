@@ -20,11 +20,13 @@ import { RegistrationForm } from "@/components/registration-form";
 
 afterEach(() => {
   cleanup();
+  sessionStorage.clear();
   vi.clearAllMocks();
 });
 
 describe("registration redirect status", () => {
   it("redirects a registered wallet login to dashboard", async () => {
+    sessionStorage.setItem("landing-inline-mode", "signup");
     walletLogin.mockResolvedValue({
       wallet: "0x000000000000000000000000000000000000dead",
       registered: true,
@@ -35,6 +37,7 @@ describe("registration redirect status", () => {
     });
     fireEvent.submit(screen.getByRole("button", { name: "Signup" }).closest("form")!);
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/dashboard"));
+    expect(sessionStorage.getItem("landing-inline-mode")).toBeNull();
     expect(registerOnTestnet).not.toHaveBeenCalled();
   });
 
@@ -53,6 +56,7 @@ describe("registration redirect status", () => {
   });
 
   it("redirects to dashboard when preparation reports 409 already registered", async () => {
+    sessionStorage.setItem("landing-inline-mode", "signup");
     walletLogin.mockResolvedValue({
       wallet: "0x000000000000000000000000000000000000dead",
       registered: false,
@@ -65,5 +69,6 @@ describe("registration redirect status", () => {
     fireEvent.submit(screen.getByRole("button", { name: "Signup" }).closest("form")!);
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/dashboard"));
     expect(screen.getByRole("status")).toHaveTextContent("Wallet is already registered");
+    expect(sessionStorage.getItem("landing-inline-mode")).toBeNull();
   });
 });

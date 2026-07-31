@@ -37,6 +37,7 @@ export function RegistrationForm({
       const session = await walletLogin();
       setConnectedWallet(session.wallet);
       if (session.registered) {
+        sessionStorage.removeItem("landing-inline-mode");
         router.replace("/dashboard");
         return;
       }
@@ -45,6 +46,7 @@ export function RegistrationForm({
       }
       const result = await registerOnTestnet(sponsor, setStatus);
       if (result.alreadyRegistered) {
+        sessionStorage.removeItem("landing-inline-mode");
         setStatus("Wallet is already registered. Redirecting to dashboard.");
         router.replace("/dashboard");
         router.refresh();
@@ -56,6 +58,7 @@ export function RegistrationForm({
         return;
       }
       setStatus("Registration verified and activated. Redirecting to dashboard…");
+      sessionStorage.removeItem("landing-inline-mode");
       router.replace("/dashboard");
       router.refresh();
     } catch (reason) {

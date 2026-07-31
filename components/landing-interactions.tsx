@@ -68,6 +68,7 @@ export function LandingInteractionProvider({
         session = await authenticate();
       }
       if (session.registered) {
+        sessionStorage.removeItem("landing-inline-mode");
         router.push("/dashboard");
       } else {
         setStatus("");

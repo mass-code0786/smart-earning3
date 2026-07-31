@@ -15,6 +15,7 @@ import {
 import { SmartEarningPageShell } from "@/components/smart-earning-shell";
 import { formatTokenUnits } from "@/lib/client/money";
 import { BoosterCountdown, type BoosterEligibility } from "@/components/booster-countdown";
+import { getInjectedProvider } from "@/lib/client/wallet";
 
 type DashboardData = {
   wallet_address: string;
@@ -70,7 +71,15 @@ const profit = (values: string[]) => formatTokenUnits(
 );
 
 async function json(path: string) {
-  const response = await fetch(path, { cache: "no-store", credentials: "same-origin" });
+  const accounts = await getInjectedProvider().request({ method: "eth_accounts" });
+  const connectedWallet = Array.isArray(accounts) && typeof accounts[0] === "string"
+    ? accounts[0].toLowerCase() : "";
+  if (!connectedWallet) throw new Error("UNAUTHENTICATED");
+  const response = await fetch(path, {
+    cache: "no-store",
+    credentials: "same-origin",
+    headers: { "x-connected-wallet": connectedWallet },
+  });
   if (response.status === 401) throw new Error("UNAUTHENTICATED");
   const body = await response.json();
   if (!response.ok) throw new Error("LOAD_FAILED");
