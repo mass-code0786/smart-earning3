@@ -22,18 +22,72 @@ async function main(){
   const routes=["dashboard","packages","matrix/x3","matrix/x4","magic-level","booster","autopool","dividend","income","wallet","team","admin"];
   const viewports=[{name:"mobile",width:390,height:844},{name:"desktop",width:1440,height:900}];
   const output=path.resolve("evidence/local-e2e/screenshots");fs.mkdirSync(output,{recursive:true});
+  const networkOutput=path.resolve("evidence/local-e2e/network");fs.mkdirSync(networkOutput,{recursive:true});
   const errors:Array<Record<string,unknown>>=[];
   const checks:Array<Record<string,unknown>>=[];
   for(const viewport of viewports){
-    const context=await browser.newContext({viewport:{width:viewport.width,height:viewport.height}});
+    const context=await browser.newContext({
+      viewport:{width:viewport.width,height:viewport.height},
+      recordHar:{path:path.join(networkOutput,`${viewport.name}.har`),mode:"full"},
+    });
     await context.addCookies([{name:"se_session",value:token,url:"http://127.0.0.1:3020",httpOnly:true,sameSite:"Strict"}]);
     for(const route of routes){
       if(route==="admin"&&admin)await context.addCookies([{name:"se_session",value:await sign(admin),
         url:"http://127.0.0.1:3020",httpOnly:true,sameSite:"Strict"}]);
       const page=await context.newPage();
-      page.on("console",msg=>{if(msg.type()==="error")errors.push({route,viewport:viewport.name,type:"console",text:msg.text()})});
+      const connectedWallet=route==="admin"&&admin?admin:wallet;
+      await page.addInitScript({content:`{
+        const address=${JSON.stringify(connectedWallet)};
+        const listeners=new Map();
+        const provider={
+          request:async({method})=>{
+            if(method==="eth_accounts"||method==="eth_requestAccounts")return[address];
+            if(method==="eth_chainId")return"0x7a69";
+            throw new Error("Unsupported local E2E wallet method: "+method);
+          },
+          on:(event,listener)=>{
+            const registered=listeners.get(event)||new Set();registered.add(listener);listeners.set(event,registered);
+          },
+          removeListener:(event,listener)=>listeners.get(event)?.delete(listener),
+        };
+        Object.defineProperty(window,"ethereum",{value:provider,configurable:true});
+      }`});
+      await page.setExtraHTTPHeaders({"x-connected-wallet":connectedWallet});
+      const pending=new Map<string,{url:string;method:string;resourceType:string;startedAt:string}>();
+      const requests:Array<Record<string,unknown>>=[];
+      const consoleMessages:Array<Record<string,unknown>>=[];
+      page.on("request",request=>{
+        const entry={url:request.url(),method:request.method(),resourceType:request.resourceType(),
+          connectedWallet:request.headers()["x-connected-wallet"]||null,startedAt:new Date().toISOString()};
+        pending.set(request.url(),entry);requests.push({event:"started",...entry});
+      });
+      page.on("response",response=>requests.push({
+        event:"response",url:response.url(),status:response.status(),at:new Date().toISOString(),
+      }));
+      page.on("requestfinished",request=>{
+        pending.delete(request.url());requests.push({event:"finished",url:request.url(),at:new Date().toISOString()});
+      });
+      page.on("console",msg=>{
+        const entry={route,viewport:viewport.name,type:msg.type(),text:msg.text()};
+        consoleMessages.push(entry);
+        if(msg.type()==="error")errors.push({...entry,type:"console"});
+      });
+      page.on("pageerror",error=>errors.push({route,viewport:viewport.name,type:"pageerror",text:error.stack||error.message}));
       page.on("requestfailed",request=>errors.push({route,viewport:viewport.name,type:"request",url:request.url(),error:request.failure()?.errorText}));
-      const response=await page.goto(`http://127.0.0.1:3020/${route}`,{waitUntil:"networkidle"});
+      let response;
+      try {
+        response=await page.goto(`http://127.0.0.1:3020/${route}`,{waitUntil:"networkidle"});
+      } catch(error) {
+        fs.writeFileSync(path.join(networkOutput,`${route.replaceAll("/","-")}-${viewport.name}.json`),JSON.stringify({
+          route,viewport:viewport.name,pending:[...pending.values()],requests,console:consoleMessages,
+          error:error instanceof Error?{name:error.name,message:error.message,stack:error.stack}:String(error),
+        },null,2));
+        await page.close();
+        await context.close();
+        await browser.close();
+        await pool.end();
+        throw error;
+      }
       await page.screenshot({path:path.join(output,`${route.replaceAll("/","-")}-${viewport.name}.png`),fullPage:true});
       const overflow=await page.evaluate(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth);
       checks.push({route,viewport:viewport.name,width:viewport.width,height:viewport.height,status:response?.status(),overflow});

@@ -30,6 +30,27 @@ function snapshot(wallet: string, amount = "0") {
 }
 
 describe("Wallet summary page", () => {
+  it("keeps the due-booster refresh mounted instead of creating a fetch loop", async () => {
+    const dueSnapshot = snapshot(walletA);
+    const dueBooster = dueSnapshot.booster as {
+      server_time: string; next_entry_at: string | null;
+      eligibility: string; booster_wallet_balance: string;
+    };
+    dueBooster.next_entry_at = "2026-07-28T10:00:00Z";
+    dueBooster.eligibility = "DUE";
+    const fetcher = vi.fn(async () => new Response(JSON.stringify(dueSnapshot), {
+      status: 200, headers: { "content-type": "application/json" },
+    }));
+    vi.stubGlobal("fetch", fetcher);
+
+    const view = render(<RealWallet />);
+
+    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2));
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    view.unmount();
+  });
+
   it("renders a single session-owned wallet snapshot with zero-safe values", async () => {
     const fetcher = vi.fn(async () => new Response(JSON.stringify(snapshot(walletB)), {
       status: 200, headers: { "content-type": "application/json" },

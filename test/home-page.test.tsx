@@ -15,6 +15,25 @@ afterEach(() => {
 });
 
 describe("locked mobile Home composition", () => {
+  it("does not restart due-booster refresh after every dashboard render", async () => {
+    const fetchMock = vi.fn(async (input: string) => ({
+      ok: true,
+      status: 200,
+      json: async () => input === "/api/dashboard"
+        ? { user: { wallet_address: "0x000000000000000000000000000000000000dead", direct_count: 0 } }
+        : input === "/api/booster"
+          ? { server_time: "2026-07-28T10:00:00.000Z", next_entry_at: null, eligibility: "DUE" }
+          : { packages: [] },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<RealDashboard />);
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(8));
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(fetchMock).toHaveBeenCalledTimes(8);
+  });
+
   it("renders only the approved live Home sections in their required order", async () => {
     const prices = [8, 16, 32, 64, 128, 256, 512, 1024];
     const fetchMock = vi.fn(async (input: string) => {

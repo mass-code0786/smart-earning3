@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -81,13 +81,15 @@ export default function RealDashboard() {
   const [data, setData] = useState<HomeData | null>(null);
   const [error, setError] = useState("");
   const router = useRouter();
+  const routerRef = useRef(router);
+  routerRef.current = router;
 
-  async function load() {
+  const load = useCallback(async () => {
     setError("");
     try {
       const dashboard = await json("/api/dashboard");
       if (!dashboard.user) {
-        router.replace("/register");
+        routerRef.current.replace("/register");
         return;
       }
       const [x3, x4, booster] = await Promise.allSettled([
@@ -114,16 +116,16 @@ export default function RealDashboard() {
       });
     } catch (cause) {
       if (cause instanceof Error && cause.message === "UNAUTHENTICATED") {
-        router.replace("/");
+        routerRef.current.replace("/");
         return;
       }
       setError("Home data could not be loaded");
     }
-  }
+  }, []);
 
   useEffect(() => {
     void load();
-  }, []);
+  }, [load]);
 
   return (
     <SmartEarningPageShell home>

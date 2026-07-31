@@ -6,6 +6,9 @@ import { NextRequest } from "next/server";
 import { loadEnvConfig } from "@next/env";
 
 loadEnvConfig(process.cwd());
+// This integration test constructs localhost requests. Keep its auth origin
+// consistent even when the developer's .env points at the deployed HTTPS app.
+process.env.APP_ORIGIN = "http://localhost:3000";
 
 const cookieState = vi.hoisted(() => ({
   token: undefined as string | undefined,
