@@ -89,12 +89,14 @@ export async function reconcileExistingRegistrationProjection(
     }
     const inserted = await client.query<{ id: string }>(
       `INSERT INTO matrix_placements(
-         user_id,parent_user_id,position,bfs_index,registration_id
-       ) VALUES($1,$2,$3,$4,$5)
+         user_id,parent_user_id,position,bfs_index,registration_id,sponsor_user_id,
+         transaction_hash,block_number,log_index
+       ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
        ON CONFLICT(user_id) DO NOTHING RETURNING id`,
       [
         input.userId, parent.rows[0].id, input.matrixPosition,
-        input.matrixIndex.toString(), input.registrationId,
+        input.matrixIndex.toString(), input.registrationId, input.sponsorUserId,
+        input.txHash, input.blockNumber, input.logIndex,
       ],
     );
     const placement = await client.query<{
@@ -337,9 +339,13 @@ export async function verifyAndActivateRegistration(
     );
     await client.query(
       `INSERT INTO matrix_placements(
-        user_id,parent_user_id,position,bfs_index,registration_id
-       ) VALUES($1,$2,$3,$4,$5)`,
-      [userId,parentResult.rows[0].id,matrixPosition,matrixIndex.toString(),registrationId],
+        user_id,parent_user_id,position,bfs_index,registration_id,sponsor_user_id,
+        transaction_hash,block_number,log_index
+       ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [
+        userId,parentResult.rows[0].id,matrixPosition,matrixIndex.toString(),registrationId,
+        sponsorResult.rows[0].id,txHash,receipt.blockNumber,log.index,
+      ],
     );
     await client.query(
       `UPDATE users sponsor SET direct_count=(

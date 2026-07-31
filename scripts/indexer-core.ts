@@ -1,6 +1,7 @@
 export type IndexerTransaction = {
   hash: string;
   to: string | null;
+  transactionIndex?: number;
 };
 
 export type IndexerBlock = {
@@ -13,6 +14,7 @@ export type IndexerLog = {
   blockNumber: number;
   transactionHash: string;
   index: number;
+  transactionIndex?: number;
   topics: readonly string[];
   data: string;
 };
@@ -110,12 +112,16 @@ export async function processConfirmedBlocks(input: {
     }
     const matching = block.transactions.filter(
       (transaction) => transaction.to?.toLowerCase() === address,
-    );
+    ).sort((left, right) =>
+      (left.transactionIndex ?? 0) - (right.transactionIndex ?? 0)
+      || left.hash.localeCompare(right.hash));
     let blockEvents = 0;
     for (const transaction of matching) {
       const receipt = await input.provider.getTransactionReceipt(transaction.hash);
       if (receipt.status !== 1) continue;
-      for (const log of receipt.logs) {
+      for (const log of [...receipt.logs].sort((left, right) =>
+        (left.transactionIndex ?? 0) - (right.transactionIndex ?? 0)
+        || left.index - right.index)) {
         if (log.address.toLowerCase() !== address) continue;
         const name = input.eventName(log);
         if (!name) continue;

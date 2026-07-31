@@ -1,6 +1,7 @@
 export const SMART_EARNING_ABI = [
   "function register(address sponsor)",
   "function registered(address) view returns (bool)",
+  "function registrationPrice() view returns (uint256)",
   "function MAX_LEVELS() view returns(uint8)",
   "function usdt() view returns(address)",
   "function treasuryWallet() view returns(address)",

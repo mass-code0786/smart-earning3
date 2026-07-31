@@ -1,9 +1,14 @@
 import { z } from "zod";
 
+const optionalNonEmpty = z.preprocess(
+  (value) => typeof value === "string" && value.trim() === "" ? undefined : value,
+  z.string().min(1).optional(),
+);
+
 const authSchema = z.object({
   DATABASE_URL: z.string().url(),
   DATABASE_SSL_MODE: z.enum(["disable", "require", "verify-full"]).optional(),
-  DATABASE_SSL_CA: z.string().min(1).optional(),
+  DATABASE_SSL_CA: optionalNonEmpty,
   SESSION_SECRET: z.string().min(32),
   APP_ORIGIN: z.string().url().default("http://localhost:3000"),
 });
@@ -11,14 +16,20 @@ const authSchema = z.object({
 const serverSchema = z.object({
   DATABASE_URL: z.string().url(),
   DATABASE_SSL_MODE: z.enum(["disable", "require", "verify-full"]).optional(),
-  DATABASE_SSL_CA: z.string().min(1).optional(),
+  DATABASE_SSL_CA: optionalNonEmpty,
   SESSION_SECRET: z.string().min(32),
   BSC_TESTNET_RPC_URL: z.string().url(),
   SMART_EARNING_CHAIN_ID: z.coerce.number().int().positive().default(97),
   SMART_EARNING_CONTRACT_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
   BSC_TESTNET_USDT_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
-  KEEPER_PRIVATE_KEY: z.string().regex(/^0x[a-fA-F0-9]{64}$/).optional(),
-  KEEPER_SECRET: z.string().min(32).optional(),
+  KEEPER_PRIVATE_KEY: z.preprocess(
+    (value) => typeof value === "string" && value.trim() === "" ? undefined : value,
+    z.string().regex(/^0x[a-fA-F0-9]{64}$/).optional(),
+  ),
+  KEEPER_SECRET: z.preprocess(
+    (value) => typeof value === "string" && value.trim() === "" ? undefined : value,
+    z.string().min(32).optional(),
+  ),
   CONFIRMATIONS_REQUIRED: z.coerce.number().int().min(1).max(50).default(3),
   APP_ORIGIN: z.string().url().default("http://localhost:3000"),
 });

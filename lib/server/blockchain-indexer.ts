@@ -6,9 +6,13 @@ import {
   ReadOnlyIndexerRpc,
 } from "@/lib/blockchain/indexer-rpc";
 import { CHAIN_ID, getServerConfig } from "./config";
-import { query } from "./db";
+import { getPool, query } from "./db";
+import { smartEarningDeployment } from "@/lib/blockchain/deployment-metadata";
+import { getSmartEarningContract as getOnchainRegistrationState } from "@/lib/blockchain/provider";
+import { transaction } from "./db";
 import { verifyAndActivateRegistration } from "./registration-service";
 import { verifyPackagePurchase } from "./package-service";
+import { ApiError } from "./http";
 import {
   configuredStartBlock,
   initializeForwardIndexer,
@@ -37,6 +41,10 @@ type IndexerHealth = {
   currentRpcEndpointRedacted: string | null;
   rpcFailoverCount: number;
   currentRetryDelayMs: number;
+  ready: boolean;
+  readinessReasons: string[];
+  unresolvedRegistrationConflicts: number;
+  lockOwned: boolean;
 };
 
 const health: IndexerHealth = {
@@ -52,6 +60,10 @@ const health: IndexerHealth = {
   currentRpcEndpointRedacted: null,
   rpcFailoverCount: 0,
   currentRetryDelayMs: 0,
+  ready: false,
+  readinessReasons: ["not started"],
+  unresolvedRegistrationConflicts: 0,
+  lockOwned: false,
 };
 let worker: Promise<void> | undefined;
 let stopped = false;
@@ -68,18 +80,19 @@ function positiveInteger(name: string, fallback: number) {
 }
 
 export function blockchainIndexerConfig() {
-  const mode = (process.env.BLOCKCHAIN_INDEXER_START_MODE || "latest").trim().toLowerCase();
-  if (mode !== "latest") throw new Error("BLOCKCHAIN_INDEXER_START_MODE must be latest");
+  // SMART_EARNING_DEPLOYMENT_BLOCK is authoritative in tracked metadata.
+  const deployment = smartEarningDeployment();
+  const deploymentBlock = deployment.blockNumber;
   const configuredStart = configuredStartBlock();
-  const deploymentBlock = Number(process.env.SMART_EARNING_DEPLOYMENT_BLOCK);
-  if (!Number.isSafeInteger(deploymentBlock) || deploymentBlock < 1) {
-    throw new Error("SMART_EARNING_DEPLOYMENT_BLOCK must be a positive integer");
+  if (configuredStart !== undefined && configuredStart > deployment.blockNumber - 1) {
+    throw new Error("BLOCKCHAIN_INDEXER_START_BLOCK cannot skip the deployment history");
   }
   return {
     confirmations: positiveInteger("BLOCKCHAIN_CONFIRMATIONS", 3),
     pollMs: positiveInteger("BLOCKCHAIN_INDEXER_POLL_MS", 5_000),
     // A checkpoint represents the last processed block. Starting one block
     // before deployment ensures the deployment block itself is inspected.
+    deployment,
     startBlock: configuredStart ?? deploymentBlock - 1,
   };
 }
@@ -135,6 +148,41 @@ const processedEvents: ProcessedEventStore = {
   },
 };
 
+async function ensureGenesisProjection(genesis: string) {
+  const registrationPrice = BigInt(await getOnchainRegistrationState().registrationPrice());
+  await transaction(async (client) => {
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["registration-genesis-projection"]);
+    const user = await client.query<{ id: string }>(
+      `INSERT INTO users(wallet_address,status,role,activated_at)
+       VALUES($1,'ACTIVE','ADMIN',now())
+       ON CONFLICT(wallet_address) DO UPDATE SET status='ACTIVE'
+       RETURNING id`,
+      [genesis],
+    );
+    await client.query(
+      `INSERT INTO matrix_placements(user_id,parent_user_id,position,bfs_index)
+       VALUES($1,NULL,NULL,0) ON CONFLICT(user_id) DO NOTHING`,
+      [user.rows[0].id],
+    );
+    await client.query(
+      `INSERT INTO user_package_states(
+         user_id,registration_value,total_eligible_value,total_earning_cap,total_earned,remaining_cap
+       ) VALUES($1,$2,$2,$3,0,$3) ON CONFLICT(user_id) DO NOTHING`,
+      [user.rows[0].id, registrationPrice.toString(), (registrationPrice * 5n).toString()],
+    );
+    await client.query(
+      `INSERT INTO earning_cap_ledger(
+         user_id,source_type,source_reference,eligible_value,cap_increase,total_cap_after
+       ) VALUES($1,'REGISTRATION',$2,$3,$4,$4)
+       ON CONFLICT(source_type,source_reference) DO NOTHING`,
+      [
+        user.rows[0].id, `genesis:${genesis}`, registrationPrice.toString(),
+        (registrationPrice * 5n).toString(),
+      ],
+    );
+  });
+}
+
 export function decodedIndexerEventName(log: IndexerLog) {
   try {
     const name = iface.parseLog(log)?.name;
@@ -148,7 +196,50 @@ async function handleLog(log: IndexerLog, eventName: string, _receipt: IndexerRe
   const event = iface.parseLog(log);
   if (!event) return;
   if (eventName === "UserRegistered") {
-    await verifyAndActivateRegistration(String(event.args.user), log.transactionHash);
+    try {
+      await verifyAndActivateRegistration(String(event.args.user), log.transactionHash);
+    } catch (error) {
+      const hardConflictCodes = new Set([
+        "REGISTRATION_CONFLICT", "REFERRAL_CONFLICT", "MATRIX_PROJECTION_CONFLICT",
+        "OWNERSHIP_CONFLICT", "CAP_RECONCILIATION_FAILED",
+      ]);
+      if (!(error instanceof ApiError) || !hardConflictCodes.has(error.code)) throw error;
+      const wallet = String(event.args.user).toLowerCase();
+      const actual = await query(
+        `SELECT u.wallet_address,p.wallet_address parent_wallet,s.wallet_address sponsor_wallet,
+                mp.position,mp.bfs_index::text matrix_index,r.tx_hash
+         FROM users u
+         LEFT JOIN matrix_placements mp ON mp.user_id=u.id
+         LEFT JOIN users p ON p.id=mp.parent_user_id
+         LEFT JOIN registrations r ON r.user_id=u.id
+         LEFT JOIN users s ON s.id=r.sponsor_user_id
+         WHERE u.wallet_address=$1`,
+        [wallet],
+      );
+      await query(
+        `INSERT INTO registration_projection_conflicts(
+           chain_id,contract_address,transaction_hash,log_index,block_number,
+           conflict_type,expected,actual
+         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8)
+         ON CONFLICT(chain_id,transaction_hash,log_index,conflict_type)
+         DO UPDATE SET expected=EXCLUDED.expected,actual=EXCLUDED.actual`,
+        [
+          CHAIN_ID, log.address.toLowerCase(), log.transactionHash.toLowerCase(), log.index,
+          log.blockNumber, error.code,
+          JSON.stringify({
+            wallet,
+            sponsor: String(event.args.sponsor).toLowerCase(),
+            matrixParent: String(event.args.matrixParent).toLowerCase(),
+            matrixIndex: String(event.args.matrixIndex),
+            matrixPosition: Number(event.args.matrixPosition),
+          }),
+          JSON.stringify({ message: error.message, rows: actual.rows }),
+        ],
+      );
+      console.error("[blockchain-indexer] registration projection conflict", {
+        code: error.code, transactionHash: log.transactionHash, logIndex: log.index,
+      });
+    }
   } else if (eventName === "PackagePurchased") {
     await verifyPackagePurchase(String(event.args.user), log.transactionHash);
   }
@@ -166,6 +257,21 @@ const sleepUntilPoll = (milliseconds: number) => new Promise<void>((resolve) => 
 async function run() {
   const server = getServerConfig();
   const config = blockchainIndexerConfig();
+  if (CHAIN_ID !== config.deployment.chainId) throw new Error("Configured chain ID conflicts with deployment metadata");
+  if (server.SMART_EARNING_CONTRACT_ADDRESS.toLowerCase() !== config.deployment.address) {
+    throw new Error("Configured contract address conflicts with deployment metadata");
+  }
+  const lockClient = await getPool().connect();
+  const lock = await lockClient.query<{ owned: boolean }>(
+    "SELECT pg_try_advisory_lock(hashtext($1),$2) owned",
+    ["smart-earning-registration-indexer", CHAIN_ID],
+  );
+  if (!lock.rows[0]?.owned) {
+    lockClient.release();
+    throw new Error("Registration indexer ownership lock is already held by another process");
+  }
+  health.lockOwned = true;
+  try {
   let activeBlock: number | null = null;
   const errorLogger = new RateLimitedRpcErrorLogger();
   const provider = new ReadOnlyIndexerRpc(indexerRpcUrls(), {
@@ -181,6 +287,7 @@ async function run() {
     },
   });
   const contractAddress = server.SMART_EARNING_CONTRACT_ADDRESS.toLowerCase();
+  await ensureGenesisProjection(config.deployment.genesis);
   health.contractAddress = contractAddress;
   health.currentRpcEndpointRedacted = provider.currentEndpointRedacted;
   health.running = true;
@@ -191,10 +298,15 @@ async function run() {
   health.lastProcessedBlock = initialized.checkpoint;
   health.safeLatestBlock = initialized.safeLatest;
   health.blocksBehind = Math.max(0, initialized.safeLatest - initialized.checkpoint);
-  console.info(
-    `[blockchain-indexer] start block=${initialized.checkpoint} safe_latest=${initialized.safeLatest}` +
-    ` initialized=${initialized.initialized}`,
-  );
+  console.info("[blockchain-indexer] ready", {
+    chainId: CHAIN_ID,
+    contractAddress,
+    deploymentBlock: config.deployment.blockNumber,
+    checkpoint: initialized.checkpoint,
+    safeLatest: initialized.safeLatest,
+    initialized: initialized.initialized,
+    lockOwned: true,
+  });
 
   while (!stopped) {
     try {
@@ -227,7 +339,15 @@ async function run() {
     const delay = health.lastError ? 30_000 : config.pollMs;
     if (!stopped) await sleepUntilPoll(delay);
   }
-  health.running = false;
+  } finally {
+    health.running = false;
+    await lockClient.query(
+      "SELECT pg_advisory_unlock(hashtext($1),$2)",
+      ["smart-earning-registration-indexer", CHAIN_ID],
+    ).catch(() => undefined);
+    health.lockOwned = false;
+    lockClient.release();
+  }
 }
 
 export function startBlockchainIndexer() {
@@ -265,16 +385,37 @@ export async function blockchainIndexerHealth(): Promise<IndexerHealth> {
   const snapshot = { ...health };
   if (!snapshot.contractAddress) return snapshot;
   try {
-    const [state, latest] = await Promise.all([
+    const rpc = new ReadOnlyIndexerRpc(indexerRpcUrls());
+    const [state, latest, rpcChainId, contractCode, conflicts] = await Promise.all([
       checkpoints.getLastBlock(snapshot.chainId, snapshot.contractAddress),
-      new ReadOnlyIndexerRpc(indexerRpcUrls()).getBlockNumber(),
+      rpc.getBlockNumber(),
+      rpc.getChainId(),
+      rpc.request<string>("eth_getCode", [snapshot.contractAddress, "latest"]),
+      query<{ count: string }>(
+        "SELECT count(*)::text count FROM registration_projection_conflicts WHERE resolved_at IS NULL",
+      ),
     ]);
     const safe = safeLatestBlock(latest, blockchainIndexerConfig().confirmations);
+    const blocksBehind = state === undefined ? null : Math.max(0, safe - state);
+    const threshold = positiveInteger("BLOCKCHAIN_INDEXER_MAX_BLOCKS_BEHIND", 20);
+    const unresolvedRegistrationConflicts = Number(conflicts.rows[0]?.count || 0);
+    const readinessReasons = [
+      ...(!snapshot.running ? ["indexer process is not running"] : []),
+      ...(!snapshot.lockOwned ? ["indexer ownership lock is not held"] : []),
+      ...(rpcChainId !== snapshot.chainId ? ["RPC chain ID does not match configuration"] : []),
+      ...(!contractCode || contractCode === "0x" ? ["configured contract has no deployed code"] : []),
+      ...(blocksBehind === null || blocksBehind > threshold
+        ? [`checkpoint exceeds ${threshold}-block readiness threshold`] : []),
+      ...(unresolvedRegistrationConflicts ? ["unresolved registration projection conflict"] : []),
+    ];
     return {
       ...snapshot,
       lastProcessedBlock: state ?? null,
       safeLatestBlock: safe,
-      blocksBehind: state === undefined ? null : Math.max(0, safe - state),
+      blocksBehind,
+      unresolvedRegistrationConflicts,
+      readinessReasons,
+      ready: readinessReasons.length === 0,
     };
   } catch (error) {
     return {

@@ -161,10 +161,18 @@ export class ReadOnlyIndexerRpc implements IndexerProvider {
   async getBlockWithTransactions(blockNumber: number): Promise<IndexerBlock> {
     const block = await this.request<{
       number: string;
-      transactions: Array<{ hash: string; to: string | null }>;
+      transactions: Array<{ hash: string; to: string | null; transactionIndex?: string }>;
     }>("eth_getBlockByNumber", [`0x${blockNumber.toString(16)}`, true]);
     if (!block) throw new Error(`Block ${blockNumber} was not returned by RPC`);
-    return { number: hexNumber(block.number), transactions: block.transactions };
+    return {
+      number: hexNumber(block.number),
+      transactions: block.transactions.map((transaction) => ({
+        hash: transaction.hash,
+        to: transaction.to,
+        transactionIndex: transaction.transactionIndex
+          ? hexNumber(transaction.transactionIndex) : undefined,
+      })),
+    };
   }
 
   async getTransactionReceipt(transactionHash: string): Promise<IndexerReceipt> {
@@ -174,7 +182,7 @@ export class ReadOnlyIndexerRpc implements IndexerProvider {
       blockNumber: string;
       logs: Array<{
         address: string; transactionHash: string; blockNumber: string;
-        logIndex: string; topics: string[]; data: string;
+        logIndex: string; transactionIndex?: string; topics: string[]; data: string;
       }>;
     }>("eth_getTransactionReceipt", [transactionHash]);
     if (!receipt) throw new Error(`Receipt ${transactionHash} was not returned by RPC`);
@@ -187,6 +195,7 @@ export class ReadOnlyIndexerRpc implements IndexerProvider {
         transactionHash: log.transactionHash,
         blockNumber: hexNumber(log.blockNumber),
         index: hexNumber(log.logIndex),
+        transactionIndex: log.transactionIndex ? hexNumber(log.transactionIndex) : undefined,
         topics: log.topics,
         data: log.data,
       })),

@@ -1,5 +1,6 @@
 {
   "scripts": {
+    "pretest": "node scripts/ensure-local-postgres.cjs",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
@@ -25,6 +26,7 @@
     "indexer": "tsx scripts/indexer.ts",
     "reconcile:registration:testnet": "tsx scripts/reconcile-registration-tx.ts",
     "diagnose:registration-indexing": "tsx scripts/diagnose-registration-indexing.ts",
+    "repair:registration-index": "tsx scripts/registration-index-repair.ts",
     "diagnose:user-ownership:testnet": "tsx scripts/diagnose-user-ownership.ts",
     "repair:user-ownership:testnet": "tsx scripts/repair-user-ownership.ts",
     "x3:backfill": "tsx scripts/backfill-x3.ts",

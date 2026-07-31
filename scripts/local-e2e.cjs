@@ -3,6 +3,7 @@ const { Client } = require("pg");
 const { HDNodeWallet } = require("ethers");
 const fs = require("node:fs");
 const path = require("node:path");
+const { displayDatabaseUrl, ensureLocalPostgres } = require("./local-postgres.cjs");
 
 const root = path.resolve(__dirname, "..");
 const children = new Set();
@@ -200,6 +201,10 @@ async function cleanup() {
 
 async function main() {
   const configured = configuredDatabaseUrl();
+  stage(`effective DATABASE_URL=${displayDatabaseUrl(configured)}`);
+  stage("START PostgreSQL dependency bootstrap");
+  const postgres = await ensureLocalPostgres(configured);
+  stage(`READY PostgreSQL dependency (${postgres.action}, ${postgres.health})`);
   await cleanStaleDatabases(configured);
   databaseUrl = await createDatabase(configured);
   const base = {

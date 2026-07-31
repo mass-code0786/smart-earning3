@@ -51,6 +51,10 @@ export function RegistrationForm({
         return;
       }
       setHash(result.txHash);
+      if (result.pendingSync) {
+        setStatus("Registration succeeded on-chain and is pending synchronization. Submit again to retry.");
+        return;
+      }
       setStatus("Registration verified and activated. Redirecting to dashboard…");
       router.replace("/dashboard");
       router.refresh();

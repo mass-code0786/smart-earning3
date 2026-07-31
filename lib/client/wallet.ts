@@ -348,16 +348,59 @@ export async function registerOnTestnet(sponsor: string, onStatus: (status: stri
   sessionStorage.removeItem(preparationStorageKey);
   onStatus(`Submitted ${sent.hash}. Waiting for confirmation…`);
   await sent.wait();
-  const response = await fetch("/api/registrations/verify", {
-    method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ txHash: sent.hash, sponsor }),
-  });
-  const result = await response.json();
-  if (!response.ok) {
-    throw new RegistrationFlowError(
-      String(result.code || "REGISTRATION_TX_NOT_CONFIRMED"),
-      String(result.error || "Registration verification failed"),
-    );
+  return verifyRegistrationWithRetry(sent.hash, sponsor, onStatus);
+}
+
+const permanentRegistrationVerificationCodes = new Set([
+  "TX_REVERTED", "WRONG_CONTRACT", "EVENT_NOT_FOUND", "WALLET_MISMATCH",
+  "WRONG_RPC_NETWORK", "REGISTRATION_CONFLICT", "REFERRAL_CONFLICT",
+  "MATRIX_PROJECTION_CONFLICT", "CAP_RECONCILIATION_FAILED",
+]);
+
+export async function verifyRegistrationWithRetry(
+  txHash: string,
+  sponsor: string,
+  onStatus: (status: string) => void,
+  options: {
+    attempts?: number;
+    initialDelayMs?: number;
+    fetcher?: typeof fetch;
+    sleep?: (milliseconds: number) => Promise<void>;
+  } = {},
+) {
+  const attempts = options.attempts ?? 8;
+  const fetcher = options.fetcher ?? fetch;
+  const sleep = options.sleep ?? ((milliseconds) =>
+    new Promise<void>((resolve) => setTimeout(resolve, milliseconds)));
+  let lastCode = "CONFIRMATIONS_PENDING";
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const response = await fetcher("/api/registrations/verify", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ txHash, sponsor }),
+    });
+    const result = await response.json();
+    if (response.ok) {
+      return { ...result, txHash, alreadyRegistered: false as const, pendingSync: false as const };
+    }
+    lastCode = String(result.code || "REGISTRATION_TX_NOT_CONFIRMED");
+    if (!["CONFIRMATIONS_PENDING", "TX_PENDING"].includes(lastCode)
+        && (permanentRegistrationVerificationCodes.has(lastCode) || response.status < 500)) {
+      throw new RegistrationFlowError(
+        lastCode,
+        String(result.error || "Registration verification failed"),
+      );
+    }
+    if (attempt < attempts - 1) {
+      const delay = Math.min((options.initialDelayMs ?? 1_000) * 2 ** attempt, 10_000);
+      onStatus(`Transaction succeeded on-chain; synchronization pending (${lastCode}). Retrying`);
+      await sleep(delay);
+    }
   }
-  return { ...result, txHash: sent.hash, alreadyRegistered: false as const };
+  onStatus("Registration succeeded on-chain and is pending synchronization. You can retry verification.");
+  return {
+    txHash,
+    alreadyRegistered: false as const,
+    pendingSync: true as const,
+    code: lastCode,
+  };
 }

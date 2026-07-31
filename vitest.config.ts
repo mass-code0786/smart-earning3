@@ -8,6 +8,7 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     setupFiles: ["./test/setup.ts"],
+    exclude: ["**/node_modules/**", "**/releases/**"],
     testTimeout: 15_000,
     hookTimeout: 15_000,
   },
