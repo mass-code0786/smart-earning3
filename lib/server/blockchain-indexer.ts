@@ -108,8 +108,9 @@ const checkpoints: IndexerCheckpointStore = {
   },
   async initialize(chainId, contractAddress, blockNumber) {
     const result = await query<{ last_processed_block: string }>(
-      `INSERT INTO blockchain_indexer_state(chain_id,contract_address,last_processed_block)
-       VALUES($1,$2,$3) ON CONFLICT(chain_id,contract_address) DO UPDATE
+      `INSERT INTO blockchain_indexer_state(
+         chain_id,contract_address,last_processed_block,history_start_block
+       ) VALUES($1,$2,$3,$3) ON CONFLICT(chain_id,contract_address) DO UPDATE
        SET last_processed_block=blockchain_indexer_state.last_processed_block
        RETURNING last_processed_block::text`,
       [chainId, contractAddress, blockNumber],
@@ -124,6 +125,34 @@ const checkpoints: IndexerCheckpointStore = {
     );
   },
 };
+
+export async function reconcileLegacyIndexerCheckpoint(
+  chainId: number,
+  contractAddress: string,
+  historyStartBlock: number,
+) {
+  const result = await query<{ previous_checkpoint: string; last_processed_block: string }>(
+    `WITH legacy AS (
+       SELECT id,last_processed_block FROM blockchain_indexer_state
+       WHERE chain_id=$1 AND contract_address=$2 AND history_start_block IS NULL
+       FOR UPDATE
+     ), updated AS (
+       UPDATE blockchain_indexer_state state
+       SET last_processed_block=LEAST(state.last_processed_block,$3),
+           history_start_block=$3,
+           updated_at=now()
+       FROM legacy WHERE state.id=legacy.id
+       RETURNING legacy.last_processed_block previous_checkpoint,state.last_processed_block
+     )
+     SELECT previous_checkpoint::text,last_processed_block::text FROM updated`,
+    [chainId, contractAddress, historyStartBlock],
+  );
+  if (!result.rows[0]) return null;
+  return {
+    previousCheckpoint: Number(result.rows[0].previous_checkpoint),
+    checkpoint: Number(result.rows[0].last_processed_block),
+  };
+}
 
 const processedEvents: ProcessedEventStore = {
   async has(chainId, transactionHash, logIndex) {
@@ -288,6 +317,15 @@ async function run() {
   });
   const contractAddress = server.SMART_EARNING_CONTRACT_ADDRESS.toLowerCase();
   await ensureGenesisProjection(config.deployment.genesis);
+  const reconciledCheckpoint = await reconcileLegacyIndexerCheckpoint(
+    CHAIN_ID, contractAddress, config.startBlock,
+  );
+  if (reconciledCheckpoint) {
+    console.info("[blockchain-indexer] reconciled legacy checkpoint", {
+      ...reconciledCheckpoint,
+      historyStartBlock: config.startBlock,
+    });
+  }
   health.contractAddress = contractAddress;
   health.currentRpcEndpointRedacted = provider.currentEndpointRedacted;
   health.running = true;

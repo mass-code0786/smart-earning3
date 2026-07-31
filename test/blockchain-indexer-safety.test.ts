@@ -34,4 +34,23 @@ describe("live blockchain indexer safety", () => {
     expect(source).toContain("deploymentBlock - 1");
     expect(source).toContain("configuredInitialCheckpoint");
   });
+
+  it("rewinds legacy safe-head checkpoints exactly once before historical replay", () => {
+    const source = readFileSync(resolve("lib/server/blockchain-indexer.ts"), "utf8");
+    const migration = readFileSync(
+      resolve("database/migrations/027_indexer_history_checkpoint.sql"), "utf8",
+    );
+    expect(migration).toContain("history_start_block");
+    expect(source).toContain("history_start_block IS NULL");
+    expect(source).toContain("LEAST(state.last_processed_block,$3)");
+    expect(source).toContain("reconcileLegacyIndexerCheckpoint");
+    expect(source.indexOf("reconcileLegacyIndexerCheckpoint(\n    CHAIN_ID"))
+      .toBeLessThan(source.indexOf("initializeForwardIndexer({"));
+  });
+
+  it("records checkpoint history origin for every newly initialized indexer", () => {
+    const source = readFileSync(resolve("lib/server/blockchain-indexer.ts"), "utf8");
+    expect(source).toContain("last_processed_block,history_start_block");
+    expect(source).toContain("VALUES($1,$2,$3,$3)");
+  });
 });
