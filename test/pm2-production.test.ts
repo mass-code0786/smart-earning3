@@ -16,6 +16,13 @@ const { loadProductionPm2Environment } = require(
     environment?: Record<string, string | undefined>,
   ) => Record<string, string | undefined>;
 };
+const { validateProductionEnvironment } = require(
+  "../scripts/validate-production-environment.cjs",
+) as {
+  validateProductionEnvironment: (
+    environment: Record<string, string | undefined>,
+  ) => { valid: boolean; errors: string[] };
+};
 
 const production = {
   name: "smart-earning",
@@ -63,13 +70,13 @@ describe("PM2 production database targeting", () => {
     expect(worker).toContain('["pm2","validated-deploy"]');
   });
 
-  it("ecosystem loads .env safely, preserves precedence, and survives saved PM2 state", () => {
+  it("ecosystem loads .env safely and preserves values absent from the file", () => {
     const loaded = loadProductionPm2Environment(resolve(".env.example"), {
       DATABASE_URL: "postgresql://override:secret@production-db/live",
       EXISTING_ONLY: "preserved",
     });
     expect(loaded.DATABASE_URL).toBe(
-      "postgresql://override:secret@production-db/live",
+      "postgresql://postgres:postgres@localhost:5433/smartearning",
     );
     expect(loaded.NEXT_PUBLIC_NETWORK_NAME).toBe("BNB Smart Chain Testnet");
     expect(loaded.EXISTING_ONLY).toBe("preserved");
@@ -83,6 +90,24 @@ describe("PM2 production database targeting", () => {
     expect(ecosystem).toContain('name: "smart-earning"');
   });
 
+  it("does not let stale saved PM2 secrets override the authoritative production file", () => {
+    const loaded = loadProductionPm2Environment(
+      resolve("test/fixtures/valid-production.env"),
+      {
+        SESSION_SECRET: "short",
+        DEPLOYER_PRIVATE_KEY: `0x${"ab".repeat(32)}`,
+        DATABASE_URL: "postgresql://stale:secret@old-db/old",
+      },
+    );
+    expect(loaded.SESSION_SECRET).toHaveLength(64);
+    expect(loaded.DEPLOYER_PRIVATE_KEY).toBeUndefined();
+    expect(loaded.DATABASE_URL).toBe("postgresql://app:secret@db/live");
+    expect(validateProductionEnvironment(loaded)).toMatchObject({
+      valid: true,
+      errors: [],
+    });
+  });
+
   it("fails closed without DATABASE_URL and does not log secrets", () => {
     const emptyEnv = resolve("test/fixtures/empty-production.env");
     expect(() => loadProductionPm2Environment(emptyEnv, {})).toThrow(
@@ -93,6 +118,8 @@ describe("PM2 production database targeting", () => {
       "utf8",
     );
     expect(source).not.toMatch(/console\.(log|info|debug)/);
+    expect(source).toContain('"DEPLOYER_PRIVATE_KEY"');
+    expect(source).toContain("delete resolved[key]");
   });
 
   it("parses quoted spaces and special characters without shell evaluation", () => {
