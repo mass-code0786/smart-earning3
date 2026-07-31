@@ -63,6 +63,7 @@ describe("idempotent confirmed-registration projection repair", () => {
     expect(sql.some(text => text.includes("UPDATE users SET status='ACTIVE'"))).toBe(true);
     expect(sql.some(text => text.includes("UPDATE registrations SET status='CONFIRMED'"))).toBe(true);
     expect(sql.some(text => text.includes("INSERT INTO blockchain_transactions"))).toBe(true);
+    expect(sql.some(text => text.includes("INSERT INTO blockchain_processed_events"))).toBe(true);
     expect(sql.join("\n")).not.toMatch(/direct_income_ledger|magic_wallet_ledger|matrix_placements|INSERT INTO users/);
     expect(recordReferralHistory).toHaveBeenCalledTimes(2);
     expect((recordReferralHistory.mock.calls as unknown[][])[0][1]).toMatchObject({

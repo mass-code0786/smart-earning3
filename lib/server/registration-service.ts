@@ -1,4 +1,4 @@
-import { Interface, TransactionReceipt } from "ethers";
+import { Contract, Interface, TransactionReceipt } from "ethers";
 import { z } from "zod";
 import { SMART_EARNING_ABI } from "@/lib/blockchain/abi";
 import { getProvider } from "@/lib/blockchain/provider";
@@ -29,8 +29,26 @@ async function ensureConfirmedMatrixParent(
   return parent.rows[0].id;
 }
 
-function registrationEvent(receipt: TransactionReceipt) {
+async function ensureConfirmedSponsor(
+  client: PoolClient,
+  wallet: string,
+  confirmedAt: Date,
+  registrationValue: bigint,
+  currentEarningCap: bigint,
+) {
+  const userId = await ensureConfirmedMatrixParent(client, wallet, confirmedAt);
+  await client.query(
+    `INSERT INTO user_package_states(
+       user_id,registration_value,total_eligible_value,total_earning_cap,total_earned,remaining_cap
+     ) VALUES($1,$2,$2,$3,0,$3) ON CONFLICT(user_id) DO NOTHING`,
+    [userId, registrationValue.toString(), currentEarningCap.toString()],
+  );
+  return userId;
+}
+
+function registrationEvent(receipt: TransactionReceipt, contractAddress: string) {
   for (const log of receipt.logs) {
+    if (normalizeWallet(log.address) !== normalizeWallet(contractAddress)) continue;
     try {
       const parsed = iface.parseLog(log);
       if (parsed?.name === "UserRegistered") return { log, parsed };
@@ -114,6 +132,7 @@ export async function reconcileExistingRegistrationProjection(
       grossAmount: input.directGross,
       idempotencyKey: `registration:${input.txHash}:direct-cap`,
       magicAlreadyOnchain: true,
+      confirmedOnchainCredit: input.directIncome,
     }, client);
     if (cappedDirect.credited !== input.directIncome) {
       throw new ApiError(409, "On-chain and indexed earning cap disagree", "CAP_RECONCILIATION_FAILED");
@@ -243,6 +262,16 @@ export async function reconcileExistingRegistrationProjection(
         JSON.stringify({ sponsor: input.sponsor, projectionRepair: true }), input.confirmedAt,
       ],
     );
+    await client.query(
+      `INSERT INTO blockchain_processed_events(
+         chain_id,contract_address,transaction_hash,log_index,block_number,event_name
+       ) VALUES($1,$2,$3,$4,$5,'UserRegistered')
+       ON CONFLICT(chain_id,transaction_hash,log_index) DO NOTHING`,
+      [
+        CHAIN_ID, normalizeWallet(input.contractAddress), input.txHash,
+        input.logIndex, input.blockNumber,
+      ],
+    );
   }
   return {
     relationCreated: Boolean(relationInsert.rows[0]),
@@ -283,7 +312,7 @@ export async function verifyAndActivateRegistration(
     );
   }
 
-  const { log, parsed } = registrationEvent(receipt);
+  const { log, parsed } = registrationEvent(receipt, config.SMART_EARNING_CONTRACT_ADDRESS);
   const eventUser = normalizeWallet(String(parsed.args.user));
   const sponsor = normalizeWallet(String(parsed.args.sponsor));
   const matrixParent = normalizeWallet(String(parsed.args.matrixParent));
@@ -294,9 +323,23 @@ export async function verifyAndActivateRegistration(
   if (eventUser !== wallet) {
     throw new ApiError(403, "Transaction belongs to another wallet", "WALLET_MISMATCH");
   }
+  const registrationContract = new Contract(
+    config.SMART_EARNING_CONTRACT_ADDRESS, SMART_EARNING_ABI, provider,
+  );
+  const [registrationPrice, sponsorEarningCap] = await Promise.all([
+    registrationContract.registrationPrice({ blockTag: receipt.blockNumber }),
+    registrationContract.totalEarningCap(sponsor, { blockTag: receipt.blockNumber }),
+  ]).then(([price, cap]) => [BigInt(price), BigInt(cap)] as const);
+  if (sponsorEarningCap < directIncome) {
+    throw new ApiError(409, "Sponsor on-chain cap is inconsistent with the event", "CAP_RECONCILIATION_FAILED");
+  }
 
   return transaction(async (client) => {
     await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`registration:${txHash}`]);
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`registration-sponsor:${sponsor}`]);
+    const sponsorUserId = await ensureConfirmedSponsor(
+      client, sponsor, new Date(), registrationPrice, sponsorEarningCap,
+    );
 
     const existing = await client.query<{
       id: string; status: string; user_id: string; sponsor_user_id: string;
@@ -356,9 +399,7 @@ export async function verifyAndActivateRegistration(
           EXISTS(SELECT 1 FROM registrations WHERE user_id=$1)
           OR EXISTS(SELECT 1 FROM referral_relations WHERE user_id=$1)
           OR EXISTS(SELECT 1 FROM matrix_placements WHERE user_id=$1)
-          OR EXISTS(SELECT 1 FROM magic_wallet_ledger WHERE user_id=$1)
-          OR EXISTS(SELECT 1 FROM income_wallet_ledger WHERE user_id=$1)
-          OR EXISTS(SELECT 1 FROM earning_split_events WHERE user_id=$1)
+          OR EXISTS(SELECT 1 FROM magic_wallet_ledger WHERE user_id=$1 AND registration_id IS NOT NULL)
           OR EXISTS(SELECT 1 FROM x3_hold_ledger WHERE user_id=$1)
           OR EXISTS(SELECT 1 FROM package_purchases WHERE user_id=$1)
         ) has_projection`,
@@ -368,13 +409,6 @@ export async function verifyAndActivateRegistration(
         throw new ApiError(409, "Wallet has conflicting ownership projections", "OWNERSHIP_CONFLICT");
       }
       reusableUserId = existingUser.rows[0].id;
-    }
-    const sponsorResult = await client.query<{ id: string }>(
-      "SELECT id FROM users WHERE wallet_address=$1 AND status='ACTIVE' FOR UPDATE",
-      [sponsor],
-    );
-    if (!sponsorResult.rows[0]) {
-      throw new ApiError(422, "Sponsor is not active in the index", "SPONSOR_NOT_INDEXED");
     }
     const parentUserId = await ensureConfirmedMatrixParent(client, matrixParent, new Date());
 
@@ -393,7 +427,7 @@ export async function verifyAndActivateRegistration(
       `INSERT INTO registrations(
          user_id,sponsor_user_id,tx_hash,chain_id,amount_token_units,status,block_number,confirmed_at
        ) VALUES($1,$2,$3,$4,$5,'CONFIRMED',$6,now()) RETURNING id`,
-      [userId, sponsorResult.rows[0].id, txHash, CHAIN_ID, magicCredit * 2n, receipt.blockNumber],
+      [userId, sponsorUserId, txHash, CHAIN_ID, magicCredit * 2n, receipt.blockNumber],
     );
     const registrationId = registrationResult.rows[0].id;
     const registrationValue = magicCredit * 2n;
@@ -414,7 +448,7 @@ export async function verifyAndActivateRegistration(
     await client.query(
       `INSERT INTO referral_relations(user_id,sponsor_user_id,registration_id)
        VALUES($1,$2,$3)`,
-      [userId, sponsorResult.rows[0].id, registrationId],
+      [userId, sponsorUserId, registrationId],
     );
     await client.query(
       `INSERT INTO matrix_placements(
@@ -423,14 +457,14 @@ export async function verifyAndActivateRegistration(
        ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
       [
         userId,parentUserId,matrixPosition,matrixIndex.toString(),registrationId,
-        sponsorResult.rows[0].id,txHash,receipt.blockNumber,log.index,
+        sponsorUserId,txHash,receipt.blockNumber,log.index,
       ],
     );
     await client.query(
       `UPDATE users sponsor SET direct_count=(
          SELECT count(*)::int FROM referral_relations rr WHERE rr.sponsor_user_id=sponsor.id
        ) WHERE sponsor.id=$1`,
-      [sponsorResult.rows[0].id],
+      [sponsorUserId],
     );
     await client.query(
       `INSERT INTO magic_wallet_ledger(
@@ -439,12 +473,13 @@ export async function verifyAndActivateRegistration(
       [userId, registrationId, magicCredit.toString(), `registration:${txHash}:magic`, JSON.stringify({ txHash })],
     );
     const cappedDirect = await creditGrossEarning({
-      userId: sponsorResult.rows[0].id,
+      userId: sponsorUserId,
       incomeType: "DIRECT_INCOME",
       sourceReference: registrationId,
       grossAmount: magicCredit,
       idempotencyKey: `registration:${txHash}:direct-cap`,
       magicAlreadyOnchain:true,
+      confirmedOnchainCredit:directIncome,
     }, client);
     if (cappedDirect.credited !== directIncome) {
       throw new ApiError(409, "On-chain and indexed earning cap disagree", "CAP_RECONCILIATION_FAILED");
@@ -454,7 +489,7 @@ export async function verifyAndActivateRegistration(
         `INSERT INTO direct_income_ledger(
           sponsor_user_id,source_user_id,registration_id,amount_token_units,tx_hash,idempotency_key
          ) VALUES($1,$2,$3,$4,$5,$6)`,
-        [sponsorResult.rows[0].id, userId, registrationId, directIncome.toString(), txHash, `registration:${txHash}:direct`],
+        [sponsorUserId, userId, registrationId, directIncome.toString(), txHash, `registration:${txHash}:direct`],
       );
     }
     await client.query(
@@ -476,6 +511,16 @@ export async function verifyAndActivateRegistration(
           matrixIndex: matrixIndex.toString(),
           matrixPosition,
         }),
+      ],
+    );
+    await client.query(
+      `INSERT INTO blockchain_processed_events(
+        chain_id,contract_address,transaction_hash,log_index,block_number,event_name
+       ) VALUES($1,$2,$3,$4,$5,'UserRegistered')
+       ON CONFLICT(chain_id,transaction_hash,log_index) DO NOTHING`,
+      [
+        CHAIN_ID, normalizeWallet(config.SMART_EARNING_CONTRACT_ADDRESS),
+        txHash, log.index, receipt.blockNumber,
       ],
     );
 

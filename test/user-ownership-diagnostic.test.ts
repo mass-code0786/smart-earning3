@@ -45,9 +45,9 @@ describe("user ownership diagnostic safety", () => {
 
   it("registration projection keeps registered and sponsor IDs in distinct positions", () => {
     const source = readFileSync(resolve("lib/server/registration-service.ts"), "utf8");
-    expect(source).toContain("[userId, sponsorResult.rows[0].id, txHash");
-    expect(source).toContain("[userId, sponsorResult.rows[0].id, registrationId]");
-    expect(source).toContain("userId: sponsorResult.rows[0].id");
+    expect(source).toContain("[userId, sponsorUserId, txHash");
+    expect(source).toContain("[userId, sponsorUserId, registrationId]");
+    expect(source).toContain("userId: sponsorUserId");
     expect(source).toContain("[userId, registrationId, magicCredit.toString()");
   });
 });
