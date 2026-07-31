@@ -24,12 +24,16 @@ type ExactTransactionProvider = {
   getTransactionReceipt(txHash: string): Promise<{
     status: number | null;
     to: string | null;
+    blockNumber: number;
+    blockHash: string;
     logs: ReadonlyArray<{
       address: string;
+      index: number;
       topics: readonly string[];
       data: string;
     }>;
   } | null>;
+  getBlockNumber(): Promise<number>;
 };
 
 type RegistrationEventProvider = {
@@ -78,6 +82,10 @@ function isRpcRateLimit(error: unknown) {
 type RegistrationVerifier = (
   wallet: string,
   txHash: string,
+  repairEvidence?: {
+    receipt: NonNullable<Awaited<ReturnType<ExactTransactionProvider["getTransactionReceipt"]>>>;
+    latestBlock: number;
+  },
 ) => Promise<{ registrationId: string; status: string; duplicate: boolean }>;
 
 export async function inspectRegistrationProjection(
@@ -373,9 +381,11 @@ export async function reconcileRegistrationTransaction(
     };
   }
 
+  const latestBlock = await provider.getBlockNumber();
   const result = await (dependencies.verifyRegistration ?? verifyAndActivateRegistration)(
     intendedWallet,
     txHash,
+    { receipt, latestBlock },
   );
   return {
     txHash,

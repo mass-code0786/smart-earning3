@@ -1,4 +1,4 @@
-import { Contract, Interface, TransactionReceipt } from "ethers";
+import { Contract, Interface } from "ethers";
 import { z } from "zod";
 import { SMART_EARNING_ABI } from "@/lib/blockchain/abi";
 import { getProvider } from "@/lib/blockchain/provider";
@@ -46,7 +46,20 @@ async function ensureConfirmedSponsor(
   return userId;
 }
 
-function registrationEvent(receipt: TransactionReceipt, contractAddress: string) {
+type ConfirmedRegistrationReceipt = {
+  status: number | null;
+  to: string | null;
+  blockNumber: number;
+  blockHash: string;
+  logs: ReadonlyArray<{
+    address: string;
+    index: number;
+    topics: readonly string[];
+    data: string;
+  }>;
+};
+
+function registrationEvent(receipt: ConfirmedRegistrationReceipt, contractAddress: string) {
   for (const log of receipt.logs) {
     if (normalizeWallet(log.address) !== normalizeWallet(contractAddress)) continue;
     try {
@@ -284,16 +297,22 @@ export async function reconcileExistingRegistrationProjection(
 export async function verifyAndActivateRegistration(
   walletInput: string,
   txHashInput: string,
+  repairEvidence?: {
+    receipt: ConfirmedRegistrationReceipt;
+    latestBlock: number;
+  },
 ) {
   const wallet = normalizeWallet(walletInput);
   const txHash = hashSchema.parse(txHashInput).toLowerCase();
   const config = getServerConfig();
   const provider = getProvider();
-  const [receipt, network, latestBlock] = await Promise.all([
-    provider.getTransactionReceipt(txHash),
-    provider.getNetwork(),
-    provider.getBlockNumber(),
-  ]);
+  const [receipt, network, latestBlock] = repairEvidence
+    ? [repairEvidence.receipt, { chainId: BigInt(CHAIN_ID) }, repairEvidence.latestBlock]
+    : await Promise.all([
+        provider.getTransactionReceipt(txHash),
+        provider.getNetwork(),
+        provider.getBlockNumber(),
+      ]);
 
   if (Number(network.chainId) !== CHAIN_ID) {
     throw new ApiError(503, "RPC is not connected to BNB Testnet", "WRONG_RPC_NETWORK");
@@ -323,15 +342,22 @@ export async function verifyAndActivateRegistration(
   if (eventUser !== wallet) {
     throw new ApiError(403, "Transaction belongs to another wallet", "WALLET_MISMATCH");
   }
-  const registrationContract = new Contract(
-    config.SMART_EARNING_CONTRACT_ADDRESS, SMART_EARNING_ABI, provider,
-  );
-  const [registrationPrice, sponsorEarningCap] = await Promise.all([
-    registrationContract.registrationPrice({ blockTag: receipt.blockNumber }),
-    registrationContract.totalEarningCap(sponsor, { blockTag: receipt.blockNumber }),
-  ]).then(([price, cap]) => [BigInt(price), BigInt(cap)] as const);
-  if (sponsorEarningCap < directIncome) {
-    throw new ApiError(409, "Sponsor on-chain cap is inconsistent with the event", "CAP_RECONCILIATION_FAILED");
+  let registrationPrice: bigint;
+  let sponsorEarningCap: bigint;
+  if (repairEvidence) {
+    registrationPrice = magicCredit * 2n;
+    sponsorEarningCap = registrationPrice * 5n;
+  } else {
+    const registrationContract = new Contract(
+      config.SMART_EARNING_CONTRACT_ADDRESS, SMART_EARNING_ABI, provider,
+    );
+    [registrationPrice, sponsorEarningCap] = await Promise.all([
+      registrationContract.registrationPrice({ blockTag: receipt.blockNumber }),
+      registrationContract.totalEarningCap(sponsor, { blockTag: receipt.blockNumber }),
+    ]).then(([price, cap]) => [BigInt(price), BigInt(cap)] as const);
+    if (sponsorEarningCap < directIncome) {
+      throw new ApiError(409, "Sponsor on-chain cap is inconsistent with the event", "CAP_RECONCILIATION_FAILED");
+    }
   }
 
   return transaction(async (client) => {

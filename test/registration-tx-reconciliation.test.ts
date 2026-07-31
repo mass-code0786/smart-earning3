@@ -36,6 +36,7 @@ function fixture(overrides: {
   ]);
   const provider = {
     getNetwork: vi.fn(async () => ({ chainId: 97n })),
+    getBlockNumber: vi.fn(async () => 101),
     getTransaction: vi.fn(async () => ({
       from: wallet,
       to: target,
@@ -44,8 +45,11 @@ function fixture(overrides: {
     getTransactionReceipt: vi.fn(async () => ({
       status: overrides.status ?? 1,
       to: target,
+      blockNumber: 100,
+      blockHash: `0x${"ab".repeat(32)}`,
       logs: overrides.includeEvent === false ? [] : [{
         address: overrides.eventAddress ?? contract,
+        index: 0,
         topics: event.topics,
         data: event.data,
       }],
@@ -201,7 +205,10 @@ describe("exact BSC Testnet registration transaction reconciliation", () => {
       status: "CONFIRMED",
       alreadyReconciled: false,
     });
-    expect(verifyRegistration).toHaveBeenCalledWith(wallet.toLowerCase(), txHash);
+    expect(verifyRegistration).toHaveBeenCalledWith(
+      wallet.toLowerCase(), txHash,
+      expect.objectContaining({ latestBlock: 101 }),
+    );
   });
 
   it("rejects a failed transaction", async () => {
