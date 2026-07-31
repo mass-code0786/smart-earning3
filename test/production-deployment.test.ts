@@ -98,8 +98,8 @@ describe("atomic production deployment", () => {
 
   it("blocks duplicate indexers and rolls back after a failed switched release", () => {
     const deployment = readFileSync(resolve("scripts/deploy-production.ts"), "utf8");
-    expect(deployment).toContain('name: "single_indexer"');
-    expect(deployment).toContain("separate legacy indexer process");
+    expect(deployment).toContain("PM2_APPS");
+    expect(deployment).toContain("Expected exactly one ${name} process");
     expect(deployment).toContain("rollback_previous_release: START");
     expect(deployment).toContain("SMART_EARNING_RELEASE_CWD: previousCwd");
     expect(deployment.indexOf('name: "next_artifacts"'))
@@ -121,9 +121,25 @@ describe("atomic production deployment", () => {
     expect(deployment).toContain("127.0.0.1:${productionPort}");
   });
 
-  it("contains no migration, database write, contract, or financial command", () => {
+  it("backs up and migrates before switching PM2 without contract or financial commands", () => {
     const deployment = readFileSync(resolve("scripts/deploy-production.ts"), "utf8");
-    expect(deployment).not.toMatch(/\bmigrate\b|INSERT\s|UPDATE\s|DELETE\s|hardhat|deploy-contract/);
+    expect(deployment).toContain('name: "pre_migration_backup"');
+    expect(deployment).toContain('name: "database_migrations"');
+    expect(deployment).toContain('name: "prune_development_dependencies"');
+    expect(deployment.indexOf('name: "database_migrations"')).toBeLessThan(deployment.indexOf('name: "pm2_reload"'));
+    expect(deployment).not.toMatch(/INSERT\s|UPDATE\s|DELETE\s|hardhat|deploy-contract/);
     expect(deployment).toContain("verify:production-readiness");
+  });
+
+  it("automates backup scheduling, log rotation, TLS, and reboot startup", () => {
+    const bootstrap = readFileSync(resolve("ops/bootstrap-production.sh"), "utf8");
+    const timer = readFileSync(resolve("ops/smart-earning-backup.timer"), "utf8");
+    const service = readFileSync(resolve("ops/smart-earning-backup.service"), "utf8");
+    expect(bootstrap).toContain("systemctl enable --now smart-earning-backup.timer");
+    expect(bootstrap).toContain("pm2 install pm2-logrotate");
+    expect(bootstrap).toContain("pm2 startup systemd");
+    expect(bootstrap).toContain("certbot --nginx --non-interactive");
+    expect(timer).toContain("Persistent=true");
+    expect(service).toContain("ops/postgres-backup.sh");
   });
 });

@@ -22,6 +22,9 @@
     "deploy:production": "tsx scripts/deploy-production.ts",
     "cleanup:production-releases": "tsx scripts/cleanup-production-releases.ts",
     "verify:production-runtime": "tsx scripts/verify-production-runtime.ts",
+    "verify:production-environment": "node scripts/validate-production-environment.cjs",
+    "verify:backup-restore": "node scripts/verify-backup-restore.cjs",
+    "verify:production-performance": "tsx scripts/production-performance-audit.ts",
     "seed:genesis": "tsx scripts/seed-genesis.ts",
     "indexer": "tsx scripts/indexer.ts",
     "reconcile:registration:testnet": "tsx scripts/reconcile-registration-tx.ts",
@@ -56,11 +59,12 @@
     "lucide-react": "latest",
     "next": "^16.2.11",
     "pg": "^8.22.0",
-    "postcss": "^8.5.12",
+    "postcss": "^8.5.25",
     "react": "latest",
     "react-dom": "latest",
     "sharp": "^0.35.0",
     "tailwindcss": "^3.4.17",
+    "tsx": "^4.23.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {
@@ -80,13 +84,12 @@
     "jsdom": "^29.1.1",
     "mocha": "^11.7.6",
     "playwright-core": "^1.62.0",
-    "tsx": "^4.23.1",
     "typescript": "5.9.3",
     "vitest": "^4.1.10"
   },
   "overrides": {
     "next": {
-      "postcss": "8.5.12",
+      "postcss": "8.5.25",
       "sharp": "0.35.0"
     }
   }

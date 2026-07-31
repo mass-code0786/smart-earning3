@@ -1,0 +1,2 @@
+import{NextResponse}from"next/server";import{query}from"@/lib/server/db";
+export async function GET(){try{await query("SELECT 1");const migration=(await query<{filename:string}>("SELECT filename FROM schema_migrations ORDER BY filename DESC LIMIT 1")).rows[0]?.filename||null;return NextResponse.json({status:"ready",database:"connected",latestMigration:migration},{headers:{"cache-control":"no-store"}})}catch{return NextResponse.json({status:"not-ready",database:"unavailable"},{status:503,headers:{"cache-control":"no-store"}})}}

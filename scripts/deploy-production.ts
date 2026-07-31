@@ -22,6 +22,7 @@ const { requireProductionPort } = require("./production-port.cjs") as {
 };
 
 const CONFIRM = "--confirm-production-deploy";
+const PM2_APPS = ["smart-earning","smart-earning-indexer","smart-earning-x3-recovery","smart-earning-booster","smart-earning-dividend","smart-earning-withdrawal","smart-earning-magic-funding"];
 type Stage = { name: string; run: () => void | Promise<void> };
 
 function command(
@@ -121,22 +122,22 @@ async function main() {
       completedAtMs = verified.completedAtMs;
     } },
     { name: "live_indexer_source", run: () => verifyLiveIndexerSources(releaseCwd) },
-    { name: "single_indexer", run: () => {
-      const legacy = readPm2Processes().filter((process) => {
-        const path = String(process.pm2_env?.pm_exec_path || "");
-        return process.name !== "smart-earning" && /(?:scripts[\\/])?indexer\.(?:ts|js)$/.test(path);
-      });
-      if (legacy.length) throw new Error(`Found ${legacy.length} separate legacy indexer process(es)`);
-    } },
+    { name: "pre_migration_backup", run: () => command("bash", ["ops/postgres-backup.sh"], releaseCwd, productionEnvironment) },
+    { name: "database_migrations", run: () => command(process.execPath,
+      [resolve(releaseCwd,"node_modules/tsx/dist/cli.mjs"),resolve(releaseCwd,"scripts/migrate.ts")],releaseCwd,
+      {...productionEnvironment,NODE_ENV:"production",PRODUCTION_DATABASE_SOURCE:"validated-deploy"}) },
+    { name: "prune_development_dependencies", run: () => command("npm",["prune","--omit=dev"],releaseCwd) },
     { name: "pm2_reload", run: () => {
       command("pm2", ["startOrReload", resolve(releaseCwd, "ecosystem.config.cjs"),
-        "--only", "smart-earning", "--update-env"], releaseCwd, {
+        "--update-env"], releaseCwd, {
         ...process.env, SMART_EARNING_RELEASE_CWD: releaseCwd,
       });
       switched = true;
     } },
     { name: "pm2_save", run: () => command("pm2", ["save"], releaseCwd) },
     { name: "runtime_identity", run: () => {
+      const processes=readPm2Processes();
+      for(const name of PM2_APPS){const matches=processes.filter(process=>process.name===name&&resolve(String(process.pm2_env?.pm_cwd||""))===resolve(releaseCwd));if(matches.length!==1)throw new Error(`Expected exactly one ${name} process; found ${matches.length}`)}
       const selected = selectProductionPm2Process(readPm2Processes(), releaseCwd);
       const env = selected.process.pm2_env;
       if (env?.NODE_ENV !== "production" || !env.DATABASE_URL) {
@@ -164,10 +165,9 @@ async function main() {
     { name: "database_readiness", run: () =>
       command("npm", ["run", "verify:production-readiness"], releaseCwd) },
     { name: "http_health", run: () =>
-      waitForHttpHealth(`http://127.0.0.1:${productionPort}/`) },
+      waitForHttpHealth(`http://127.0.0.1:${productionPort}/api/health/ready`) },
     { name: "indexer_health_mode", run: async () => {
-      const selected = selectProductionPm2Process(readPm2Processes(), releaseCwd);
-      const logs = output("pm2", ["logs", String(selected.process.name),
+      const logs = output("pm2", ["logs", "smart-earning-indexer",
         "--nostream", "--lines", "200"], releaseCwd);
       const verification = verifyLiveIndexerLogs(logs);
       process.stdout.write(
@@ -196,7 +196,7 @@ async function main() {
       const previousCwd = previous.process.pm2_env.pm_cwd;
       process.stderr.write("[deploy] rollback_previous_release: START\n");
       command("pm2", ["startOrReload", resolve(previousCwd, "ecosystem.config.cjs"),
-        "--only", "smart-earning", "--update-env"], previousCwd, {
+        "--update-env"], previousCwd, {
         ...process.env, SMART_EARNING_RELEASE_CWD: previousCwd,
       });
       command("pm2", ["save"], previousCwd);

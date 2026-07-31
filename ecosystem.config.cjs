@@ -5,6 +5,7 @@ const {
   loadProductionPm2Environment,
 } = require("./scripts/pm2-environment.cjs");
 const { requireProductionPort } = require("./scripts/production-port.cjs");
+const { assertProductionEnvironment } = require("./scripts/validate-production-environment.cjs");
 
 const projectRoot = "/var/www/smart-earning3";
 const cwd = process.env.SMART_EARNING_RELEASE_CWD || projectRoot;
@@ -12,6 +13,7 @@ const productionEnvironment = loadProductionPm2Environment(
   resolve(projectRoot, ".env"),
 );
 const productionPort = requireProductionPort(productionEnvironment);
+assertProductionEnvironment({ ...productionEnvironment, NODE_ENV: "production", PORT: productionPort });
 const requiredArtifacts = [
   ".next/BUILD_ID",
   ".next/server/app/page_client-reference-manifest.js",
@@ -45,6 +47,8 @@ const common = {
   min_uptime: "10s",
   kill_timeout: 30_000,
   listen_timeout: 15_000,
+  merge_logs: true,
+  log_date_format: "YYYY-MM-DDTHH:mm:ss.SSSZ",
   env: {
     ...productionEnvironment,
     NODE_ENV: "production",
@@ -59,6 +63,8 @@ const worker = (name, file) => ({
   name,
   script: "node_modules/tsx/dist/cli.mjs",
   args: [file],
+  out_file: `/var/log/smart-earning/${name}.out.log`,
+  error_file: `/var/log/smart-earning/${name}.error.log`,
 });
 
 module.exports = {
@@ -67,6 +73,8 @@ module.exports = {
     name: "smart-earning",
     script: "node_modules/next/dist/bin/next",
     args: ["start", "--port", productionPort],
+    out_file: "/var/log/smart-earning/smart-earning.out.log",
+    error_file: "/var/log/smart-earning/smart-earning.error.log",
     env: {
       ...common.env,
       PORT: productionPort,

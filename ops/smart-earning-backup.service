@@ -1,0 +1,19 @@
+[Unit]
+Description=Smart Earning verified PostgreSQL backup
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/var/www/smart-earning3
+EnvironmentFile=/var/www/smart-earning3/.env
+Environment=BACKUP_DIRECTORY=/var/backups/smart-earning
+ExecStart=/usr/bin/bash /var/www/smart-earning3/ops/postgres-backup.sh
+User=root
+Group=root
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/backups/smart-earning

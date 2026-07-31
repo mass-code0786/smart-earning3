@@ -14,16 +14,7 @@ afterEach(() => {
 describe("protected wallet routes", () => {
   it("redirects every protected route family when no session exists", async () => {
     process.env.SESSION_SECRET = secret;
-    expect(config.matcher).toEqual(expect.arrayContaining([
-      "/dashboard/:path*",
-      "/packages/:path*",
-      "/matrix/:path*",
-      "/team/:path*",
-      "/wallet/:path*",
-      "/booster/:path*",
-      "/autopool/:path*",
-      "/dividend/:path*",
-    ]));
+    expect(config.matcher).toEqual(["/((?!_next/static|_next/image|favicon.ico|logo.png).*)"]);
     const response = await proxy(new NextRequest("http://localhost:3000/dashboard"));
     expect(response.status).toBe(307);
     expect(response.headers.get("location")).toBe("http://localhost:3000/");

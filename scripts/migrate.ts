@@ -7,7 +7,7 @@ import { invalidateRegistrationSchemaReadiness } from "../lib/server/registratio
 const environment = loadAuthoritativeEnvironment(process.cwd());
 const productionCheckout = process.cwd().replaceAll("\\", "/") === "/var/www/smart-earning3";
 if ((process.env.NODE_ENV === "production" || productionCheckout)
-    && process.env.PRODUCTION_DATABASE_SOURCE !== "pm2") {
+    && !["pm2","validated-deploy"].includes(process.env.PRODUCTION_DATABASE_SOURCE||"")) {
   throw new Error("Production migrations must be launched with npm run migrate:production");
 }
 

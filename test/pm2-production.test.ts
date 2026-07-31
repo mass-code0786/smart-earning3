@@ -60,7 +60,7 @@ describe("PM2 production database targeting", () => {
     expect(source).not.toContain("loadEnvConfig");
     const worker = readFileSync(resolve("scripts/migrate.ts"), "utf8");
     expect(worker).toContain('"/var/www/smart-earning3"');
-    expect(worker).toContain('PRODUCTION_DATABASE_SOURCE !== "pm2"');
+    expect(worker).toContain('["pm2","validated-deploy"]');
   });
 
   it("ecosystem loads .env safely, preserves precedence, and survives saved PM2 state", () => {
