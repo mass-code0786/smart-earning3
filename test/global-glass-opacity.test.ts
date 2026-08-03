@@ -37,7 +37,7 @@ describe("authenticated application glass opacity", () => {
       "components/matrix-history-menu.tsx",
     ];
     for (const file of surfaces) {
-      expect(fs.readFileSync(path.join(process.cwd(), file), "utf8")).toMatch(/smart-glass-card|matrix-history-sheet|home-(?:team-summary|action-card|matrix-card)/);
+      expect(fs.readFileSync(path.join(process.cwd(), file), "utf8")).toMatch(/smart-glass-card|CenteredModal|home-(?:team-summary|action-card|matrix-card)/);
     }
   });
 });

@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
-import { Menu, X } from "lucide-react";
+import { useState } from "react";
+import { Menu } from "lucide-react";
 import { formatTokenUnits } from "@/lib/client/money";
 import { authenticatedWalletFetch } from "@/lib/client/authenticated-fetch";
+import { CenteredModal } from "@/components/centered-modal";
 
 type Module = "MAGIC_LEVEL" | "X3" | "X4" | "BOOSTER" | "AUTOPOOL";
 type Item = {
@@ -28,20 +28,6 @@ export function MatrixHistoryMenu({ module, packageId, entryId, title }: {
   const [error, setError] = useState("");
   const name = title || moduleNames[module];
 
-  useEffect(() => {
-    if (!open) return;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [open]);
-
   async function load(append = false) {
     setLoading(true); setError("");
     try {
@@ -63,9 +49,7 @@ export function MatrixHistoryMenu({ module, packageId, entryId, title }: {
 
   return <>
     <button type="button" className="matrix-history-menu" aria-label={`Open ${name} history`} onClick={show}><Menu size={15}/></button>
-    {open && createPortal(<div className="matrix-history-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setOpen(false); }}>
-      <section className="matrix-history-sheet" role="dialog" aria-modal="true" aria-label={`${name} history`}>
-        <header><div><small>MATRIX PLACEMENT HISTORY</small><h2>{name}</h2></div><button type="button" aria-label="Close matrix history" onClick={() => setOpen(false)}><X size={18}/></button></header>
+    <CenteredModal open={open} onClose={() => setOpen(false)} eyebrow="MATRIX PLACEMENT HISTORY" title={name} label={`${name} history`} closeLabel="Close matrix history">
         <div className="matrix-history-items">
           {items.map(item => <article key={item.id}>
             <div className="matrix-history-row-head"><span><small>{moduleNames[item.module]}</small><b>{shortWallet(item.wallet)}</b></span><time dateTime={item.placedAt}>{new Date(item.placedAt).toLocaleString()}</time></div>
@@ -82,8 +66,7 @@ export function MatrixHistoryMenu({ module, packageId, entryId, title }: {
           {error && <div className="matrix-history-empty">{error}</div>}
         </div>
         {cursor && <button type="button" className="matrix-history-more" disabled={loading} onClick={() => void load(true)}>{loading ? "Loading…" : "Load more"}</button>}
-      </section>
-    </div>, document.body)}
+    </CenteredModal>
   </>;
 }
 

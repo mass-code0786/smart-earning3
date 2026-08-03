@@ -3,6 +3,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { DirectIncomeLive } from "@/components/live-plan-data";
 import IncomePage from "@/app/income/page";
 
+const walletState = vi.hoisted(() => ({ connectedWallet: "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd" }));
+vi.mock("@/lib/client/wallet", () => ({
+  getInjectedProvider: () => ({ request: vi.fn(async () => [walletState.connectedWallet]) }),
+}));
+
 vi.mock("next/navigation", () => ({
   usePathname: () => "/income",
   useRouter: () => ({ push: vi.fn() }),
@@ -77,12 +82,36 @@ describe("Income totals page", () => {
       fireEvent.click(await screen.findByRole("button", { name: `Open ${label} history` }));
       await waitFor(() => expect(fetcher).toHaveBeenCalledWith(
         `/api/income/history?incomeType=${incomeType}&limit=20`,
-        { cache: "no-store", credentials: "same-origin" },
+        expect.objectContaining({ cache: "no-store", credentials: "same-origin", headers: expect.any(Headers) }),
       ));
-      expect(await screen.findByRole("dialog", { name: `${label} history` })).toBeInTheDocument();
+      const historyCall = fetcher.mock.calls.find(([url]) => String(url).includes(`incomeType=${incomeType}`)) as unknown as [unknown, RequestInit];
+      expect(new Headers(historyCall[1].headers).get("x-connected-wallet")).toBe(walletState.connectedWallet);
+      const dialog = await screen.findByRole("dialog", { name: `${label} history` });
+      expect(dialog).toHaveClass("centered-modal-panel");
+      expect(dialog.parentElement?.parentElement).toBe(document.body);
+      expect(document.body.style.overflow).toBe("hidden");
       if (incomeType === "MAGIC_LEVEL_INCOME") expect(await screen.findByText("No income history yet")).toBeInTheDocument();
       else expect(await screen.findByText(`source:${incomeType}`)).toBeInTheDocument();
       fireEvent.click(screen.getByRole("button", { name: "Close income history" }));
+      expect(document.body.style.overflow).toBe("");
     }
+  });
+
+  it("closes Income history from its shared backdrop and Escape", async () => {
+    const fetcher = vi.fn(async (input: string | URL | Request) => String(input) === "/api/dashboard"
+      ? new Response(JSON.stringify({ user: { incomeTotals } }), { status: 200 })
+      : new Response(JSON.stringify({ items: [], nextCursor: null }), { status: 200 }));
+    vi.stubGlobal("fetch", fetcher);
+    render(<DirectIncomeLive />);
+    const open = () => fireEvent.click(screen.getByRole("button", { name: "Open Direct Income history" }));
+    await screen.findByRole("button", { name: "Open Direct Income history" });
+    open();
+    let dialog = await screen.findByRole("dialog");
+    fireEvent.mouseDown(dialog.parentElement!);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    open();
+    dialog = await screen.findByRole("dialog");
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(dialog).not.toBeInTheDocument();
   });
 });

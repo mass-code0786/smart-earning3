@@ -78,9 +78,15 @@ describe("matrix history menu", () => {
     expect(dialog.querySelector(".matrix-history-items")).toBeInTheDocument();
 
     const css = readFileSync(resolve("app/dashboard.css"), "utf8");
-    expect(css).toMatch(/\.matrix-history-backdrop\{z-index:200;align-items:center;padding:16px\}/);
-    expect(css).toMatch(/\.matrix-history-sheet\{display:flex;width:calc\(100% - 32px\);max-width:580px;max-height:80dvh;flex-direction:column;overflow:hidden/);
-    expect(css).toContain(".matrix-history-items{min-height:0;overflow-y:auto}");
+    expect(backdrop).toHaveClass("centered-modal-backdrop");
+    expect(dialog).toHaveClass("centered-modal-panel");
+    expect(dialog.querySelector(".centered-modal-scroll")).toBeInTheDocument();
+    expect(css).toMatch(/\.centered-modal-backdrop\{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center/);
+    expect(css).toContain("width:min(580px,calc(100% - 32px))");
+    expect(css).toContain("max-height:min(80dvh,calc(100dvh");
+    expect(css).toContain(".centered-modal-scroll{min-height:0;overflow-y:auto");
+    expect(css).not.toContain(".matrix-history-backdrop");
+    expect(css).not.toContain(".income-history-backdrop");
 
     fireEvent.click(screen.getByRole("button", { name: "Close matrix history" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
