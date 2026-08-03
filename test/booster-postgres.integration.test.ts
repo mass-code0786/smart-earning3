@@ -82,7 +82,7 @@ integration("Booster PostgreSQL integration",()=>{
     "SELECT last_entry_at,next_entry_at FROM booster_memberships WHERE user_id=$1",[user.id],
    )).rows[0];
    expect(timing.last_entry_at.getTime()).toBe(processedAt.getTime());
-   expect(timing.next_entry_at.getTime()).toBe(processedAt.getTime()+5*60*60*1000);
+   expect(timing.next_entry_at.getTime()).toBe(processedAt.getTime()+4*60*60*1000);
   }finally{await client.query("ROLLBACK")}
  },30_000);
 });

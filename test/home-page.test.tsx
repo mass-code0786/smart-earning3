@@ -66,7 +66,7 @@ describe("locked mobile Home composition", () => {
             ] : [],
           })) } : {
             server_time: "2026-07-28T10:00:00.000Z",
-            next_entry_at: "2026-07-28T15:00:00.000Z",
+            next_entry_at: "2026-07-28T14:00:00.000Z",
             eligibility: "NOT_DUE",
           };
       return { ok: true, status: 200, json: async () => body };
@@ -113,7 +113,7 @@ describe("locked mobile Home composition", () => {
     ]) {
       expect(screen.queryByText(removed, { exact: false })).not.toBeInTheDocument();
     }
-    expect(screen.getByText("Next booster: 05:00:00")).toBeInTheDocument();
+    expect(screen.getByText("Next booster: 04:00:00")).toBeInTheDocument();
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4));
   });
 

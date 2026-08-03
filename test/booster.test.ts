@@ -6,8 +6,8 @@ describe("Booster exact arithmetic",()=>{
   expect(boosterPackageCredit(dollars*1_000_000n)).toBe(dollars*312_500n)});
  it("uses exact entry and position amounts",()=>{expect(BOOSTER_ENTRY_COST).toBe(2_500_000n);expect(BOOSTER_INCOME).toBe(2_000_000n)});
  it("derives balance only from credits and debits",()=>expect(boosterBalance([{direction:"CREDIT",amount:"5000000"},{direction:"DEBIT",amount:"2500000"}])).toBe(2_500_000n));
- it("uses five hours from the last successful entry",()=>{const last=new Date("2026-01-01T00:00:00Z");
-  expect(boosterScheduledFor(last,new Date()).toISOString()).toBe("2026-01-01T05:00:00.000Z")});
+ it("uses four hours from the last successful entry",()=>{const last=new Date("2026-01-01T00:00:00Z");
+  expect(boosterScheduledFor(last,new Date()).toISOString()).toBe("2026-01-01T04:00:00.000Z")});
 });
 describe("Booster Wallet top-up evidence",()=>{
  it("confirms the contract accepts arbitrary positive top-up amounts",()=>{

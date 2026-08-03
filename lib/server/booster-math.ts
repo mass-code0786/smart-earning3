@@ -1,6 +1,6 @@
 export const BOOSTER_ENTRY_COST=2_500_000n;
 export const BOOSTER_INCOME=2_000_000n;
-export const BOOSTER_INTERVAL_MS=5*60*60*1000;
+export const BOOSTER_INTERVAL_MS=4*60*60*1000;
 export function boosterPackageCredit(amount:bigint){
   if(amount<=0n||amount%16n!==0n)throw new Error("Package amount is not exactly divisible");
   return amount*5n/16n;

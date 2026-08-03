@@ -8,13 +8,13 @@ describe("Booster timing read model",()=>{
   query
    .mockResolvedValueOnce({rows:[{id:"u1"}]})
    .mockResolvedValueOnce({rows:[{balance:"2500000",package_credits:"2500000",manual_top_ups:"0",refunds:"0",deductions:"0"}]})
-   .mockResolvedValueOnce({rows:[{last_entry_at:"2026-07-28T10:00:00Z",next_entry_at:"2026-07-28T15:00:00Z"}]})
+   .mockResolvedValueOnce({rows:[{last_entry_at:"2026-07-28T10:00:00Z",next_entry_at:"2026-07-28T14:00:00Z"}]})
    .mockResolvedValueOnce({rows:[]}).mockResolvedValueOnce({rows:[]}).mockResolvedValueOnce({rows:[]}).mockResolvedValueOnce({rows:[]})
    .mockResolvedValueOnce({rows:[{total_entries:0,active_entries:0,completed_entries:0,total_income:"0",pending_positions:0}]});
   const{getBoosterDashboard}=await import("@/lib/server/booster-query-service");
   await expect(getBoosterDashboard("0x1234567890abcdef1234567890abcdef12345678")).resolves.toMatchObject({
-   boosterActive:true,lastRunAt:"2026-07-28T10:00:00Z",nextEligibleAt:"2026-07-28T15:00:00Z",
-   remainingSeconds:18000,eligibility:"NOT_DUE",
+   boosterActive:true,lastRunAt:"2026-07-28T10:00:00Z",nextEligibleAt:"2026-07-28T14:00:00Z",
+   remainingSeconds:14400,eligibility:"NOT_DUE",
   });
  });
 });

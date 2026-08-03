@@ -34,12 +34,12 @@ describe("Booster synchronized countdown",()=>{
   await act(async()=>vi.advanceTimersByTime(5_000));
   expect(refresh).toHaveBeenCalledTimes(2);
  });
- it("starts a new five-hour countdown when refreshed server data confirms an entry",async()=>{
+ it("starts a new four-hour countdown when refreshed server data confirms an entry",async()=>{
   const refresh=vi.fn().mockResolvedValue(undefined);
   const{rerender}=render(<BoosterCountdown serverTime="2026-01-01T09:00:00Z" nextEntryAt="2026-01-01T09:00:00Z" eligibility="DUE" onRefresh={refresh}/>);
   expect(screen.getByText("Booster Available")).toBeInTheDocument();
-  rerender(<BoosterCountdown serverTime="2026-01-01T09:00:10Z" nextEntryAt="2026-01-01T14:00:10Z" eligibility="ENTRY_CREATED" onRefresh={refresh}/>);
-  expect(screen.getByText("05:00:00")).toBeInTheDocument();
+  rerender(<BoosterCountdown serverTime="2026-01-01T09:00:10Z" nextEntryAt="2026-01-01T13:00:10Z" eligibility="ENTRY_CREATED" onRefresh={refresh}/>);
+  expect(screen.getByText("04:00:00")).toBeInTheDocument();
  });
  it("shows the persisted inactive state without constructing a timer",()=>{
   render(<BoosterCountdown serverTime="2026-01-01T09:00:00Z" nextEntryAt={null} eligibility="INACTIVE" onRefresh={vi.fn()}/>);

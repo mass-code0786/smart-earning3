@@ -7,7 +7,7 @@ import{CHAIN_ID,getServerConfig}from"./config";
 import{query,transaction,getPool}from"./db";
 import{ApiError}from"./http";
 import{creditGrossEarning}from"./earning-split-service";
-import{BOOSTER_ENTRY_COST,BOOSTER_INCOME,boosterPackageCredit}from"./booster-math";
+import{BOOSTER_ENTRY_COST,BOOSTER_INCOME,BOOSTER_INTERVAL_MS,boosterPackageCredit}from"./booster-math";
 import{createAutopoolEntryForBooster}from"./autopool-service";
 
 const transferInterface=new Interface(["event Transfer(address indexed from,address indexed to,uint256 value)"]);
@@ -141,7 +141,7 @@ export async function processBoosterUser(userId:string,now=new Date(),existingCl
       await client.query(`INSERT INTO booster_scheduler_history(user_id,scheduled_for,status,worker_instance)
         VALUES($1,$2,'INSUFFICIENT',$3)`,[userId,scheduledFor,workerInstance]);
       await client.query("UPDATE booster_memberships SET next_entry_at=$2,updated_at=now() WHERE user_id=$1",
-        [userId,new Date(now.getTime()+5*60*60*1000)]);
+        [userId,new Date(now.getTime()+BOOSTER_INTERVAL_MS)]);
       return{status:"INSUFFICIENT" as const};
     }
     const history=(await client.query<{id:string}>(
@@ -162,7 +162,7 @@ export async function processBoosterUser(userId:string,now=new Date(),existingCl
     await placeEntry(client,entry);
     await createAutopoolEntryForBooster(client,{boosterEntryId:entry.id,userId});
     await client.query("UPDATE booster_memberships SET last_entry_at=$2,next_entry_at=$3,updated_at=now() WHERE user_id=$1",
-      [userId,now,new Date(now.getTime()+5*60*60*1000)]);
+      [userId,now,new Date(now.getTime()+BOOSTER_INTERVAL_MS)]);
     return{status:"COMPLETED" as const,entryId:entry.id};
   };
   return existingClient?execute(existingClient):transaction(execute);
