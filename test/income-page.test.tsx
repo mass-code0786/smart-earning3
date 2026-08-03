@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DirectIncomeLive } from "@/components/live-plan-data";
 
@@ -34,5 +34,40 @@ describe("Income totals page", () => {
     expect(screen.getByText("$1.25 USDT")).toBeInTheDocument();
     expect(fetcher).toHaveBeenCalledWith("/api/dashboard", expect.objectContaining({ cache: "no-store" }));
     expect(screen.queryByText("Verified Income History")).not.toBeInTheDocument();
+  });
+
+  it("opens only the selected card's canonical history and supports an empty state", async () => {
+    const fetcher = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url === "/api/dashboard") return new Response(JSON.stringify({ user: { incomeTotals } }), { status: 200 });
+      const incomeType = new URL(url, "http://localhost").searchParams.get("incomeType")!;
+      const items = incomeType === "MAGIC_LEVEL_INCOME" ? [] : [{
+        id: "10000000-0000-0000-0000-000000000001",
+        income_type: incomeType,
+        source_reference: `source:${incomeType}`,
+        credited_amount: "1000000",
+        created_at: "2026-08-03T10:00:00.000Z",
+      }];
+      return new Response(JSON.stringify({ items, nextCursor: null }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetcher);
+    render(<DirectIncomeLive />);
+
+    for (const [incomeType, label] of incomeTotals.map(item => [item.incomeType, ({
+      DIRECT_INCOME: "Direct Income", MAGIC_LEVEL_INCOME: "Magic Level Income",
+      X3_PACKAGE: "Working X3 Package Income", X3_HOLD_RELEASE: "Working X3 Hold Release Income",
+      X4_GLOBAL: "Working X4 Global Income", BOOSTER: "Booster Income",
+      GLOBAL_AUTOPOOL: "Global Autopool Income", DAILY_DIVIDEND: "Daily Dividend Income",
+    } as Record<string, string>)[item.incomeType]])) {
+      fireEvent.click(await screen.findByRole("button", { name: `Open ${label} history` }));
+      await waitFor(() => expect(fetcher).toHaveBeenCalledWith(
+        `/api/income/history?incomeType=${incomeType}&limit=20`,
+        { cache: "no-store", credentials: "same-origin" },
+      ));
+      expect(await screen.findByRole("dialog", { name: `${label} history` })).toBeInTheDocument();
+      if (incomeType === "MAGIC_LEVEL_INCOME") expect(await screen.findByText("No income history yet")).toBeInTheDocument();
+      else expect(await screen.findByText(`source:${incomeType}`)).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Close income history" }));
+    }
   });
 });
