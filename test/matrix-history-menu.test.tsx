@@ -1,5 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { MatrixHistoryMenu } from "@/components/matrix-history-menu";
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
@@ -50,5 +52,41 @@ describe("matrix history menu", () => {
       { cache: "no-store", credentials: "same-origin" },
     ));
     expect(screen.getAllByText("0xabcd…abcd")).toHaveLength(2);
+  });
+
+  it("portals a centered, internally scrolling modal above app navigation", async () => {
+    const items = Array.from({ length: 25 }, (_, index) => item(`10000000-0000-0000-0000-${String(index).padStart(12, "0")}`, "X3"));
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ items, nextCursor: null }), { status: 200 })));
+    render(<div className="matrix-history-host"><MatrixHistoryMenu module="X3" packageId={1} title="Package 1 X3 Matrix"/></div>);
+    fireEvent.click(screen.getByRole("button", { name: "Open Package 1 X3 Matrix history" }));
+    const dialog = await screen.findByRole("dialog", { name: "Package 1 X3 Matrix history" });
+    const backdrop = dialog.parentElement!;
+    expect(backdrop.parentElement).toBe(document.body);
+    expect(document.body.style.overflow).toBe("hidden");
+    expect(screen.getByText("MATRIX PLACEMENT HISTORY")).toBeInTheDocument();
+    expect(dialog.querySelector(".matrix-history-items")).toBeInTheDocument();
+
+    const css = readFileSync(resolve("app/dashboard.css"), "utf8");
+    expect(css).toMatch(/\.matrix-history-backdrop\{z-index:200;align-items:center;padding:16px\}/);
+    expect(css).toMatch(/\.matrix-history-sheet\{display:flex;width:calc\(100% - 32px\);max-width:580px;max-height:80dvh;flex-direction:column;overflow:hidden/);
+    expect(css).toContain(".matrix-history-items{min-height:0;overflow-y:auto}");
+
+    fireEvent.click(screen.getByRole("button", { name: "Close matrix history" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(document.body.style.overflow).toBe("");
+  });
+
+  it("closes from the backdrop and Escape key", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ items: [], nextCursor: null }), { status: 200 })));
+    render(<div className="matrix-history-host"><MatrixHistoryMenu module="MAGIC_LEVEL"/></div>);
+    const open = () => fireEvent.click(screen.getByRole("button", { name: "Open Magic Level Matrix history" }));
+    open();
+    let dialog = await screen.findByRole("dialog");
+    fireEvent.mouseDown(dialog.parentElement!);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    open();
+    dialog = await screen.findByRole("dialog");
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(dialog).not.toBeInTheDocument();
   });
 });
