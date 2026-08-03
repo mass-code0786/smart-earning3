@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DirectIncomeLive } from "@/components/live-plan-data";
 import IncomePage from "@/app/income/page";
@@ -63,7 +63,7 @@ describe("Income totals page", () => {
       const incomeType = new URL(url, "http://localhost").searchParams.get("incomeType")!;
       const items = incomeType === "MAGIC_LEVEL_INCOME" ? [] : [{
         id: "10000000-0000-0000-0000-000000000001",
-        income_type: incomeType,
+        wallet_address: walletState.connectedWallet,
         source_reference: `source:${incomeType}`,
         credited_amount: "1000000",
         created_at: "2026-08-03T10:00:00.000Z",
@@ -91,7 +91,18 @@ describe("Income totals page", () => {
       expect(dialog.parentElement?.parentElement).toBe(document.body);
       expect(document.body.style.overflow).toBe("hidden");
       if (incomeType === "MAGIC_LEVEL_INCOME") expect(await screen.findByText("No income history yet")).toBeInTheDocument();
-      else expect(await screen.findByText(`source:${incomeType}`)).toBeInTheDocument();
+      else {
+        expect(await screen.findByText("0xabcd...abcd")).toBeInTheDocument();
+        expect(screen.getByText("$1.00 USDT")).toBeInTheDocument();
+        expect(screen.getByText("Wallet")).toBeInTheDocument();
+        expect(screen.getByText("Amount")).toBeInTheDocument();
+        expect(screen.getByText("Date & Time")).toBeInTheDocument();
+        expect(screen.queryByText(`source:${incomeType}`)).not.toBeInTheDocument();
+        expect(screen.queryByText("Source")).not.toBeInTheDocument();
+        expect(screen.queryByText("Ledger reference")).not.toBeInTheDocument();
+        expect(screen.queryByText("10000000-0000-0000-0000-000000000001")).not.toBeInTheDocument();
+        expect(within(dialog).getAllByText(label)).toHaveLength(1);
+      }
       fireEvent.click(screen.getByRole("button", { name: "Close income history" }));
       expect(document.body.style.overflow).toBe("");
     }

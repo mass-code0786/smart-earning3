@@ -41,8 +41,8 @@ export async function getIncomeHistory(wallet: string, parameters: URLSearchPara
   const cursor = decodeCursor(parameters.get("cursor"));
   const requestedLimit = Number(parameters.get("limit") || 20);
   const limit = Number.isInteger(requestedLimit) ? Math.min(50, Math.max(1, requestedLimit)) : 20;
-  const user = (await query<{ id: string }>(
-    "SELECT id FROM users WHERE lower(wallet_address)=lower($1)",
+  const user = (await query<{ id: string; wallet_address: string }>(
+    "SELECT id,wallet_address FROM users WHERE lower(wallet_address)=lower($1)",
     [normalizeWallet(wallet)],
   )).rows[0];
   if (!user) throw new ApiError(404, "User is not indexed", "USER_NOT_FOUND");
@@ -56,6 +56,6 @@ export async function getIncomeHistory(wallet: string, parameters: URLSearchPara
     [user.id, incomeType, cursor?.createdAt || null, cursor?.id || null, limit + 1],
   );
   const hasMore = result.rows.length > limit;
-  const items = result.rows.slice(0, limit);
+  const items = result.rows.slice(0, limit).map((row) => ({ ...row, wallet_address: user.wallet_address }));
   return { items, nextCursor: hasMore ? encodeCursor(items[items.length - 1]) : null };
 }

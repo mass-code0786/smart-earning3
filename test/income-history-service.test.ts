@@ -12,25 +12,28 @@ const row = (index: number) => ({
   credited_amount: "2000000",
   created_at: new Date(Date.UTC(2026, 0, 1, 0, 0, 30 - index)),
 });
+const canonicalUser = { id: userId, wallet_address: wallet };
 
 describe("canonical income history", () => {
   beforeEach(() => query.mockReset());
 
   it("scopes the exact income type to the authenticated wallet's user id", async () => {
-    query.mockResolvedValueOnce({ rows: [{ id: userId }] }).mockResolvedValueOnce({ rows: [row(1)] });
+    query.mockResolvedValueOnce({ rows: [canonicalUser] }).mockResolvedValueOnce({ rows: [row(1)] });
     const result = await getIncomeHistory(wallet, new URLSearchParams({ incomeType: "BOOSTER" }));
     expect(result.items).toHaveLength(1);
+    expect(result.items[0].wallet_address).toBe(wallet);
+    expect(String(query.mock.calls[0][0])).toContain("wallet_address");
     expect(query.mock.calls[0][1]).toEqual([wallet]);
     expect(query.mock.calls[1][1]).toEqual([userId, "BOOSTER", null, null, 21]);
     expect(String(query.mock.calls[1][0])).toContain("WHERE user_id=$1 AND income_type=$2");
   });
 
   it("uses newest-first keyset pagination with a capped page size", async () => {
-    query.mockResolvedValueOnce({ rows: [{ id: userId }] }).mockResolvedValueOnce({ rows: Array.from({ length: 21 }, (_, index) => row(index)) });
+    query.mockResolvedValueOnce({ rows: [canonicalUser] }).mockResolvedValueOnce({ rows: Array.from({ length: 21 }, (_, index) => row(index)) });
     const first = await getIncomeHistory(wallet, new URLSearchParams({ incomeType: "BOOSTER", limit: "20" }));
     expect(first.items).toHaveLength(20);
     expect(first.nextCursor).toBeTruthy();
-    query.mockResolvedValueOnce({ rows: [{ id: userId }] }).mockResolvedValueOnce({ rows: [] });
+    query.mockResolvedValueOnce({ rows: [canonicalUser] }).mockResolvedValueOnce({ rows: [] });
     await getIncomeHistory(wallet, new URLSearchParams({ incomeType: "BOOSTER", cursor: first.nextCursor! }));
     expect(query.mock.calls[3][1][2]).toBeTruthy();
     expect(query.mock.calls[3][1][3]).toBe(first.items[19].id);
