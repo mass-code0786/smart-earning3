@@ -11,7 +11,7 @@ vi.mock("@/lib/client/authenticated-fetch", () => ({
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 describe("Magic Level frontend", () => {
-  it("shows 20 levels and the real insufficient-balance state", async () => {
+  it("shows all 20 levels without the removed Magic status cards", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ user: {
@@ -22,8 +22,10 @@ describe("Magic Level frontend", () => {
       } }),
     }));
     render(<MagicPlanLive />);
-    await waitFor(() => expect(screen.getByText("INSUFFICIENT MAGIC BALANCE")).toBeInTheDocument());
-    expect(screen.getByText("Level 20")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("Level 20")).toBeInTheDocument());
+    expect(screen.queryByText("Magic Wallet Balance")).not.toBeInTheDocument();
+    expect(screen.queryByText("Daily Required Balance")).not.toBeInTheDocument();
+    expect(screen.queryByText("Distribution Status")).not.toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "View More" })).toHaveLength(20);
     expect(screen.getAllByText("0 Users")).toHaveLength(20);
   });

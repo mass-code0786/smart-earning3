@@ -3,13 +3,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import MatrixPage from "@/app/matrix/page";
 import MenuPage from "@/components/menu-page";
 import { SmartEarningBottomNav } from "@/components/smart-earning-shell";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 const navigation = vi.hoisted(() => ({ path: "/matrix", push: vi.fn() }));
 vi.mock("next/navigation", () => ({
   usePathname: () => navigation.path,
   useRouter: () => ({ push: navigation.push }),
 }));
-vi.mock("@/components/page-sections", () => ({ PageHero: ({ title }: { title: string }) => <h1>{title}</h1> }));
+vi.mock("@/components/page-sections", () => ({ CompactPageTitle: ({ title }: { title: string }) => <section data-testid="compact-title"><h1>{title}</h1></section> }));
 vi.mock("@/lib/client/authenticated-fetch", () => ({
   authenticatedWalletFetch: vi.fn(async (url: string) => new Response(JSON.stringify(
     url.endsWith("/structure") ? { levels: Array.from({ length: 20 }, (_, index) => ({ level: index + 1, userCount: 0 })) } : { items: [], nextCursor: null },
@@ -25,6 +27,12 @@ describe("Matrix default navigation", () => {
     } }), { status: 200 })));
     render(<MatrixPage/>);
     expect(await screen.findByText("MAGIC LEVEL MATRIX")).toBeInTheDocument();
+    expect(screen.getByTestId("compact-title")).toHaveTextContent("Magic Level");
+    expect(screen.queryByText("BNB Testnet")).not.toBeInTheDocument();
+    expect(screen.queryByText("20 levels with permanent 1 × 2 BFS spillover placement and verified daily USDT distribution records.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Magic Wallet Balance")).not.toBeInTheDocument();
+    expect(screen.queryByText("Daily Required Balance")).not.toBeInTheDocument();
+    expect(screen.queryByText("Distribution Status")).not.toBeInTheDocument();
     expect(screen.getByText("Level 1 to Level 20")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "View More" })).toHaveLength(20);
     expect(screen.queryByText("VERIFIED MATRIX RECORDS")).not.toBeInTheDocument();
@@ -34,6 +42,7 @@ describe("Matrix default navigation", () => {
     expect(matrixTab.className).toContain("text-[#F5FFF9]");
     fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
     expect(navigation.push).toHaveBeenCalledWith("/menu");
+    expect(readFileSync(resolve("components/page-sections.tsx"), "utf8")).toContain('className="px-4 py-3 sm:px-5 sm:py-4"');
   });
 
   it("keeps every existing matrix module reachable from the hamburger menu", async () => {

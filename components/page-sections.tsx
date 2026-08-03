@@ -9,3 +9,7 @@ export function PageHero({ title, copy }: { title: string; copy: string }) {
     </GlassCard>
   );
 }
+
+export function CompactPageTitle({ title }: { title: string }) {
+  return <GlassCard className="px-4 py-3 sm:px-5 sm:py-4"><h1 className="text-lg font-semibold sm:text-xl">{title}</h1></GlassCard>;
+}
