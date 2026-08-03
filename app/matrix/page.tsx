@@ -9,6 +9,9 @@ export default function Page() {
         <h1 className="mt-2 text-2xl font-bold">Matrix</h1>
         <p className="mt-2 text-sm text-[#8B9D94]">Choose a matrix backed by an available server endpoint.</p>
         <div className="mt-5 flex flex-wrap gap-3">
+          <Link className="rounded-xl border border-[#00F77A]/20 px-4 py-3 text-xs text-[#00F77A]" href="/magic-level">
+            Open Magic Level Matrix
+          </Link>
           <Link className="rounded-xl bg-[#00F77A] px-4 py-3 text-xs font-bold text-[#020705]" href="/matrix/x3">
             Open X3 Matrix
           </Link>

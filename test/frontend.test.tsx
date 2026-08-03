@@ -2,6 +2,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { MagicPlanLive } from "@/components/live-plan-data";
 
+vi.mock("@/lib/client/authenticated-fetch", () => ({
+  authenticatedWalletFetch: vi.fn(async (url: string) => new Response(JSON.stringify(
+    url.endsWith("/structure") ? { levels: Array.from({ length: 20 }, (_, index) => ({ level: index + 1, userCount: 0 })) } : { items: [], nextCursor: null },
+  ), { status: 200 })),
+}));
+
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 describe("Magic Level frontend", () => {
@@ -18,6 +24,7 @@ describe("Magic Level frontend", () => {
     render(<MagicPlanLive />);
     await waitFor(() => expect(screen.getByText("INSUFFICIENT MAGIC BALANCE")).toBeInTheDocument());
     expect(screen.getByText("Level 20")).toBeInTheDocument();
-    expect(screen.getAllByText("2 / 10 directs")).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "View More" })).toHaveLength(20);
+    expect(screen.getAllByText("0 Users")).toHaveLength(20);
   });
 });
