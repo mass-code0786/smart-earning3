@@ -1,6 +1,12 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DirectIncomeLive } from "@/components/live-plan-data";
+import IncomePage from "@/app/income/page";
+
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/income",
+  useRouter: () => ({ push: vi.fn() }),
+}));
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
@@ -16,6 +22,15 @@ const incomeTotals = [
 ].map(([incomeType, total]) => ({ incomeType, total }));
 
 describe("Income totals page", () => {
+  it("does not render the automatic withdrawal section", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ user: { incomeTotals } }), { status: 200 })));
+    render(<IncomePage />);
+    expect(await screen.findByText("Direct Income")).toBeInTheDocument();
+    expect(screen.queryByText("AUTOMATIC WITHDRAWAL")).not.toBeInTheDocument();
+    expect(screen.queryByText("Income Wallet payouts")).not.toBeInTheDocument();
+    expect(screen.queryByText("No automatic withdrawal records yet.")).not.toBeInTheDocument();
+  });
+
   it("renders every canonical income type from the authenticated API, including zero totals", async () => {
     const fetcher = vi.fn(async () => new Response(JSON.stringify({ user: { incomeTotals } }), {
       status: 200,
