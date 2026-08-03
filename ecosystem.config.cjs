@@ -86,5 +86,6 @@ module.exports = {
   worker("smart-earning-dividend", "scripts/dividend-worker.ts"),
   worker("smart-earning-withdrawal", "scripts/withdrawal-worker.ts"),
   worker("smart-earning-magic-funding", "scripts/magic-funding-worker.ts"),
+  worker("smart-earning-magic-distribution", "scripts/magic-distribution-worker.ts"),
   ],
 };

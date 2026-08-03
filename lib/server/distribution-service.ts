@@ -2,11 +2,24 @@ import { Contract, Interface, Wallet } from "ethers";
 import { SMART_EARNING_ABI } from "@/lib/blockchain/abi";
 import { getProvider } from "@/lib/blockchain/provider";
 import { getServerConfig } from "./config";
-import { query, transaction } from "./db";
+import { getPool, query, transaction } from "./db";
 import { ApiError } from "./http";
 import { creditGrossEarning } from "./earning-split-service";
 
 const iface = new Interface(SMART_EARNING_ABI);
+
+export async function withDistributionWorkerLock<T>(fn: () => Promise<T>) {
+  const client = await getPool().connect();
+  const locked = (await client.query<{ ok: boolean }>(
+    "SELECT pg_try_advisory_lock(hashtext('magic-distribution:worker')) ok",
+  )).rows[0].ok;
+  if (!locked) { client.release(); return null; }
+  try { return await fn(); }
+  finally {
+    await client.query("SELECT pg_advisory_unlock(hashtext('magic-distribution:worker'))");
+    client.release();
+  }
+}
 
 type Allocation = {
   source: string;
@@ -15,6 +28,10 @@ type Allocation = {
   amount: bigint;
   qualified: boolean;
 };
+
+export function hasRequiredMagicBalance(balance: string, requiredBalance: string | null) {
+  return requiredBalance !== null && BigInt(balance) >= BigInt(requiredBalance);
+}
 
 export async function runDistributionCycle() {
   const config = getServerConfig();
@@ -42,13 +59,13 @@ export async function runDistributionCycle() {
   });
   if (cycle.status === "COMPLETED") return { cycleId: cycleId.toString(), alreadyComplete: true };
 
-  const eligible = await query<{ id: string; wallet_address: string }>(
-    `SELECT u.id,u.wallet_address
+  const candidates = await query<{ id: string; wallet_address: string; balance: string; requiredBalance: string | null }>(
+    `SELECT u.id,u.wallet_address,
+       COALESCE((SELECT sum(CASE direction WHEN 'CREDIT' THEN amount_token_units ELSE -amount_token_units END)
+                 FROM magic_wallet_ledger l WHERE l.user_id=u.id),0)::text balance,
+       (SELECT amount_token_units::text FROM magic_wallet_ledger WHERE reason='REGISTRATION_CREDIT' ORDER BY created_at,id LIMIT 1) "requiredBalance"
      FROM users u
      WHERE u.status='ACTIVE'
-       AND COALESCE((SELECT sum(CASE direction WHEN 'CREDIT' THEN amount_token_units ELSE -amount_token_units END)
-                     FROM magic_wallet_ledger l WHERE l.user_id=u.id),0) >=
-           (SELECT amount_token_units FROM magic_wallet_ledger WHERE reason='REGISTRATION_CREDIT' LIMIT 1)
        AND NOT EXISTS (
          SELECT 1 FROM magic_wallet_ledger l
          WHERE l.user_id=u.id AND l.distribution_cycle_id=$1 AND l.reason='DAILY_DISTRIBUTION'
@@ -56,16 +73,18 @@ export async function runDistributionCycle() {
      ORDER BY u.created_at`,
     [cycle.id],
   );
+  const eligible = candidates.rows.filter(row => hasRequiredMagicBalance(row.balance, row.requiredBalance));
+  const skipped = candidates.rows.length - eligible.length;
   await query("UPDATE distribution_cycles SET eligible_users=$2 WHERE id=$1", [
     cycle.id,
-    eligible.rowCount,
+    eligible.length,
   ]);
 
   let processed = 0;
   let failed = 0;
   const hashes: string[] = [];
-  for (let offset = 0; offset < eligible.rows.length; offset += 50) {
-    const batch = eligible.rows.slice(offset, offset + 50);
+  for (let offset = 0; offset < eligible.length; offset += 50) {
+    const batch = eligible.slice(offset, offset + 50);
     try {
       const sent = await contract.distributeBatch(
         batch.map((row) => row.wallet_address),
@@ -105,7 +124,7 @@ export async function runDistributionCycle() {
      WHERE id=$1`,
     [cycle.id, status, processed, failed, hashes.at(-1) || null],
   );
-  return { cycleId: cycleId.toString(), processed, failed, hashes, status };
+  return { cycleId: cycleId.toString(), processed, skipped, failed, hashes, status };
 }
 
 async function recordDistribution(

@@ -21,10 +21,11 @@ All user payments enter the unified contract and are forwarded in full to the
 configured treasury in the same transaction. Withdrawal liquidity is funded
 separately by the treasury and payouts are executed only by the unified contract.
 
-Schedule `POST /api/keeper/distribute` shortly after 00:00 UTC with
-`Authorization: Bearer <KEEPER_SECRET>`. Contract and database uniqueness make
-repeated calls idempotent. Run `npm run indexer` continuously or on a short
-schedule to backfill confirmed registration events.
+Production PM2 runs `npm run magic-distribution:worker`, which checks the current
+on-chain daily cycle continuously and executes it once shortly after 00:00 UTC.
+`POST /api/keeper/distribute` remains an authenticated manual trigger; both paths
+share one worker lock and the same idempotent cycle records. Run `npm run indexer`
+continuously or on a short schedule to backfill confirmed registration events.
 # Local end-to-end environment
 
 Run the complete isolated Smart Earning stack with:

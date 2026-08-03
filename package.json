@@ -41,6 +41,7 @@
     "dividend:worker": "tsx scripts/dividend-worker.ts",
     "withdrawal:worker": "tsx scripts/withdrawal-worker.ts",
     "magic-funding:worker": "tsx scripts/magic-funding-worker.ts",
+    "magic-distribution:worker": "tsx scripts/magic-distribution-worker.ts",
     "financial:audit": "tsx scripts/financial-correction-audit.ts",
     "operations:check": "tsx scripts/operations-check.ts",
     "operations:testnet-smoke": "tsx scripts/operations-testnet-smoke.ts",

@@ -9,6 +9,7 @@ const workers = [
   "dividend-worker.ts",
   "indexer.ts",
   "magic-funding-worker.ts",
+  "magic-distribution-worker.ts",
   "withdrawal-worker.ts",
   "x3-recovery-worker.ts",
 ] as const;
