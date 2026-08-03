@@ -19,7 +19,7 @@ export function X4Page(){
     <p className="mt-3 text-sm">{error||"Loading global X4 matrices..."}</p>
     <button onClick={load} className="mt-3 flex items-center gap-2 text-xs text-[#00f77a]"><RefreshCw size={14}/>Retry</button></section>;
   return <div className="grid gap-4">
-    <section className="smart-glass-card flex min-h-12 items-center rounded-[22px] px-4 py-3"><h1 className="text-lg font-bold">C4 Global Matrix</h1></section>
+    <section className="smart-glass-card flex min-h-12 items-center rounded-[22px] px-4 py-3"><h1 className="text-lg font-bold">X4 Global Matrix</h1></section>
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{data.packages.map(item=><article className="smart-glass-card matrix-history-host min-w-0 rounded-[22px] p-5" key={item.packageId}><MatrixHistoryMenu module="X4" packageId={item.packageId} title={`Package ${item.packageId} X4 Matrix`}/>
       <div className="flex items-center justify-between gap-2"><b className="truncate">Package {item.packageId} · {money(item.priceTokenUnits)}</b>
         <span className={`rounded-full border px-2 py-1 text-[9px] ${item.active?"border-[#00f77a]/30 text-[#00f77a]":"border-white/10 text-[#8b9d94]"}`}>{item.active?"ACTIVE":"LOCKED"}</span></div>
