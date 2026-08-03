@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, ExternalLink, Lock, PackageCheck, RefreshCw, Wallet } from "lucide-react";
 import { formatTokenUnits, percentageBasisPoints } from "@/lib/client/money";
 import { purchasePackageOnTestnet, walletLogin } from "@/lib/client/wallet";
+import { presentBlockchainError } from "@/lib/client/blockchain-error";
 
 type PackageItem = {
   packageId: number;
@@ -75,7 +76,7 @@ export function PackagePage({ compact = false }: { compact?: boolean }) {
       setStatus(`Package ${item.packageId} confirmed`);
       await load();
     } catch (reason) {
-      setStatus(reason instanceof Error ? reason.message : "Package purchase failed");
+      setStatus(presentBlockchainError("Package purchase failed", reason, "Package purchase failed. Please try again."));
     } finally {
       submissionLock.current = false;
       setBusy(0);
@@ -126,7 +127,7 @@ export function PackagePage({ compact = false }: { compact?: boolean }) {
           </button>
         </article>)}
       </div>
-      {status && <section className="smart-glass-card rounded-[18px] p-4 text-xs"><p>{status}</p>{hash && <a href={`https://testnet.bscscan.com/tx/${hash}`} target="_blank" rel="noreferrer" className="mt-2 flex items-center gap-2 break-all text-[#00f77a]"><ExternalLink size={13} />{hash}</a>}</section>}
+      {status && <section className="smart-glass-card min-w-0 max-w-full overflow-hidden rounded-[18px] p-4 text-xs"><p role="status" className="max-h-28 overflow-y-auto [overflow-wrap:anywhere] [word-break:break-word]">{status}</p>{hash && <a href={`https://testnet.bscscan.com/tx/${hash}`} target="_blank" rel="noreferrer" className="mt-2 flex min-w-0 max-w-full items-center gap-2 break-all text-[#00f77a]"><ExternalLink className="shrink-0" size={13} /><span className="min-w-0 break-all">{hash}</span></a>}</section>}
       <p className="text-[10px] text-[#8b9d94]">The unified contract records the 12.5% Magic accounting allocation and forwards the full package payment to treasury atomically.</p>
     </div>
   );

@@ -23,7 +23,7 @@ function responses(available="100000000"){
   return{ok:true,json:async()=>dashboard};
  });
 }
-afterEach(()=>{cleanup();vi.unstubAllGlobals()});
+afterEach(()=>{cleanup();vi.unstubAllGlobals();vi.restoreAllMocks()});
 beforeEach(()=>{vi.clearAllMocks();topUp.mockResolvedValue({topUpId:"1",duplicate:false})});
 
 describe("custom Booster top-up amounts",()=>{
@@ -57,9 +57,10 @@ describe("custom Booster top-up amounts",()=>{
   expect(topUp).not.toHaveBeenCalled();
  });
  it.each(["User rejected approval","User rejected Booster top-up transaction"])("surfaces wallet rejection: %s",async(message)=>{
+  vi.spyOn(console,"error").mockImplementation(()=>undefined);
   vi.stubGlobal("fetch",responses());topUp.mockRejectedValueOnce(new Error(message));render(<BoosterPage/>);await screen.findByText("Booster Wallet top-up");
   fireEvent.click(screen.getByRole("button",{name:"$2.50"}));fireEvent.click(screen.getByRole("button",{name:"Add Funds"}));
   fireEvent.click(await screen.findByRole("button",{name:"Confirm"}));
-  expect(await screen.findByText(message)).toBeInTheDocument();
+  expect(await screen.findByText("Transaction was rejected in your wallet.")).toBeInTheDocument();
  });
 });

@@ -4,6 +4,7 @@ import { FormEvent, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2 } from "lucide-react";
 import { RegistrationFlowError, registerOnTestnet, walletLogin } from "@/lib/client/wallet";
+import { presentBlockchainError } from "@/lib/client/blockchain-error";
 
 export function RegistrationForm({
   registrationEnabled,
@@ -65,7 +66,7 @@ export function RegistrationForm({
       setStatus("");
       setError(reason instanceof RegistrationFlowError
         ? `${reason.message} (${reason.code})`
-        : reason instanceof Error ? reason.message : "Registration failed");
+        : presentBlockchainError("Registration transaction failed", reason, "Registration failed. Please try again."));
     } finally {
       locked.current = false;
       setBusy(false);
@@ -98,7 +99,7 @@ export function RegistrationForm({
       )}
       {status && <p role="status" className="text-xs leading-5 text-white/70">{status}</p>}
       {error && (
-        <p role="alert" className="rounded-lg border border-[#ff7f8a]/20 bg-black/25 px-3 py-2 text-xs leading-5 text-[#ffadb4]">
+        <p role="alert" className="max-h-28 min-w-0 max-w-full overflow-y-auto rounded-lg border border-[#ff7f8a]/20 bg-black/25 px-3 py-2 text-xs leading-5 text-[#ffadb4] [overflow-wrap:anywhere] [word-break:break-word]">
           {error}
         </p>
       )}

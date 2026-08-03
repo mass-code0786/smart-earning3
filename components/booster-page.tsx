@@ -6,6 +6,7 @@ import{boosterAmountTokenUnits,normalizeBoosterAmountInput}from"@/lib/client/boo
 import{BoosterCountdown,type BoosterEligibility}from"@/components/booster-countdown";
 import{formatTokenUnits}from"@/lib/client/money";
 import{MatrixHistoryMenu}from"@/components/matrix-history-menu";
+import{presentBlockchainError}from"@/lib/client/blockchain-error";
 type Entry={id:string;cycle_number:number;status:string;positions:{slotNumber:number;wallet:string}[];created_at:string;completed_at:string|null};
 type TopUp={id:string;amount:string;source_reference:string|null;tx_hash:string;status:string;sender_address:string;created_at:string;previous_balance:string|null;new_balance:string|null};
 type Data={balance:string;package_credits:string;manual_top_ups:string;refunds:string;deductions:string;nextEntryAt:string|null;
@@ -40,7 +41,7 @@ export function BoosterPage(){
    const exactAmount=BigInt(preparation.amountTokenUnits);
    await topUpBoosterWalletOnTestnet(exactAmount,(message,hash)=>{setStatus(message);if(hash)setTxHash(hash)});
    setStatus("Booster Wallet top-up confirmed");setPreparation(null);setAmount("");await load();
-  }catch(reason){setStatus(reason instanceof Error?reason.message:"Booster Wallet top-up failed")}finally{locked.current=false;setBusy(false)}
+  }catch(reason){setStatus(presentBlockchainError("Booster Wallet top-up failed",reason,"Booster Wallet top-up failed. Please try again."))}finally{locked.current=false;setBusy(false)}
  }
  if(!data)return <section className="smart-glass-card rounded-[22px] p-5">{error||"Loading Booster..."}</section>;
  const cards=[["Booster Wallet balance",money(data.booster_wallet_balance)],["Active entries",data.active_entries],["Completed entries",data.completed_entries],["Total entries",data.total_entries],["Pending positions",data.pending_positions],["Total Booster income",money(data.total_income)],["C-position refunds",money(data.refunds)]];
@@ -55,7 +56,7 @@ export function BoosterPage(){
    {amountError&&<p id="booster-amount-error" role="alert" className="mt-3 text-xs text-[#e9ad45]">{amountError}</p>}
    <p className="mt-3 text-[10px] text-[#8b9d94]">Gas is paid separately in tBNB/BNB. No top-up runs automatically.</p>
    <button type="button" disabled={busy} onClick={()=>void prepare()} className="mt-3 w-full rounded-xl bg-[#00f77a] p-3 text-xs font-bold text-black disabled:opacity-50">{busy?"Checking…":"Add Funds"}</button>
-   {status&&<p role="status" className="mt-3 break-words text-xs text-[#8b9d94]">{status}</p>}{txHash&&<p className="mt-1 break-all text-[10px] text-[#8b9d94]">Transaction: {txHash}</p>}
+   {status&&<p role="status" className="mt-3 max-h-28 min-w-0 max-w-full overflow-y-auto [overflow-wrap:anywhere] [word-break:break-word] text-xs text-[#8b9d94]">{status}</p>}{txHash&&<p className="mt-1 min-w-0 max-w-full break-all text-[10px] text-[#8b9d94]">Transaction: {txHash}</p>}
   </section>
   {preparation&&<div className="booster-confirm-backdrop" role="dialog" aria-modal="true" aria-label="Confirm Booster top-up"><section className="smart-glass-card booster-confirm-card"><p className="dash-label">CONFIRM TOP-UP</p><h2>Review Booster Wallet funding</h2><div><span>Top-up amount<b>{money(preparation.amountTokenUnits)} USDT</b></span><span>Current balance<b>{money(data.booster_wallet_balance)} USDT</b></span><span>Expected new balance<b>{money(expected!)} USDT</b></span><span>Network<b>{preparation.network}</b></span><span>Gas<b>Paid separately in {preparation.gasCurrency}</b></span></div><div className="grid grid-cols-2 gap-2"><button type="button" disabled={busy} onClick={()=>setPreparation(null)}>Cancel</button><button type="button" disabled={busy} onClick={()=>void confirm()}>{busy?"Processing…":"Confirm"}</button></div></section></div>}
   <div className="grid gap-3 md:grid-cols-2">{data.entries.map(entry=><article className="smart-glass-card matrix-history-host rounded-[22px] p-5" key={entry.id}><MatrixHistoryMenu module="BOOSTER" entryId={entry.id} title={`Booster entry #${entry.cycle_number}`}/><div className="flex justify-between"><b>Booster entry #{entry.cycle_number}</b><span className="text-[10px] text-[#00f77a]">{entry.status}</span></div><div className="mt-4 grid grid-cols-3 gap-2">{[1,2,3].map(slot=>{const position=entry.positions.find(value=>value.slotNumber===slot);return <div className={`min-w-0 rounded-xl border p-3 text-center text-[9px] ${position?"border-[#00f77a]/30 bg-[#00f77a]/5":"border-dashed border-white/10"}`} key={slot}><b className="block">{["A","B","C"][slot-1]}</b><span className="block truncate text-[#8b9d94]">{position?.wallet||"Empty"}</span></div>})}</div></article>)}</div>
