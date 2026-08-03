@@ -13,6 +13,13 @@ type TeamData = { referralIdentifier: string };
 type MenuRow = { label: string; href: string; icon: typeof History };
 
 const sections: { title: string; rows: MenuRow[] }[] = [
+  { title: "MATRIX", rows: [
+    { label: "Magic Level Matrix", href: "/matrix", icon: Sparkles },
+    { label: "X3 Matrix", href: "/matrix/x3", icon: GitBranch },
+    { label: "X4 Matrix", href: "/matrix/x4", icon: GitBranch },
+    { label: "Booster", href: "/booster", icon: Zap },
+    { label: "Global Autopool", href: "/autopool", icon: Layers3 },
+  ] },
   { title: "BOOSTER", rows: [
     { label: "Booster Wallet Topup", href: "/booster", icon: Zap },
     { label: "Booster History", href: "/history?category=BOOSTER", icon: FileClock },
