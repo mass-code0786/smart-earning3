@@ -52,8 +52,9 @@ export function MagicLevelStructure() {
       <button type="button" onClick={() => show(item.level)}>View More</button>
     </article>)}</div>
     {selected !== null && <CenteredModal open onClose={() => setSelected(null)} eyebrow="MAGIC LEVEL USERS" title={`Level ${selected}`} label={`Magic Level ${selected} users`} closeLabel="Close Magic Level users">
-      <div className="magic-level-users">{users.map(user => <article key={user.id}>
-        <dl><div><dt>Wallet</dt><dd>{shortWallet(user.wallet)} <button type="button" aria-label={`Copy wallet ${user.wallet}`} onClick={() => void navigator.clipboard?.writeText(user.wallet)}><Copy size={12}/></button></dd></div><div><dt>Position</dt><dd>{user.position}</dd></div><div><dt>Date &amp; Time</dt><dd><time dateTime={user.placedAt}>{new Date(user.placedAt).toLocaleString()}</time></dd></div></dl>
+      <div className="magic-level-users">{users.map(user => <article className="magic-level-user-card" key={user.id}>
+        <div><span>{shortWallet(user.wallet)} <button type="button" aria-label={`Copy wallet ${user.wallet}`} onClick={() => void navigator.clipboard?.writeText(user.wallet)}><Copy size={12}/></button></span><b aria-label={`Position ${user.position}`}>{user.position}</b></div>
+        <time dateTime={user.placedAt}>{new Date(user.placedAt).toLocaleString()}</time>
       </article>)}
       {!loading&&!error&&!users.length&&<div className="magic-level-users-empty">No users found in Level {selected}.</div>}
       {loading&&!users.length&&<div className="magic-level-users-empty">Loading Level {selected} users…</div>}

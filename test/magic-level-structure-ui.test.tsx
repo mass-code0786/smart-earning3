@@ -31,11 +31,9 @@ describe("Magic Level structure UI", () => {
     expect(document.body.style.overflow).toBe("hidden");
     expect(within(dialog).getByRole("heading", { name: "Level 1" })).toBeInTheDocument();
     expect(within(dialog).getByText("0xabcd…abcd")).toBeInTheDocument();
-    expect(within(dialog).getByText("0")).toBeInTheDocument();
-    expect(within(dialog).getByText("Wallet")).toBeInTheDocument();
-    expect(within(dialog).getByText("Position")).toBeInTheDocument();
-    expect(within(dialog).getByText("Date & Time")).toBeInTheDocument();
-    for (const hidden of ["Member ID", "Level", "Position / slot", "Placement ID", "Registration reference", "Transaction", user.memberId, user.id, user.registrationId, user.transactionHash]) {
+    expect(within(dialog).getByLabelText("Position 0")).toHaveTextContent("0");
+    expect(dialog.querySelectorAll(".magic-level-user-card")).toHaveLength(1);
+    for (const hidden of ["Wallet", "Position", "Date & Time", "Member ID", "Level", "Position / slot", "Placement ID", "Registration reference", "Transaction", user.memberId, user.id, user.registrationId, user.transactionHash]) {
       expect(within(dialog).queryByText(hidden!)).not.toBeInTheDocument();
     }
     expect(authenticatedWalletFetch).toHaveBeenCalledWith("/api/matrix/magic-level/users?level=1&limit=20");
@@ -59,5 +57,6 @@ describe("Magic Level structure UI", () => {
     await waitFor(() => expect(authenticatedWalletFetch).toHaveBeenCalledWith("/api/matrix/magic-level/users?level=1&limit=20&cursor=next"));
     expect(await screen.findByText("0x1234…5678")).toBeInTheDocument();
     expect(screen.getByText("0xabcd…abcd")).toBeInTheDocument();
+    expect(document.querySelectorAll(".magic-level-user-card")).toHaveLength(2);
   });
 });
