@@ -52,6 +52,17 @@ describe("matrix placement history service", () => {
     expect(combined.map(item => item.id)).toEqual(Array.from({ length: 25 }, (_, index) => row(index).id));
   });
 
+  it("returns derived Magic positions without exposing the raw child slot", async () => {
+    query.mockResolvedValueOnce({ rows: [{ id: userId }] }).mockResolvedValueOnce({ rows: [{ ...row(1, "MAGIC_LEVEL"), position: 3, childSlot: null }] });
+    const result = await getMatrixHistory(wallet, new URLSearchParams({ module: "MAGIC_LEVEL" }));
+    const sql = String(query.mock.calls[1][0]);
+    expect(sql).toContain("(p.position+1)::int visible_position");
+    expect(sql).toContain("parent.visible_position*2+child.position+1");
+    expect(sql).toContain('p.visible_position position');
+    expect(sql).toContain('NULL::int "childSlot"');
+    expect(result.items[0]).toMatchObject({ position: 3, childSlot: null });
+  });
+
   it("rejects malformed cursors before database access", async () => {
     await expect(getMatrixHistory(wallet, new URLSearchParams({ module: "MAGIC_LEVEL", cursor: "not-a-cursor" }))).rejects.toMatchObject({ code: "INVALID_CURSOR" });
     expect(query).not.toHaveBeenCalled();

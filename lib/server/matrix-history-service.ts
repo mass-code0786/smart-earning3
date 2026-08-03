@@ -84,13 +84,16 @@ export async function getMatrixHistory(wallet: string, parameters: URLSearchPara
   if (module === "MAGIC_LEVEL") {
     result = await query<MatrixHistoryItem>(
       `WITH RECURSIVE placements AS (
-         SELECT p.*,1::int matrix_level FROM matrix_placements p WHERE p.parent_user_id=$1
+         SELECT p.*,1::int matrix_level,(p.position+1)::int visible_position
+         FROM matrix_placements p WHERE p.parent_user_id=$1
          UNION ALL
-         SELECT child.*,parent.matrix_level+1 FROM placements parent
+         SELECT child.*,parent.matrix_level+1,
+           (parent.visible_position*2+child.position+1)::int visible_position
+         FROM placements parent
          JOIN matrix_placements child ON child.parent_user_id=parent.user_id
        )
        SELECT p.id,p.user_id "memberId",u.wallet_address wallet,'MAGIC_LEVEL' module,
-         p.matrix_level level,p.position, NULL::int "levelPosition",NULL::int "childSlot",
+         p.matrix_level level,p.visible_position position,NULL::int "levelPosition",NULL::int "childSlot",
          NULL::int "packageId",r.amount_token_units::text amount,
          COALESCE(p.transaction_hash,r.tx_hash) "transactionHash",p.registration_id::text reference,p.created_at "placedAt"
        FROM placements p JOIN users u ON u.id=p.user_id LEFT JOIN registrations r ON r.id=p.registration_id

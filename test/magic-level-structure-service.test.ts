@@ -30,6 +30,8 @@ describe("Magic Level structure service", () => {
     expect(sql).toContain("NOT child.user_id=ANY(parent.traversal_path)");
     expect(sql).toContain("count(DISTINCT user_id)");
     expect(sql).toContain("generate_series(1,20)");
+    expect(sql).toContain("(p.position+1)::int visible_position");
+    expect(sql).toContain("parent.visible_position*2+child.position+1");
   });
 
   it("returns only the selected relative level and uses stable keyset pagination", async () => {
@@ -42,6 +44,16 @@ describe("Magic Level structure service", () => {
     query.mockResolvedValueOnce({ rows: [{ id: ownerId }] }).mockResolvedValueOnce({ rows: [row(20)] });
     await getMagicLevelUsers(wallet, new URLSearchParams({ level: "2", cursor: first.nextCursor! }));
     expect(query.mock.calls[3][1]).toEqual([ownerId, 2, first.items[19].placedAt.toISOString(), first.items[19].id, 21]);
+  });
+
+  it("derives owner-relative binary-tree positions for the first three levels", () => {
+    const children = (parents: number[]) => parents.flatMap(parent => [parent * 2 + 1, parent * 2 + 2]);
+    const level1 = [0 + 1, 1 + 1];
+    const level2 = children(level1);
+    const level3 = children(level2);
+    expect(level1).toEqual([1, 2]);
+    expect(level2).toEqual([3, 4, 5, 6]);
+    expect(level3).toEqual([7, 8, 9, 10, 11, 12, 13, 14]);
   });
 
   it.each(["0", "21", "text", "1.5"])("rejects invalid level %s before database access", async level => {

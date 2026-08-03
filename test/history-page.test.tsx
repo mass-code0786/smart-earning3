@@ -4,13 +4,13 @@ import HistoryPage from "@/components/history-page";
 afterEach(()=>{cleanup();vi.unstubAllGlobals()});
 
 describe("History Center UI",()=>{
- it("requests and renders canonical Magic Level placement history, including position zero",async()=>{
+ it("requests and renders the owner-relative Magic Level placement position",async()=>{
   const placement={
    id:"placement-1",type:"MAGIC_LEVEL_PLACED",category:"MAGIC_LEVEL",amount:null,currency:"USDT",
    sourceWallet:"0xabcdefabcdefabcdefabcdefabcdefabcdefabcd",packageAmount:null,packageId:null,
    matrixType:"MAGIC_LEVEL",cycle:null,recycleCount:null,status:"CONFIRMED",txHash:`0x${"cd".repeat(32)}`,
    createdAt:"2026-07-28T10:00:00Z",description:"Magic Level placement",incomeType:null,level:2,
-   position:0,metadata:{memberId:"SE100001",reference:"registration:7"},
+   position:3,metadata:{memberId:"SE100001",reference:"registration:7"},
   };
   const fetchMock=vi.fn((input:string)=>Promise.resolve({
    ok:true,json:async()=>String(input).includes("category=MAGIC_LEVEL")?{items:[placement],nextCursor:null}:{items:[],nextCursor:null},
@@ -21,7 +21,8 @@ describe("History Center UI",()=>{
   expect(fetchMock.mock.calls.some(([input])=>String(input).includes("category=MAGIC_LEVEL"))).toBe(true);
   expect(screen.getByText("SE100001")).toBeInTheDocument();
   expect(screen.getByText("registration:7")).toBeInTheDocument();
-  expect(screen.getByText("0")).toBeInTheDocument();
+  expect(screen.getByText("3")).toBeInTheDocument();
+  expect(screen.queryByText("0")).not.toBeInTheDocument();
   expect(screen.getByLabelText("Copy 0xabcdefabcdefabcdefabcdefabcdefabcdefabcd")).toBeInTheDocument();
  });
  it("shows the empty state when canonical Magic Level placements are absent",async()=>{

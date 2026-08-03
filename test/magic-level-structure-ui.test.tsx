@@ -9,7 +9,7 @@ afterEach(() => { cleanup(); authenticatedWalletFetch.mockReset(); });
 const levels = Array.from({ length: 20 }, (_, index) => ({ level: index + 1, userCount: index === 0 ? 2 : 0 }));
 const user = {
   id: "10000000-0000-0000-0000-000000000001", memberId: "20000000-0000-0000-0000-000000000001",
-  wallet: "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd", level: 1, position: 0,
+  wallet: "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd", level: 1, position: 1,
   registrationId: "30000000-0000-0000-0000-000000000001", transactionHash: `0x${"ab".repeat(32)}`,
   placedAt: "2026-08-03T10:00:00.000Z",
 };
@@ -31,7 +31,8 @@ describe("Magic Level structure UI", () => {
     expect(document.body.style.overflow).toBe("hidden");
     expect(within(dialog).getByRole("heading", { name: "Level 1" })).toBeInTheDocument();
     expect(within(dialog).getByText("0xabcd…abcd")).toBeInTheDocument();
-    expect(within(dialog).getByLabelText("Position 0")).toHaveTextContent("0");
+    expect(within(dialog).getByLabelText("Position 1")).toHaveTextContent("1");
+    expect(within(dialog).queryByLabelText("Position 0")).not.toBeInTheDocument();
     expect(dialog.querySelectorAll(".magic-level-user-card")).toHaveLength(1);
     for (const hidden of ["Wallet", "Position", "Date & Time", "Member ID", "Level", "Position / slot", "Placement ID", "Registration reference", "Transaction", user.memberId, user.id, user.registrationId, user.transactionHash]) {
       expect(within(dialog).queryByText(hidden!)).not.toBeInTheDocument();

@@ -46,10 +46,12 @@ function cursorFrom(value: string | null): Cursor | null {
 }
 
 const descendantsCte = `WITH RECURSIVE descendants AS (
-  SELECT p.*,1::int relative_level,ARRAY[$1::uuid,p.user_id]::uuid[] traversal_path
+  SELECT p.*,1::int relative_level,ARRAY[$1::uuid,p.user_id]::uuid[] traversal_path,
+    (p.position+1)::int visible_position
   FROM matrix_placements p WHERE p.parent_user_id=$1
   UNION ALL
-  SELECT child.*,parent.relative_level+1,parent.traversal_path||child.user_id
+  SELECT child.*,parent.relative_level+1,parent.traversal_path||child.user_id,
+    (parent.visible_position*2+child.position+1)::int visible_position
   FROM descendants parent
   JOIN matrix_placements child ON child.parent_user_id=parent.user_id
   WHERE parent.relative_level<20 AND NOT child.user_id=ANY(parent.traversal_path)
@@ -80,7 +82,7 @@ export async function getMagicLevelUsers(wallet: string, parameters: URLSearchPa
   const result = await query<MagicLevelUser>(
     `${descendantsCte}
      SELECT p.id,p.user_id "memberId",u.wallet_address wallet,p.relative_level level,
-       p.position,p.registration_id "registrationId",p.transaction_hash "transactionHash",p.created_at "placedAt"
+       p.visible_position position,p.registration_id "registrationId",p.transaction_hash "transactionHash",p.created_at "placedAt"
      FROM descendants p JOIN users u ON u.id=p.user_id
      WHERE p.relative_level=$2
        AND ($3::timestamptz IS NULL OR (p.created_at,p.id)<($3::timestamptz,$4::uuid))
