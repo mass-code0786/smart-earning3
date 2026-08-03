@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Menu, X } from "lucide-react";
 import { formatTokenUnits } from "@/lib/client/money";
+import { authenticatedWalletFetch } from "@/lib/client/authenticated-fetch";
 
 type Module = "MAGIC_LEVEL" | "X3" | "X4" | "BOOSTER" | "AUTOPOOL";
 type Item = {
@@ -48,7 +49,7 @@ export function MatrixHistoryMenu({ module, packageId, entryId, title }: {
       if (packageId !== undefined) parameters.set("packageId", String(packageId));
       if (entryId) parameters.set("entryId", entryId);
       if (append && cursor) parameters.set("cursor", cursor);
-      const response = await fetch(`/api/matrix/history?${parameters}`, { cache: "no-store", credentials: "same-origin" });
+      const response = await authenticatedWalletFetch(`/api/matrix/history?${parameters}`);
       const body = await response.json();
       if (!response.ok) throw new Error(body.error || "Matrix history unavailable");
       setItems(current => append ? [...current, ...body.items] : body.items);

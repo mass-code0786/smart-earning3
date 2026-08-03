@@ -4,6 +4,19 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { MatrixHistoryMenu } from "@/components/matrix-history-menu";
 
+const walletState = vi.hoisted(() => ({ connectedWallet: "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd" }));
+vi.mock("@/lib/client/wallet", () => ({
+  getInjectedProvider: () => ({ request: vi.fn(async () => [walletState.connectedWallet.toUpperCase().replace("0X", "0x")]) }),
+}));
+
+function expectAuthenticatedRequest(fetcher: ReturnType<typeof vi.fn>, url: string) {
+  expect(fetcher).toHaveBeenCalledWith(url, expect.objectContaining({
+    cache: "no-store", credentials: "same-origin", headers: expect.any(Headers),
+  }));
+  const call = fetcher.mock.calls.find(([input]) => input === url);
+  expect(new Headers(call?.[1]?.headers).get("x-connected-wallet")).toBe(walletState.connectedWallet);
+}
+
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 const item = (id: string, module: string) => ({
@@ -27,7 +40,7 @@ describe("matrix history menu", () => {
     render(<div className="matrix-history-host"><MatrixHistoryMenu module={module} {...identifiers} title={title}/></div>);
     fireEvent.click(screen.getByRole("button", { name: `Open ${title} history` }));
     expect(await screen.findByRole("dialog", { name: `${title} history` })).toBeInTheDocument();
-    expect(fetcher).toHaveBeenCalledWith(`/api/matrix/history?${query}`, { cache: "no-store", credentials: "same-origin" });
+    expectAuthenticatedRequest(fetcher, `/api/matrix/history?${query}`);
     expect(screen.getByText("0xabcd…abcd")).toBeInTheDocument();
     expect(screen.getByText("40000000-0000-0000-0000-000000000001")).toBeInTheDocument();
     expect(screen.getByText("4")).toBeInTheDocument();
@@ -47,10 +60,8 @@ describe("matrix history menu", () => {
     render(<div className="matrix-history-host"><MatrixHistoryMenu module="X4" packageId={3} title="Package 3 X4 Matrix"/></div>);
     fireEvent.click(screen.getByRole("button", { name: "Open Package 3 X4 Matrix history" }));
     fireEvent.click(await screen.findByRole("button", { name: "Load more" }));
-    await waitFor(() => expect(fetcher).toHaveBeenLastCalledWith(
-      "/api/matrix/history?module=X4&limit=20&packageId=3&cursor=next-page",
-      { cache: "no-store", credentials: "same-origin" },
-    ));
+    await waitFor(() => expectAuthenticatedRequest(fetcher,
+      "/api/matrix/history?module=X4&limit=20&packageId=3&cursor=next-page"));
     expect(screen.getAllByText("0xabcd…abcd")).toHaveLength(2);
   });
 
@@ -77,7 +88,8 @@ describe("matrix history menu", () => {
   });
 
   it("closes from the backdrop and Escape key", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ items: [], nextCursor: null }), { status: 200 })));
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({ items: [], nextCursor: null }), { status: 200 }));
+    vi.stubGlobal("fetch", fetcher);
     render(<div className="matrix-history-host"><MatrixHistoryMenu module="MAGIC_LEVEL"/></div>);
     const open = () => fireEvent.click(screen.getByRole("button", { name: "Open Magic Level Matrix history" }));
     open();
@@ -86,6 +98,7 @@ describe("matrix history menu", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     open();
     dialog = await screen.findByRole("dialog");
+    expect(fetcher).toHaveBeenCalledTimes(2);
     fireEvent.keyDown(document, { key: "Escape" });
     expect(dialog).not.toBeInTheDocument();
   });
