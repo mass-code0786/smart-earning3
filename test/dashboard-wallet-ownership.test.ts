@@ -7,7 +7,7 @@ vi.mock("@/lib/server/db", () => ({ query }));
 const sponsor = "0x00000000000000000000000000000000000000aa";
 const referral = "0x00000000000000000000000000000000000000bb";
 
-function installDashboardFixture() {
+function installDashboardFixture(incomeRows: { income_type: string; total: string }[] = []) {
   query.mockImplementation(async (sqlInput: string, values: unknown[]) => {
     const sql = String(sqlInput);
     if (sql.includes("FROM users u") && sql.includes("LEFT JOIN referral_relations")) {
@@ -48,6 +48,7 @@ function installDashboardFixture() {
       }] };
     }
     if (sql.includes("FROM earning_split_events")) return { rows: [] };
+    if (sql.includes("FROM income_credit_ledger")) return { rows: incomeRows };
     throw new Error(`Unexpected dashboard query: ${sql}`);
   });
 }
@@ -102,5 +103,23 @@ describe("dashboard wallet ownership", () => {
     expect(teamCall?.[1]).toEqual(["referral-id"]);
     expect(String(teamCall?.[0])).toContain("WHERE rr.sponsor_user_id=$1");
     expect(String(teamCall?.[0])).toContain("WHERE direct.sponsor_user_id=$1");
+  });
+
+  it("returns every canonical income total from credited financial ledger records", async () => {
+    query.mockReset();
+    installDashboardFixture([
+      { income_type: "DIRECT_INCOME", total: "1250000" },
+      { income_type: "X4_GLOBAL", total: "3000000" },
+    ]);
+    const { userDashboard } = await import("@/lib/server/dashboard-service");
+    const dashboard = await userDashboard(sponsor);
+
+    expect(dashboard?.incomeTotals).toHaveLength(8);
+    expect(dashboard?.incomeTotals).toContainEqual({ incomeType: "DIRECT_INCOME", total: "1250000" });
+    expect(dashboard?.incomeTotals).toContainEqual({ incomeType: "X4_GLOBAL", total: "3000000" });
+    expect(dashboard?.incomeTotals).toContainEqual({ incomeType: "BOOSTER", total: "0" });
+    const totalsCall = query.mock.calls.find(([sql]) => String(sql).includes("FROM income_credit_ledger"));
+    expect(String(totalsCall?.[0])).toContain("sum(credited_amount)");
+    expect(totalsCall?.[1]?.[0]).toBe("sponsor-id");
   });
 });

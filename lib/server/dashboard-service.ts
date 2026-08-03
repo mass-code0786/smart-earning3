@@ -1,5 +1,6 @@
 import { normalizeWallet } from "./auth";
 import { query } from "./db";
+import { SPLIT_INCOME_TYPES } from "./earning-split-service";
 
 export async function userDashboard(wallet: string) {
   const authenticatedWallet = normalizeWallet(wallet);
@@ -22,7 +23,7 @@ export async function userDashboard(wallet: string) {
   const user = userResult.rows[0];
   if (!user) return null;
 
-  const [team, magic, direct, today, histories, levels, financial, earningHistory] = await Promise.all([
+  const [team, magic, direct, today, histories, levels, financial, earningHistory, incomeTotalRows] = await Promise.all([
     query<{
       direct_members: number;
       total_team: number;
@@ -97,7 +98,15 @@ export async function userDashboard(wallet: string) {
     query(`SELECT id,income_type,source_reference,gross_calculated::text,capped_gross_credit::text,
       capped_excess::text,magic_amount::text,income_amount::text,created_at
       FROM earning_split_events WHERE user_id=$1 ORDER BY created_at DESC LIMIT 100`, [user.id]),
+    query<{ income_type: string; total: string }>(
+      `SELECT income_type,COALESCE(sum(credited_amount),0)::text total
+       FROM income_credit_ledger WHERE user_id=$1 AND income_type=ANY($2::varchar[])
+       GROUP BY income_type`,
+      [user.id, [...SPLIT_INCOME_TYPES]],
+    ),
   ]);
+
+  const totalsByType = new Map(incomeTotalRows.rows.map(row => [row.income_type, row.total]));
 
   return {
     id: user.id,
@@ -120,6 +129,10 @@ export async function userDashboard(wallet: string) {
     magicIncomeHistory: levels.rows,
     financial: financial.rows[0],
     earningHistory: earningHistory.rows,
+    incomeTotals: SPLIT_INCOME_TYPES.map(incomeType => ({
+      incomeType,
+      total: totalsByType.get(incomeType) || "0",
+    })),
   };
 }
 
