@@ -5,6 +5,7 @@ import { getServerConfig } from "./config";
 import { getPool, query, transaction } from "./db";
 import { ApiError } from "./http";
 import { creditGrossEarning } from "./earning-split-service";
+import { getMagicDistributionConfig, isMagicDistributionDue } from "./magic-distribution-config";
 
 const iface = new Interface(SMART_EARNING_ABI);
 
@@ -31,6 +32,23 @@ type Allocation = {
 
 export function hasRequiredMagicBalance(balance: string, requiredBalance: string | null) {
   return requiredBalance !== null && BigInt(balance) >= BigInt(requiredBalance);
+}
+
+export async function runMagicDistributionScheduler(
+  now = new Date(),
+  run: typeof runDistributionCycle = runDistributionCycle,
+) {
+  const config = getMagicDistributionConfig();
+  if (!isMagicDistributionDue(now, config)) {
+    return {
+      status: "SCHEDULE_WAIT" as const,
+      processed: 0,
+      failed: 0,
+      scheduledHour: config.hour,
+      scheduledMinute: config.minute,
+    };
+  }
+  return run();
 }
 
 export async function runDistributionCycle() {

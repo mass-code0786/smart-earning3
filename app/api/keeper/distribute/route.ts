@@ -1,7 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { getServerConfig } from "@/lib/server/config";
-import { runDistributionCycle, withDistributionWorkerLock } from "@/lib/server/distribution-service";
+import { runMagicDistributionScheduler, withDistributionWorkerLock } from "@/lib/server/distribution-service";
 import { apiError, ApiError } from "@/lib/server/http";
 
 export async function POST(request: NextRequest) {
@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
     if (a.length !== b.length || !timingSafeEqual(a, b)) {
       throw new ApiError(401, "Keeper authorization required", "KEEPER_AUTH");
     }
-    const result = await withDistributionWorkerLock(() => runDistributionCycle());
+    const result = await withDistributionWorkerLock(() => runMagicDistributionScheduler());
     return NextResponse.json(result || { status: "BUSY", processed: 0, failed: 0 });
   } catch (error) {
     return apiError(error);

@@ -22,7 +22,9 @@ configured treasury in the same transaction. Withdrawal liquidity is funded
 separately by the treasury and payouts are executed only by the unified contract.
 
 Production PM2 runs `npm run magic-distribution:worker`, which checks the current
-on-chain daily cycle continuously and executes it once shortly after 00:00 UTC.
+on-chain daily cycle every 60 seconds and executes it once at or after 06:30 UTC
+(12:00 PM IST). Daily Dividend settles at or after 18:00 UTC (11:30 PM IST).
+Both schedules use UTC internally and do not depend on the server timezone.
 `POST /api/keeper/distribute` remains an authenticated manual trigger; both paths
 share one worker lock and the same idempotent cycle records. Run `npm run indexer`
 continuously or on a short schedule to backfill confirmed registration events.

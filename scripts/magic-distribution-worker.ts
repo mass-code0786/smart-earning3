@@ -1,6 +1,6 @@
 import { loadAuthoritativeEnvironment } from "../lib/server/production-environment";
 import { getPool } from "../lib/server/db";
-import { runDistributionCycle, withDistributionWorkerLock } from "../lib/server/distribution-service";
+import { runMagicDistributionScheduler, withDistributionWorkerLock } from "../lib/server/distribution-service";
 import { isModulePaused } from "../lib/server/module-control-service";
 import { operationsInstance, recordHeartbeat } from "../lib/server/operations-service";
 
@@ -16,7 +16,7 @@ async function run() {
     return recordHeartbeat({ workerName: name, instanceId: instance, status: "PAUSED", intervalSeconds: seconds });
   }
   try {
-    const result = await withDistributionWorkerLock(() => runDistributionCycle());
+    const result = await withDistributionWorkerLock(() => runMagicDistributionScheduler());
     const processed = result && "processed" in result ? Number(result.processed || 0) : 0;
     const failed = result && "failed" in result ? Number(result.failed || 0) : 0;
     await recordHeartbeat({ workerName: name, instanceId: instance, status: failed ? "DEGRADED" : "IDLE", intervalSeconds: seconds, processed, failed, metadata: { lockOwned: Boolean(result), cycleResult: result || null } });

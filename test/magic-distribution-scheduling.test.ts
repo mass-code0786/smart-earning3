@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { hasRequiredMagicBalance } from "@/lib/server/distribution-service";
+import { hasRequiredMagicBalance, runMagicDistributionScheduler } from "@/lib/server/distribution-service";
+import { getMagicDistributionConfig, isMagicDistributionDue } from "@/lib/server/magic-distribution-config";
 
 describe("Magic Level balance-gated distribution", () => {
   it("includes a user only when the required Magic balance is present", () => {
@@ -25,8 +26,27 @@ describe("Magic Level balance-gated distribution", () => {
     const service = readFileSync(resolve("lib/server/distribution-service.ts"), "utf8");
     expect(worker).toContain("setInterval(() => void execute(), seconds * 1000)");
     expect(worker).toContain('isModulePaused("MAGIC_DISTRIBUTION_WORKER")');
+    expect(worker).toContain("runMagicDistributionScheduler");
     expect(ecosystem).toContain('worker("smart-earning-magic-distribution", "scripts/magic-distribution-worker.ts")');
     expect(service).toContain("const cycleId = BigInt(await contract.currentCycle())");
     expect(service).not.toMatch(/missedDistribution|backfillDistribution|previousCycle/i);
+  });
+
+  it("waits through 06:29:59 UTC and becomes due exactly at 06:30 UTC", () => {
+    const config = { timezone: "UTC" as const, hour: 6, minute: 30 };
+    expect(isMagicDistributionDue(new Date("2026-08-03T06:29:59Z"), config)).toBe(false);
+    expect(isMagicDistributionDue(new Date("2026-08-03T06:30:00Z"), config)).toBe(true);
+  });
+
+  it("does not invoke the cycle before schedule and invokes it at the first later poll", async () => {
+    const run = vi.fn().mockResolvedValue({ cycleId: "1", status: "COMPLETED" });
+    await runMagicDistributionScheduler(new Date("2026-08-03T06:29:59Z"), run);
+    expect(run).not.toHaveBeenCalled();
+    await runMagicDistributionScheduler(new Date("2026-08-03T06:30:42Z"), run);
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses explicit UTC defaults", () => {
+    expect(getMagicDistributionConfig()).toEqual({ timezone: "UTC", hour: 6, minute: 30 });
   });
 });
