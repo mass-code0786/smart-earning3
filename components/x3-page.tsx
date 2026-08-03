@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AlertTriangle, GitBranch, Lock, RefreshCw, RotateCw } from "lucide-react";
+import { MatrixHistoryMenu } from "@/components/matrix-history-menu";
 
 type Slot = { slotNumber: number; wallet: string; placementType: string };
 type X3Package = {
@@ -58,7 +59,7 @@ export function X3Page() {
 
   return <div className="grid gap-4">
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      {data.map((item) => <article className="smart-glass-card rounded-[22px] p-5" key={item.packageId}>
+      {data.map((item) => <article className="smart-glass-card matrix-history-host rounded-[22px] p-5" key={item.packageId}><MatrixHistoryMenu module="X3" packageId={item.packageId} title={`Package ${item.packageId} X3 Matrix`}/>
         <div className="flex items-center justify-between">
           <b>Package {item.packageId} · {units(item.priceTokenUnits)}</b>
           <span className={`rounded-full border px-2 py-1 text-[9px] ${item.active ? "border-[#00f77a]/30 text-[#00f77a]" : "border-white/10 text-[#8b9d94]"}`}>
