@@ -117,6 +117,26 @@ describe("locked mobile Home composition", () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4));
   });
 
+  it("keeps the Booster Topup action and canonical countdown when balance is insufficient", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: string) => ({
+      ok: true,
+      status: 200,
+      json: async () => input === "/api/dashboard"
+        ? { user: { wallet_address: "0x000000000000000000000000000000000000dead", direct_count: 0 } }
+        : input === "/api/booster"
+          ? {
+            server_time: "2026-07-28T10:00:00.000Z",
+            next_entry_at: "2026-07-28T14:00:00.000Z",
+            eligibility: "INSUFFICIENT_BALANCE",
+          }
+          : { packages: [] },
+    })));
+    render(<RealDashboard />);
+    expect(await screen.findByRole("link", { name: "Booster Topup" })).toHaveAttribute("href", "/booster");
+    expect(screen.getByText("Next booster: 04:00:00")).toBeInTheDocument();
+    expect(screen.queryByText("Insufficient Booster Wallet balance")).not.toBeInTheDocument();
+  });
+
   it("keeps the approved header and bottom navigation labels", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: string) => ({
       ok: true,

@@ -46,10 +46,10 @@ describe("Booster synchronized countdown",()=>{
   expect(screen.getByText("Booster inactive")).toBeInTheDocument();
   expect(screen.queryByLabelText("Next Booster Entry countdown")).not.toBeInTheDocument();
  });
- it("shows insufficient balance without a misleading countdown",()=>{
-  render(<BoosterCountdown serverTime="2026-01-01T09:00:00Z" nextEntryAt="2026-01-01T14:00:00Z" eligibility="INSUFFICIENT_BALANCE" onRefresh={vi.fn()}/>);
-  expect(screen.getByText("Insufficient Booster Wallet balance")).toBeInTheDocument();
-  expect(screen.queryByLabelText("Next Booster Entry countdown")).not.toBeInTheDocument();
+ it("continues the canonical countdown when the Booster Wallet balance is insufficient",()=>{
+  render(<BoosterCountdown serverTime="2026-01-01T09:00:00Z" nextEntryAt="2026-01-01T13:00:00Z" eligibility="INSUFFICIENT_BALANCE" onRefresh={vi.fn()}/>);
+  expect(screen.getByLabelText("Next Booster Entry countdown")).toHaveTextContent("04:00:00");
+  expect(screen.queryByText("Insufficient Booster Wallet balance")).not.toBeInTheDocument();
  });
  it("resynchronizes with the server when the tab becomes visible",async()=>{
   const refresh=vi.fn().mockResolvedValue(undefined);

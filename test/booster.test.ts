@@ -1,6 +1,6 @@
-import{describe,expect,it}from"vitest";import{Interface}from"ethers";import{readFileSync}from"node:fs";import{resolve}from"node:path";
+import{describe,expect,it,vi}from"vitest";import{Interface}from"ethers";import{readFileSync}from"node:fs";import{resolve}from"node:path";
 import{boosterBalance,boosterPackageCredit,boosterScheduledFor,BOOSTER_ENTRY_COST,BOOSTER_INCOME}from"@/lib/server/booster-math";
-import{findBoosterTransfer,findConfirmedBoosterTopUp}from"@/lib/server/booster-service";
+import{findBoosterTransfer,findConfirmedBoosterTopUp,processBoosterUser}from"@/lib/server/booster-service";
 describe("Booster exact arithmetic",()=>{
  it("credits exactly 31.25% for all eight packages",()=>{for(const dollars of[8n,16n,32n,64n,128n,256n,512n,1024n])
   expect(boosterPackageCredit(dollars*1_000_000n)).toBe(dollars*312_500n)});
@@ -8,6 +8,29 @@ describe("Booster exact arithmetic",()=>{
  it("derives balance only from credits and debits",()=>expect(boosterBalance([{direction:"CREDIT",amount:"5000000"},{direction:"DEBIT",amount:"2500000"}])).toBe(2_500_000n));
  it("uses four hours from the last successful entry",()=>{const last=new Date("2026-01-01T00:00:00Z");
   expect(boosterScheduledFor(last,new Date()).toISOString()).toBe("2026-01-01T04:00:00.000Z")});
+});
+describe("Booster insufficient-balance scheduling",()=>{
+ it("records no financial effects and advances only one attempt by four hours",async()=>{
+  const attemptedAt=new Date("2026-08-03T08:00:00.000Z"),nextAt=new Date("2026-08-03T12:00:00.000Z");
+  let membershipReads=0;
+  const query=vi.fn(async(sql:string,_values?:unknown[])=>{
+   if(sql.includes("SELECT last_entry_at,next_entry_at,created_at")){
+    membershipReads++;
+    return{rows:[{last_entry_at:null,next_entry_at:membershipReads===1?attemptedAt:nextAt,created_at:attemptedAt}],rowCount:1};
+   }
+   if(sql.includes("SELECT 1 FROM booster_scheduler_history"))return{rows:[],rowCount:0};
+   if(sql.includes("FROM booster_wallet_ledger WHERE user_id=$1"))return{rows:[{balance:"0"}],rowCount:1};
+   return{rows:[],rowCount:0};
+  });
+  const client={query} as never;
+  expect((await processBoosterUser("user-1",attemptedAt,client)).status).toBe("INSUFFICIENT");
+  expect((await processBoosterUser("user-1",attemptedAt,client)).status).toBe("NOT_DUE");
+  const statements=query.mock.calls.map(([sql])=>String(sql));
+  expect(statements.filter(sql=>sql.includes("INSERT INTO booster_scheduler_history"))).toHaveLength(1);
+  expect(statements.some(sql=>/INSERT INTO booster_entries|INSERT INTO booster_income_history|INSERT INTO booster_wallet_ledger/.test(sql))).toBe(false);
+  const updateCall=query.mock.calls.find(([sql])=>String(sql).includes("UPDATE booster_memberships SET next_entry_at"));
+  expect(updateCall?.[1]).toEqual(["user-1",nextAt]);
+ });
 });
 describe("Booster Wallet top-up evidence",()=>{
  it("confirms the contract accepts arbitrary positive top-up amounts",()=>{
