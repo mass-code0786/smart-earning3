@@ -70,6 +70,10 @@ describe("package-wise matrix previews", () => {
     }));
     render(<X4Page />);
     await waitFor(() => expect(screen.getAllByText(/Package \d/)).toHaveLength(8));
+    expect(screen.getByRole("heading", { level: 1, name: "C4 Global Matrix" })).toBeInTheDocument();
+    expect(screen.queryByText("GLOBAL PLACEMENT")).not.toBeInTheDocument();
+    expect(screen.queryByText("Each package has one independent global, level-order queue.")).not.toBeInTheDocument();
+    expect(screen.queryByText("X4 Global Matrix")).not.toBeInTheDocument();
     expect(screen.getAllByText("Filled positions / total positions")).toHaveLength(8);
     expect(screen.getByText("2 times ♻️")).toBeInTheDocument();
     expect(screen.getByText("$3.00 USDT")).toBeInTheDocument();
