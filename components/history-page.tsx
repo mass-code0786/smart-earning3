@@ -9,8 +9,8 @@ type Item={
  status:string;txHash:string|null;createdAt:string;description:string;incomeType:string|null;level:number|null;
  position:number|null;metadata:Record<string,unknown>;
 };
-const filters=[["","All"],["PACKAGE","Packages"],["BOOSTER","Booster Top-ups"],["BOOSTER_INCOME","Booster Income"],["DIRECT_REFERRAL","Direct Referrals"],["DIRECT_INCOME","Direct Income"],["MAGIC_LEVEL_INCOME","Magic Level"],["X3_INCOME","X3 Income"],["X3_RECYCLE","X3 Recycles"],["AUTOPOOL","Autopool"],["DIVIDEND","Dividend"],["WITHDRAWAL","Withdrawals"],["WALLET","Wallet"]] as const;
-const icons:Record<string,typeof Activity>={PACKAGE:Boxes,DIRECT_REFERRAL:Users,DIRECT_INCOME:HandCoins,X3_INCOME:GitBranch,X3_RECYCLE:GitBranch,AUTOPOOL:GitBranch,BOOSTER:Activity,BOOSTER_INCOME:Activity,MAGIC_LEVEL_INCOME:Activity,DIVIDEND:HandCoins,WITHDRAWAL:Wallet,WALLET:Wallet};
+const filters=[["","All"],["PACKAGE","Packages"],["BOOSTER","Booster Top-ups"],["BOOSTER_INCOME","Booster Income"],["DIRECT_REFERRAL","Direct Referrals"],["DIRECT_INCOME","Direct Income"],["MAGIC_LEVEL","Magic Level"],["X3_INCOME","X3 Income"],["X3_RECYCLE","X3 Recycles"],["AUTOPOOL","Autopool"],["DIVIDEND","Dividend"],["WITHDRAWAL","Withdrawals"],["WALLET","Wallet"]] as const;
+const icons:Record<string,typeof Activity>={PACKAGE:Boxes,DIRECT_REFERRAL:Users,DIRECT_INCOME:HandCoins,X3_INCOME:GitBranch,X3_RECYCLE:GitBranch,AUTOPOOL:GitBranch,BOOSTER:Activity,BOOSTER_INCOME:Activity,MAGIC_LEVEL:GitBranch,MAGIC_LEVEL_INCOME:Activity,DIVIDEND:HandCoins,WITHDRAWAL:Wallet,WALLET:Wallet};
 const short=(value:string)=>`${value.slice(0,6)}…${value.slice(-4)}`;
 const money=(value:string|null)=>value===null?null:`${value} USDT`;
 
@@ -53,7 +53,7 @@ function HistoryCard({item}:{item:Item}){
    {item.cycle&&<Field label="Cycle" value={`#${item.cycle}`}/>}
    {item.recycleCount&&<Field label="Recycled" value={`${item.recycleCount} times ♻️`}/>}
    {item.level&&<Field label="Level" value={String(item.level)}/>}
-   {item.position&&<Field label="Position" value={String(item.position)}/>}
+   {item.position!==null&&<Field label="Position" value={String(item.position)}/>}
    {typeof item.metadata.relationshipLevel==="number"&&<Field label="Relationship level" value={String(item.metadata.relationshipLevel)}/>}
    {typeof item.metadata.cycleEarnings==="string"&&<Field label="Cycle earnings" value={`${item.metadata.cycleEarnings} USDT`} accent/>}
    {Array.isArray(item.metadata.positionWallets)&&<Field label="Position wallets" value={item.metadata.positionWallets.map(value=>short(String(value))).join(", ")||"None"}/>}
@@ -65,6 +65,8 @@ function HistoryCard({item}:{item:Item}){
    {typeof item.metadata.nextEligibleAt==="string"&&<Field label="Next eligible" value={new Date(item.metadata.nextEligibleAt).toLocaleString()}/>}
    {typeof item.metadata.previousBalance==="string"&&<Field label="Previous balance" value={`${item.metadata.previousBalance} USDT`}/>}
    {typeof item.metadata.newBalance==="string"&&<Field label="New balance" value={`${item.metadata.newBalance} USDT`} accent/>}
+   {typeof item.metadata.memberId==="string"&&<Field label="Member ID" value={item.metadata.memberId}/>}
+   {typeof item.metadata.reference==="string"&&item.metadata.reference&&<Field label="Canonical reference" value={item.metadata.reference}/>}
   </div>
   {item.txHash&&<a className="history-reference" href={item.txHash.startsWith("0x")?`https://testnet.bscscan.com/tx/${item.txHash}`:"#"} target={item.txHash.startsWith("0x")?"_blank":undefined} rel="noreferrer"><span>Transaction Hash: {item.txHash.startsWith("0x")?short(item.txHash):item.txHash}</span>{item.txHash.startsWith("0x")&&<ExternalLink size={12}/>}</a>}
  </article>

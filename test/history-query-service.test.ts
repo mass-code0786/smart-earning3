@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-const query=vi.hoisted(()=>vi.fn());
+const {query,getMatrixHistory}=vi.hoisted(()=>({query:vi.fn(),getMatrixHistory:vi.fn()}));
 vi.mock("@/lib/server/db",()=>({query}));
+vi.mock("@/lib/server/matrix-history-service",()=>({getMatrixHistory}));
 import { getHistory } from "@/lib/server/history-query-service";
 
 const wallet="0x1234567890abcdef1234567890abcdef12345678";
@@ -17,7 +18,25 @@ const row=(index:number)=>({
 });
 
 describe("database-backed history read model",()=>{
- beforeEach(()=>query.mockReset());
+ beforeEach(()=>{query.mockReset();getMatrixHistory.mockReset()});
+ it("reads Magic Level placements through the canonical owner-scoped matrix history service",async()=>{
+  getMatrixHistory.mockResolvedValueOnce({items:[{
+   id:"placement-1",memberId:"SE100001",wallet:"0xabcdefabcdefabcdefabcdefabcdefabcdefabcd",
+   level:2,position:0,amount:"2000000",transactionHash:`0x${"cd".repeat(32)}`,
+   reference:"registration:7",placedAt:new Date("2026-07-28T10:00:00Z"),
+  }],nextCursor:"next"});
+  const result=await getHistory(wallet,{category:"magic_level",limit:20});
+  expect(getMatrixHistory).toHaveBeenCalledWith(wallet,expect.any(URLSearchParams));
+  const parameters=getMatrixHistory.mock.calls[0][1] as URLSearchParams;
+  expect(parameters.get("module")).toBe("MAGIC_LEVEL");
+  expect(parameters.get("limit")).toBe("20");
+  expect(result.items[0]).toMatchObject({
+   category:"MAGIC_LEVEL",sourceTable:"matrix_placements",sourceRecordId:"placement-1",
+   sourceWallet:"0xabcdefabcdefabcdefabcdefabcdefabcdefabcd",level:2,position:0,amount:null,
+   metadata:{memberId:"SE100001",reference:"registration:7"},
+  });
+  expect(query).not.toHaveBeenCalled();
+ });
  it("returns normalized source, package and transaction fields",async()=>{
   query.mockResolvedValueOnce({rows:[row(1)]});
   const result=await getHistory(wallet);

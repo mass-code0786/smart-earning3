@@ -2,6 +2,7 @@ import { normalizeWallet } from "./auth";
 import { query } from "./db";
 import { ApiError } from "./http";
 import { APPROVED_HISTORY_CATEGORIES, type HistoryCategory } from "./history-service";
+import { getMatrixHistory } from "./matrix-history-service";
 
 export type HistoryFilters = {
   category?: string | null;
@@ -42,6 +43,7 @@ function optionalDate(value: string | null | undefined, end = false) {
 export async function getHistory(walletInput: string, filters: HistoryFilters = {}) {
   const wallet = normalizeWallet(walletInput);
   const category = filters.category?.trim().toUpperCase() || null;
+  if (category === "MAGIC_LEVEL") return getMagicLevelPlacementHistory(wallet, filters);
   if (category && !APPROVED_HISTORY_CATEGORIES.includes(category as HistoryCategory)) {
     throw new ApiError(400, "Invalid history category", "INVALID_CATEGORY");
   }
@@ -98,4 +100,26 @@ export async function getHistory(walletInput: string, filters: HistoryFilters = 
     level: row.referral_level, position: row.position_number, incomeType: row.event_type,
   }));
   return { items, nextCursor: hasMore ? encodeCursor(result.rows[limit - 1]) : null };
+}
+
+async function getMagicLevelPlacementHistory(wallet: string, filters: HistoryFilters) {
+  const parameters = new URLSearchParams({ module: "MAGIC_LEVEL", limit: String(filters.limit || 20) });
+  if (filters.cursor) parameters.set("cursor", filters.cursor);
+  const history = await getMatrixHistory(wallet, parameters);
+  return {
+    items: history.items.map(item => ({
+      id: item.id, category: "MAGIC_LEVEL", eventType: "MAGIC_LEVEL_PLACED", type: "MAGIC_LEVEL_PLACED",
+      title: "Magic Level placement", description: "Magic Level placement", amount: null,
+      currency: "USDT", direction: "INFO", sourceWallet: item.wallet, sponsorWallet: null,
+      referralLevel: item.level, packageNumber: null, packageAmount: null, matrixType: "MAGIC_LEVEL",
+      matrixPackageNumber: null, cycleNumber: null, recycleNumber: null, positionNumber: item.position,
+      previousBalance: null, newBalance: null, feeAmount: null, netAmount: null, status: "CONFIRMED",
+      txHash: item.transactionHash, blockNumber: null, logIndex: null, sourceTable: "matrix_placements",
+      sourceRecordId: item.id, metadata: { memberId: item.memberId, reference: item.reference },
+      occurredAt: item.placedAt.toISOString(), createdAt: item.placedAt.toISOString(), packageId: null,
+      cycle: null, recycleCount: null, level: item.level, position: item.position,
+      incomeType: null,
+    })),
+    nextCursor: history.nextCursor,
+  };
 }
