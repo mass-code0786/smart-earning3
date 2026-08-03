@@ -8,8 +8,7 @@ import { authenticatedWalletFetch } from "@/lib/client/authenticated-fetch";
 
 type Level = { level: number; userCount: number };
 type User = {
-  id: string; memberId: string; wallet: string; level: number; position: number;
-  registrationId: string | null; transactionHash: string | null; placedAt: string;
+  id: string; wallet: string; position: number; placedAt: string;
 };
 
 const emptyLevels = () => Array.from({ length: 20 }, (_, index) => ({ level: index + 1, userCount: 0 }));
@@ -54,8 +53,7 @@ export function MagicLevelStructure() {
     </article>)}</div>
     {selected !== null && <CenteredModal open onClose={() => setSelected(null)} eyebrow="MAGIC LEVEL USERS" title={`Level ${selected}`} label={`Magic Level ${selected} users`} closeLabel="Close Magic Level users">
       <div className="magic-level-users">{users.map(user => <article key={user.id}>
-        <div className="magic-level-user-head"><span><small>Member ID</small><b>{user.memberId}</b></span><time dateTime={user.placedAt}>{new Date(user.placedAt).toLocaleString()}</time></div>
-        <dl><div><dt>Wallet</dt><dd>{shortWallet(user.wallet)} <button type="button" aria-label={`Copy wallet ${user.wallet}`} onClick={() => void navigator.clipboard?.writeText(user.wallet)}><Copy size={12}/></button></dd></div><div><dt>Level</dt><dd>{user.level}</dd></div><div><dt>Position / slot</dt><dd>{user.position}</dd></div><div><dt>Placement ID</dt><dd>{user.id}</dd></div>{user.registrationId&&<div><dt>Registration reference</dt><dd>{user.registrationId}</dd></div>}{user.transactionHash&&<div><dt>Transaction</dt><dd>{user.transactionHash}</dd></div>}</dl>
+        <dl><div><dt>Wallet</dt><dd>{shortWallet(user.wallet)} <button type="button" aria-label={`Copy wallet ${user.wallet}`} onClick={() => void navigator.clipboard?.writeText(user.wallet)}><Copy size={12}/></button></dd></div><div><dt>Position</dt><dd>{user.position}</dd></div><div><dt>Date &amp; Time</dt><dd><time dateTime={user.placedAt}>{new Date(user.placedAt).toLocaleString()}</time></dd></div></dl>
       </article>)}
       {!loading&&!error&&!users.length&&<div className="magic-level-users-empty">No users found in Level {selected}.</div>}
       {loading&&!users.length&&<div className="magic-level-users-empty">Loading Level {selected} users…</div>}
