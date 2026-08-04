@@ -82,6 +82,7 @@ module.exports = {
   },
   worker("smart-earning-indexer", "scripts/indexer.ts"),
   worker("smart-earning-x3-recovery", "scripts/x3-recovery-worker.ts"),
+  worker("smart-earning-x3-hold-expiry", "scripts/x3-hold-expiry-worker.ts"),
   worker("smart-earning-booster", "scripts/booster-worker.ts"),
   worker("smart-earning-dividend", "scripts/dividend-worker.ts"),
   worker("smart-earning-withdrawal", "scripts/withdrawal-worker.ts"),

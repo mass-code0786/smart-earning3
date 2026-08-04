@@ -96,7 +96,7 @@ export async function getX3Hold(wallet:string){
   const id=await userId(wallet);
   const result=await query(
     `SELECT h.id,h.package_id,h.amount::text,h.status,h.released_amount::text,h.excess_amount::text,
-      h.held_at,h.released_at,u.wallet_address source_wallet,i.owner_cycle_id
+      h.held_at,h.expires_at,h.released_at,h.flushed_at,u.wallet_address source_wallet,i.owner_cycle_id
      FROM x3_hold_ledger h JOIN x3_income_ledger i ON i.id=h.x3_income_ledger_id
      JOIN users u ON u.id=i.source_user_id WHERE h.user_id=$1 ORDER BY h.held_at DESC`,[id],
   );
@@ -120,7 +120,7 @@ export async function getX3History(wallet:string,filters:URLSearchParams){
          i.package_id,i.status,i.gross_amount,i.created_at,i.owner_cycle_id,i.owner_user_id,i.id
        FROM x3_income_ledger i
        UNION ALL
-       SELECT CASE WHEN h.status='HELD' THEN 'HOLD' ELSE 'RELEASE' END,
+       SELECT CASE h.status WHEN 'HELD' THEN 'HOLD' WHEN 'FLUSHED' THEN 'FLUSH' ELSE 'RELEASE' END,
          h.package_id,h.status,h.amount,h.held_at,i.owner_cycle_id,h.user_id,h.id
        FROM x3_hold_ledger h JOIN x3_income_ledger i ON i.id=h.x3_income_ledger_id
        UNION ALL

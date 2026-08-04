@@ -1,8 +1,9 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import RealWallet from "@/components/real-wallet";
+import { formatX3HoldRemaining, X3HoldCountdown } from "@/components/real-wallet";
 
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 const walletA = "0x1234567890abcdef1234567890abcdef12345678";
 const walletB = "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd";
@@ -25,11 +26,33 @@ function snapshot(wallet: string, amount = "0") {
       eligibility:"INACTIVE",booster_wallet_balance:"0",
     },
     currentPackage:null,
+    x3Hold:{earliestExpiresAt:null},serverTime:"2026-07-28T10:00:00Z",
     team:{totalTeam:0},
   };
 }
 
 describe("Wallet summary page", () => {
+  it("formats the display-only X3 Hold countdown as HH:MM:SS",()=>{
+    expect(formatX3HoldRemaining(37*3_600_000+24*60_000+18_000)).toBe("37:24:18");
+    expect(formatX3HoldRemaining(-1)).toBe("00:00:00");
+  });
+
+  it("refreshes at zero and switches to the next backend-provided earliest hold",async()=>{
+    vi.useFakeTimers();vi.setSystemTime(new Date("2026-08-04T00:00:00Z"));
+    const refresh=vi.fn(async()=>undefined);
+    const view=render(<X3HoldCountdown serverTime="2026-08-04T00:00:00Z" expiresAt="2026-08-04T00:00:01Z" onRefresh={refresh}/>);
+    expect(screen.getByText("Expires in 00:00:01")).toBeInTheDocument();
+    await act(async()=>vi.advanceTimersByTime(1000));
+    expect(screen.getByText("Expires in 00:00:00")).toBeInTheDocument();expect(refresh).toHaveBeenCalledOnce();
+    view.rerender(<X3HoldCountdown serverTime="2026-08-04T00:00:01Z" expiresAt="2026-08-05T07:45:01Z" onRefresh={refresh}/>);
+    expect(screen.getByText("Expires in 31:45:00")).toBeInTheDocument();
+  });
+
+  it("shows no fake countdown for zero or grandfathered-only holds",async()=>{
+    vi.stubGlobal("fetch",vi.fn(async()=>new Response(JSON.stringify(snapshot(walletA)),{status:200,headers:{"content-type":"application/json"}})));
+    render(<RealWallet/>);await screen.findByText("X3 Hold Wallet");
+    expect(screen.queryByText(/Expires in/)).not.toBeInTheDocument();
+  });
   it("keeps the due-booster refresh mounted instead of creating a fetch loop", async () => {
     const dueSnapshot = snapshot(walletA);
     const dueBooster = dueSnapshot.booster as {

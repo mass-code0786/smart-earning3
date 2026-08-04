@@ -17,7 +17,7 @@ export async function getWalletSummary(sessionWallet: string) {
     income_reserved: string; dividend_income: string; cap_used: string;
     cap_remaining: string; active_package: string; direct_members: number;
     total_team: number; highest_package_id: number; current_package_name: string | null;
-    next_entry_at: string | null; booster_active: boolean;
+    next_entry_at: string | null; booster_active: boolean; earliest_hold_expires_at:string|null;
   }>(
     `WITH RECURSIVE account_team AS (
        SELECT rr.user_id FROM referral_relations rr WHERE rr.sponsor_user_id=$1
@@ -31,7 +31,9 @@ export async function getWalletSummary(sessionWallet: string) {
        (SELECT COALESCE(sum(CASE direction WHEN 'CREDIT' THEN amount_token_units ELSE -amount_token_units END),0)::text
         FROM magic_wallet_ledger WHERE user_id=$1) magic_wallet,
        (SELECT COALESCE(sum(amount),0)::text
-        FROM x3_hold_ledger WHERE user_id=$1 AND status='HELD') hold_wallet,
+       FROM x3_hold_ledger WHERE user_id=$1 AND status='HELD') hold_wallet,
+       (SELECT min(expires_at)::text FROM x3_hold_ledger
+        WHERE user_id=$1 AND status='HELD' AND expires_at IS NOT NULL) earliest_hold_expires_at,
        (SELECT COALESCE(sum(CASE direction WHEN 'CREDIT' THEN amount_token_units ELSE -amount_token_units END),0)::text
         FROM booster_wallet_ledger WHERE user_id=$1) booster_wallet,
        (SELECT COALESCE(sum(capped_gross_credit),0)::text
@@ -94,6 +96,8 @@ export async function getWalletSummary(sessionWallet: string) {
       packageId: result.highest_package_id,
       name: result.current_package_name || `Package ${result.highest_package_id}`,
     } : null,
+    x3Hold: { earliestExpiresAt: result?.earliest_hold_expires_at || null },
+    serverTime: serverTime.toISOString(),
     team: { totalTeam: result?.total_team || 0 },
   };
 }

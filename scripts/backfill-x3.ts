@@ -9,9 +9,9 @@ const apply=process.argv.includes("--apply");
 async function main(){
   const purchases=await getPool().query<{
     id:string;user_id:string;package_id:number;amount_token_units:string;tx_hash:string;
-    block_number:string;log_index:number|null;event_id:string|null;
+    block_number:string;log_index:number|null;event_id:string|null;purchased_at:Date;
   }>(`SELECT p.id,p.user_id,p.package_id,p.amount_token_units::text,p.tx_hash,
-      p.block_number::text,e.log_index,e.id event_id
+      p.block_number::text,e.log_index,e.id event_id,p.purchased_at
     FROM package_purchases p
     LEFT JOIN contract_events e ON e.tx_hash=p.tx_hash AND e.event_name='PackagePurchased'
     LEFT JOIN x3_package_memberships m ON m.activation_purchase_id=p.id
@@ -36,7 +36,7 @@ async function main(){
     if(apply)await transaction(client=>processX3PackagePurchase(client,{
       purchaseId:purchase.id,userId:purchase.user_id,packageId:purchase.package_id,
       amount:BigInt(purchase.amount_token_units),txHash:purchase.tx_hash,
-      blockNumber:Number(purchase.block_number),sourceEventId:purchase.event_id,
+      blockNumber:Number(purchase.block_number),sourceEventId:purchase.event_id,upgradeTimestamp:purchase.purchased_at,
     }));
   }
   await getPool().end();

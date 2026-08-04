@@ -3,10 +3,11 @@ import { ApiError } from "./http";
 import { creditGrossEarning } from "./earning-split-service";
 import { x3Allocation, X3_PACKAGE_PRICES } from "./x3-math";
 import { assertModuleActive } from "./module-control-service";
+import { flushLockedX3Hold, isX3HoldReleaseEligible } from "./x3-hold-expiry-service";
 
 type PurchaseInput = {
   purchaseId:string; userId:string; packageId:number; amount:bigint;
-  txHash:string; blockNumber:number;sourceEventId:string|null;
+  txHash:string; blockNumber:number;sourceEventId:string|null;upgradeTimestamp:Date;
 };
 type Cycle = {id:string;user_id:string;cycle_number:number;sponsor_user_id:string};
 
@@ -31,7 +32,7 @@ export async function processX3PackagePurchase(client:PoolClient,input:PurchaseI
      ) VALUES($1,$2,$3,$4,$5,$6,$7)`,
     [input.purchaseId,input.userId,input.packageId,input.amount.toString(),x3.toString(),reserved.toString(),`x3:reserve:${input.purchaseId}`],
   );
-  await releaseHeldX3(client,input.userId,input.packageId,input.purchaseId);
+  await releaseHeldX3(client,input.userId,input.packageId,input.purchaseId,input.upgradeTimestamp);
   const sponsorAnchor=await ensureAnchorCycle(client,sponsor,input.packageId);
   const buyerCycle=await createCycle(client,input.userId,input.packageId,sponsor,null);
   await placeCycle(client,{
@@ -184,8 +185,9 @@ async function createSlotIncome(client:PoolClient,input:{
       [input.ownerUserId,input.packageId,input.ownerCycleId,input.slotId,input.sourceUserId,input.sourcePurchaseId,input.amount.toString(),key],
     );
     await client.query(
-      `INSERT INTO x3_hold_ledger(user_id,package_id,x3_income_ledger_id,amount,status)
-       VALUES($1,$2,$3,$4,'HELD')`,
+      `WITH stamp AS (SELECT transaction_timestamp() held_at)
+       INSERT INTO x3_hold_ledger(user_id,package_id,x3_income_ledger_id,amount,status,held_at,expires_at)
+       SELECT $1,$2,$3,$4,'HELD',held_at,held_at+interval '48 hours' FROM stamp`,
       [input.ownerUserId,input.packageId,income.rows[0].id,input.amount.toString()],
     );
     return income.rows[0].id;
@@ -207,13 +209,17 @@ async function createSlotIncome(client:PoolClient,input:{
   return income.rows[0].id;
 }
 
-export async function releaseHeldX3(client:PoolClient,userId:string,packageId:number,purchaseId:string){
-  const holds=await client.query<{id:string;x3_income_ledger_id:string;amount:string}>(
-    `SELECT id,x3_income_ledger_id,amount::text FROM x3_hold_ledger
+export async function releaseHeldX3(client:PoolClient,userId:string,packageId:number,purchaseId:string,upgradeTimestamp:Date){
+  const holds=await client.query<{id:string;user_id:string;package_id:number;x3_income_ledger_id:string;amount:string;held_at:Date;expires_at:Date|null}>(
+    `SELECT id,user_id,package_id,x3_income_ledger_id,amount::text,held_at,expires_at FROM x3_hold_ledger
      WHERE user_id=$1 AND package_id=$2 AND status='HELD' ORDER BY held_at,id FOR UPDATE`,
     [userId,packageId],
   );
   for(const hold of holds.rows){
+    if(!isX3HoldReleaseEligible(upgradeTimestamp,hold.expires_at)){
+      await flushLockedX3Hold(client,{...hold,expires_at:hold.expires_at!},"PACKAGE");
+      continue;
+    }
     const amount=BigInt(hold.amount);
     const capped=await creditGrossEarning({
       userId,incomeType:"X3_HOLD_RELEASE",sourceReference:hold.id,grossAmount:amount,

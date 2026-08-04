@@ -228,6 +228,7 @@
 .income-type-card small,
 .wallet-summary-item small,
 .team-stat-card small{color:#fff}
+.x3-hold-countdown{margin-top:5px;font-family:monospace;font-size:8px;line-height:1.2;color:#fff}
 .smart-internal-shell [class*="bg-black/10"],
 .smart-internal-shell [class*="bg-black/20"] {
   background-color: var(--se-glass-surface) !important;

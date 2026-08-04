@@ -12,6 +12,7 @@ const workers = [
   "magic-distribution-worker.ts",
   "withdrawal-worker.ts",
   "x3-recovery-worker.ts",
+  "x3-hold-expiry-worker.ts",
 ] as const;
 
 describe("production PM2 worker CommonJS compatibility", () => {

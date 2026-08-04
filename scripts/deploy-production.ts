@@ -22,7 +22,7 @@ const { requireProductionPort } = require("./production-port.cjs") as {
 };
 
 const CONFIRM = "--confirm-production-deploy";
-const PM2_APPS = ["smart-earning","smart-earning-indexer","smart-earning-x3-recovery","smart-earning-booster","smart-earning-dividend","smart-earning-withdrawal","smart-earning-magic-funding","smart-earning-magic-distribution"];
+const PM2_APPS = ["smart-earning","smart-earning-indexer","smart-earning-x3-recovery","smart-earning-x3-hold-expiry","smart-earning-booster","smart-earning-dividend","smart-earning-withdrawal","smart-earning-magic-funding","smart-earning-magic-distribution"];
 type Stage = { name: string; run: () => void | Promise<void> };
 
 function command(

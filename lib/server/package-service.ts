@@ -124,6 +124,14 @@ export async function verifyPackagePurchase(walletInput: string, txHashInput: st
   if (confirmations < config.CONFIRMATIONS_REQUIRED) {
     throw new ApiError(409, "Waiting for blockchain confirmations", "CONFIRMATIONS_PENDING");
   }
+  const confirmedBlock=await provider.getBlock(receipt.blockNumber);
+  if(!confirmedBlock||confirmedBlock.hash?.toLowerCase()!==receipt.blockHash.toLowerCase()){
+    throw new ApiError(409,"Confirmed package block could not be validated","BLOCK_VALIDATION_FAILED");
+  }
+  const confirmedBlockAt=new Date(confirmedBlock.timestamp*1000);
+  if(!Number.isFinite(confirmedBlockAt.getTime())||confirmedBlockAt.getTime()>Date.now()+5*60_000){
+    throw new ApiError(422,"Confirmed package block timestamp is invalid","BLOCK_TIMESTAMP_INVALID");
+  }
   const packageLog = receipt.logs.map((log) => {
     try { return { log, event: iface.parseLog(log) }; } catch { return null; }
   }).find((item) => item?.event?.name === "PackagePurchased");
@@ -174,9 +182,9 @@ export async function verifyPackagePurchase(walletInput: string, txHashInput: st
     const purchase = await client.query<{id:string}>(
       `INSERT INTO package_purchases(
         user_id,wallet_address,package_definition_id,package_id,amount_token_units,
-        tx_hash,block_number,status,purchased_at
-       ) VALUES($1,$2,$3,$4,$5,$6,$7,'CONFIRMED',now()) RETURNING id`,
-      [userId,wallet,definition.rows[0].id,packageId,amount.toString(),txHash,receipt.blockNumber],
+        tx_hash,block_number,status,purchased_at,confirmed_block_at
+       ) VALUES($1,$2,$3,$4,$5,$6,$7,'CONFIRMED',$8,$8) RETURNING id`,
+      [userId,wallet,definition.rows[0].id,packageId,amount.toString(),txHash,receipt.blockNumber,confirmedBlockAt],
     );
     await client.query(
       `UPDATE user_package_states SET highest_package_id=$2,total_package_value=$3,
@@ -208,7 +216,7 @@ export async function verifyPackagePurchase(walletInput: string, txHashInput: st
     );
     await processX3PackagePurchase(client,{
       purchaseId:purchase.rows[0].id,userId,packageId,amount,txHash,
-      blockNumber:receipt.blockNumber,sourceEventId:contractEvent.rows[0].id,
+      blockNumber:receipt.blockNumber,sourceEventId:contractEvent.rows[0].id,upgradeTimestamp:confirmedBlockAt,
     });
     await processX4PackagePurchase(client,{
       purchaseId:purchase.rows[0].id,userId,packageId,amount,txHash,
