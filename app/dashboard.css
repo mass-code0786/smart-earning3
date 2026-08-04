@@ -229,6 +229,37 @@
 .wallet-summary-item small,
 .team-stat-card small{color:#fff}
 .x3-hold-countdown{margin-top:5px;font-family:monospace;font-size:8px;line-height:1.2;color:#fff}
+.smart-internal-shell{--se-value-color:#FFFFFF}
+/* Authenticated monetary/numeric values only; accent UI remains green. */
+.smart-internal-shell :is(
+  .se-value,
+  b[class*="text-[#00f77a]"],
+  b[class*="text-[#00F77A]"],
+  strong[class*="text-[#00f77a]"],
+  strong[class*="text-[#00F77A]"],
+  td[class*="text-[#00f77a]"],
+  td[class*="text-[#00F77A]"],
+  .transaction-result>b.is-credit,
+  .direct-list strong,
+  .growth-row b,
+  .income-summary-grid b.green,
+  .wallet-balance b,
+  .breakdown-row>span>b,
+  .today-list>div>span:last-child b,
+  .source-list>div>b,
+  .source-list em,
+  .income-history-row>strong,
+  .monthly-list em,
+  .income-drawer-amount,
+  .income-type-card b,
+  .income-history-items article b,
+  .wallet-summary>b,
+  .income-auto b,
+  .wallet-activity strong,
+  .wallet-history-list>button>span:nth-child(3) b,
+  .wallet-drawer-amount,
+  .history-record-grid b.positive
+){color:var(--se-value-color)!important}
 .smart-internal-shell [class*="bg-black/10"],
 .smart-internal-shell [class*="bg-black/20"] {
   background-color: var(--se-glass-surface) !important;
