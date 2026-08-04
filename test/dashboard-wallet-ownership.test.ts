@@ -47,6 +47,7 @@ function installDashboardFixture(incomeRows: { income_type: string; total: strin
         cap_total: "0", cap_used: "0", cap_remaining: "0", active_package: "0",
       }] };
     }
+    if (sql.includes("sum(income_amount)") && sql.includes("FROM earning_split_events")) return { rows: incomeRows };
     if (sql.includes("FROM earning_split_events")) return { rows: [] };
     if (sql.includes("FROM income_credit_ledger")) return { rows: incomeRows };
     throw new Error(`Unexpected dashboard query: ${sql}`);
@@ -105,7 +106,7 @@ describe("dashboard wallet ownership", () => {
     expect(String(teamCall?.[0])).toContain("WHERE direct.sponsor_user_id=$1");
   });
 
-  it("returns every canonical income total from credited financial ledger records", async () => {
+  it("returns every canonical income total from post-split Income Wallet amounts", async () => {
     query.mockReset();
     installDashboardFixture([
       { income_type: "DIRECT_INCOME", total: "1250000" },
@@ -118,8 +119,8 @@ describe("dashboard wallet ownership", () => {
     expect(dashboard?.incomeTotals).toContainEqual({ incomeType: "DIRECT_INCOME", total: "1250000" });
     expect(dashboard?.incomeTotals).toContainEqual({ incomeType: "X4_GLOBAL", total: "3000000" });
     expect(dashboard?.incomeTotals).toContainEqual({ incomeType: "BOOSTER", total: "0" });
-    const totalsCall = query.mock.calls.find(([sql]) => String(sql).includes("FROM income_credit_ledger"));
-    expect(String(totalsCall?.[0])).toContain("sum(credited_amount)");
+    const totalsCall = query.mock.calls.find(([sql]) => String(sql).includes("sum(income_amount)"));
+    expect(String(totalsCall?.[0])).toContain("FROM earning_split_events");
     expect(totalsCall?.[1]?.[0]).toBe("sponsor-id");
   });
 });

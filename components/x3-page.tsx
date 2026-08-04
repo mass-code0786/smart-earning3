@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AlertTriangle, GitBranch, Lock, RefreshCw, RotateCw } from "lucide-react";
 import { MatrixHistoryMenu } from "@/components/matrix-history-menu";
+import { formatTokenUnits } from "@/lib/client/money";
 
 type Slot = { slotNumber: number; wallet: string; placementType: string };
 type X3Package = {
@@ -21,12 +22,7 @@ type X3Package = {
   recycleCount: number;
 };
 
-const units = (value: string) => {
-  const amount = BigInt(value);
-  const whole = amount / 1_000_000n;
-  const fraction = (amount % 1_000_000n).toString().padStart(6, "0").slice(0, 2);
-  return `$${whole}.${fraction}`;
-};
+const units = (value: string) => formatTokenUnits(value);
 const wallet = (value: string) => `${value.slice(0, 6)}…${value.slice(-4)}`;
 
 export function X3Page() {

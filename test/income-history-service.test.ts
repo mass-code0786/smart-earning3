@@ -25,6 +25,8 @@ describe("canonical income history", () => {
     expect(String(query.mock.calls[0][0])).toContain("wallet_address");
     expect(query.mock.calls[0][1]).toEqual([wallet]);
     expect(query.mock.calls[1][1]).toEqual([userId, "BOOSTER", null, null, 21]);
+    expect(String(query.mock.calls[1][0])).toContain("income_amount::text credited_amount");
+    expect(String(query.mock.calls[1][0])).toContain("FROM earning_split_events");
     expect(String(query.mock.calls[1][0])).toContain("WHERE user_id=$1 AND income_type=$2");
   });
 

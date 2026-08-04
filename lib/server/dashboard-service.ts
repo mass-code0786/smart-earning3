@@ -99,8 +99,8 @@ export async function userDashboard(wallet: string) {
       capped_excess::text,magic_amount::text,income_amount::text,created_at
       FROM earning_split_events WHERE user_id=$1 ORDER BY created_at DESC LIMIT 100`, [user.id]),
     query<{ income_type: string; total: string }>(
-      `SELECT income_type,COALESCE(sum(credited_amount),0)::text total
-       FROM income_credit_ledger WHERE user_id=$1 AND income_type=ANY($2::varchar[])
+      `SELECT income_type,COALESCE(sum(income_amount),0)::text total
+       FROM earning_split_events WHERE user_id=$1 AND income_type=ANY($2::varchar[])
        GROUP BY income_type`,
       [user.id, [...SPLIT_INCOME_TYPES]],
     ),

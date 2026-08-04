@@ -48,8 +48,8 @@ export async function getIncomeHistory(wallet: string, parameters: URLSearchPara
   if (!user) throw new ApiError(404, "User is not indexed", "USER_NOT_FOUND");
 
   const result = await query<IncomeHistoryRow>(
-    `SELECT id,income_type,source_reference,credited_amount::text,created_at
-     FROM income_credit_ledger
+    `SELECT id,income_type,source_reference,income_amount::text credited_amount,created_at
+     FROM earning_split_events
      WHERE user_id=$1 AND income_type=$2
        AND ($3::timestamptz IS NULL OR (created_at,id)<($3::timestamptz,$4::uuid))
      ORDER BY created_at DESC,id DESC LIMIT $5`,

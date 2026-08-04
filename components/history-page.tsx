@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Activity, Boxes, ChevronDown, Copy, ExternalLink, GitBranch, HandCoins, RefreshCw, Search, Users, Wallet } from "lucide-react";
+import { formatDecimalAmount } from "@/lib/client/money";
 
 type Item={
  id:string;type:string;category:string;amount:string|null;currency:string|null;sourceWallet:string|null;
@@ -12,7 +13,7 @@ type Item={
 const filters=[["","All"],["PACKAGE","Packages"],["BOOSTER","Booster Top-ups"],["BOOSTER_INCOME","Booster Income"],["DIRECT_REFERRAL","Direct Referrals"],["DIRECT_INCOME","Direct Income"],["MAGIC_LEVEL","Magic Level"],["X3_INCOME","X3 Income"],["X3_RECYCLE","X3 Recycles"],["AUTOPOOL","Autopool"],["DIVIDEND","Dividend"],["WITHDRAWAL","Withdrawals"],["WALLET","Wallet"]] as const;
 const icons:Record<string,typeof Activity>={PACKAGE:Boxes,DIRECT_REFERRAL:Users,DIRECT_INCOME:HandCoins,X3_INCOME:GitBranch,X3_RECYCLE:GitBranch,AUTOPOOL:GitBranch,BOOSTER:Activity,BOOSTER_INCOME:Activity,MAGIC_LEVEL:GitBranch,MAGIC_LEVEL_INCOME:Activity,DIVIDEND:HandCoins,WITHDRAWAL:Wallet,WALLET:Wallet};
 const short=(value:string)=>`${value.slice(0,6)}…${value.slice(-4)}`;
-const money=(value:string|null)=>value===null?null:`${value} USDT`;
+const money=(value:string|null)=>value===null?null:`${formatDecimalAmount(value,{symbol:""})} USDT`;
 
 export default function HistoryPage(){
  const initial=typeof window==="undefined"?"":new URLSearchParams(window.location.search).get("category")||"";
@@ -55,16 +56,16 @@ function HistoryCard({item}:{item:Item}){
    {item.level&&<Field label="Level" value={String(item.level)}/>}
    {item.position!==null&&<Field label="Position" value={String(item.position)}/>}
    {typeof item.metadata.relationshipLevel==="number"&&<Field label="Relationship level" value={String(item.metadata.relationshipLevel)}/>}
-   {typeof item.metadata.cycleEarnings==="string"&&<Field label="Cycle earnings" value={`${item.metadata.cycleEarnings} USDT`} accent/>}
+   {typeof item.metadata.cycleEarnings==="string"&&<Field label="Cycle earnings" value={money(item.metadata.cycleEarnings)!} accent/>}
    {Array.isArray(item.metadata.positionWallets)&&<Field label="Position wallets" value={item.metadata.positionWallets.map(value=>short(String(value))).join(", ")||"None"}/>}
-   {typeof item.metadata.directIncomeGenerated==="string"&&<Field label="Direct income generated" value={`${item.metadata.directIncomeGenerated} USDT`} accent/>}
+   {typeof item.metadata.directIncomeGenerated==="string"&&<Field label="Direct income generated" value={money(item.metadata.directIncomeGenerated)!} accent/>}
    {typeof item.metadata.firstPackageAt==="string"&&<Field label="First package date" value={new Date(item.metadata.firstPackageAt).toLocaleString()}/>}
-   {typeof item.metadata.fee==="string"&&<Field label="Fee / Net" value={`${item.metadata.fee} / ${String(item.metadata.netAmount||"0.00")} USDT`}/>}
+   {typeof item.metadata.fee==="string"&&<Field label="Fee / Net" value={`${formatDecimalAmount(item.metadata.fee,{symbol:""})} / ${formatDecimalAmount(String(item.metadata.netAmount||"0"),{symbol:""})} USDT`}/>}
    {typeof item.metadata.rejectionReason==="string"&&item.metadata.rejectionReason&&<Field label="Rejection reason" value={item.metadata.rejectionReason}/>}
    {typeof item.metadata.parentWallet==="string"&&<Field label="Parent wallet" value={short(item.metadata.parentWallet)}/>}
    {typeof item.metadata.nextEligibleAt==="string"&&<Field label="Next eligible" value={new Date(item.metadata.nextEligibleAt).toLocaleString()}/>}
-   {typeof item.metadata.previousBalance==="string"&&<Field label="Previous balance" value={`${item.metadata.previousBalance} USDT`}/>}
-   {typeof item.metadata.newBalance==="string"&&<Field label="New balance" value={`${item.metadata.newBalance} USDT`} accent/>}
+   {typeof item.metadata.previousBalance==="string"&&<Field label="Previous balance" value={money(item.metadata.previousBalance)!}/>}
+   {typeof item.metadata.newBalance==="string"&&<Field label="New balance" value={money(item.metadata.newBalance)!} accent/>}
    {typeof item.metadata.memberId==="string"&&<Field label="Member ID" value={item.metadata.memberId}/>}
    {typeof item.metadata.reference==="string"&&item.metadata.reference&&<Field label="Canonical reference" value={item.metadata.reference}/>}
   </div>

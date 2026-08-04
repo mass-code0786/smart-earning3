@@ -2,12 +2,13 @@
 import{useEffect,useState}from"react";
 import{AlertTriangle,RefreshCw,RotateCw}from"lucide-react";
 import{MatrixHistoryMenu}from"@/components/matrix-history-menu";
+import{formatTokenUnits}from"@/lib/client/money";
 type Slot={slotNumber:number;level:number;wallet:string;placementType:string};
 type Package={packageId:number;priceTokenUnits:string;active:boolean;currentCycle:number;cycleStatus:string;
   slots:Slot[];filledPositions:number;emptyPositions:number;recycleCount:number;magicLevelIncome:string;
   level2Income:string;cappedExcess:string;totalEarnings:string};
 type History={id:string;type:string;package_id:number;level:number|null;status:string;amount:string;created_at:string};
-const money=(value:string)=>{const n=BigInt(value),whole=n/1_000_000n,fraction=(n%1_000_000n).toString().padStart(6,"0").slice(0,2);return`$${whole}.${fraction}`};
+const money=(value:string)=>formatTokenUnits(value);
 const shortWallet=(value:string)=>`${value.slice(0,6)}…${value.slice(-4)}`;
 export function X4Page(){
   const[data,setData]=useState<{packages:Package[];history:History[]}|null>(null),[error,setError]=useState("");

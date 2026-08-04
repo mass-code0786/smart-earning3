@@ -5,16 +5,27 @@ export function tokenDecimals() {
   return configured && /^\d+$/.test(configured) ? Number.parseInt(configured, 10) : DEFAULT_DECIMALS;
 }
 
-export function formatTokenUnits(value: string | bigint, options: { decimals?: number; displayDecimals?: number; symbol?: string } = {}) {
+export function formatTokenUnits(value: string | bigint | null | undefined, options: { decimals?: number; displayDecimals?: number; symbol?: string } = {}) {
   const decimals = options.decimals ?? tokenDecimals();
   const displayDecimals = options.displayDecimals ?? 2;
-  const amount = typeof value === "bigint" ? value : BigInt(value || "0");
+  let amount: bigint;
+  try { amount = typeof value === "bigint" ? value : BigInt(value || "0"); } catch { amount = 0n; }
   const negative = amount < 0n;
   const absolute = negative ? -amount : amount;
   const scale = 10n ** BigInt(decimals);
-  const fraction = (absolute % scale).toString().padStart(decimals, "0");
-  const shown = displayDecimals === 0 ? "" : `.${fraction.slice(0, displayDecimals).padEnd(displayDecimals, "0")}`;
-  return `${negative ? "-" : ""}${options.symbol ?? "$"}${(absolute / scale).toLocaleString("en-US")}${shown}`;
+  const displayScale = 10n ** BigInt(displayDecimals);
+  const rounded = (absolute * displayScale + scale / 2n) / scale;
+  const shown = displayDecimals === 0 ? "" : `.${(rounded % displayScale).toString().padStart(displayDecimals, "0")}`;
+  return `${negative ? "-" : ""}${options.symbol ?? "$"}${(rounded / displayScale).toLocaleString("en-US")}${shown}`;
+}
+
+export function formatDecimalAmount(value: string | number | null | undefined, options: { displayDecimals?: number; symbol?: string } = {}) {
+  const raw = String(value ?? "0").trim();
+  const match = /^(-?)(\d+)(?:\.(\d*))?$/.exec(raw);
+  if (!match) return formatTokenUnits(0n, { decimals: 0, ...options });
+  const fraction = match[3] || "";
+  const units = BigInt(`${match[2]}${fraction}` || "0") * (match[1] === "-" ? -1n : 1n);
+  return formatTokenUnits(units, { decimals: fraction.length, ...options });
 }
 
 export function percentageBasisPoints(used: string | bigint, total: string | bigint) {

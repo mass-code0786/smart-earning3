@@ -241,7 +241,7 @@ function MatrixCard({
         {packages.map((item) => (
           <div className={item.active ? "is-active" : "is-locked"} key={item.packageId}>
             <span>{item.active ? item.packageId : "🔒"}</span>
-            <b>${BigInt(item.priceTokenUnits) / 1_000_000n}</b>
+            <b>{formatTokenUnits(item.priceTokenUnits)}</b>
           </div>
         ))}
       </div>
