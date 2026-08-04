@@ -77,13 +77,13 @@ export default function RealTeam() {
         {notice && <p role="status" className="mt-2 text-[10px] text-[#00F77A]">{notice}</p>}
       </section>
 
-      <section id="total-team" className="grid grid-cols-2 gap-2">
+      <section id="total-team" className="team-stats-grid">
         {[
           ["Direct Members", data.directMembers],
           ["Total Team", data.totalTeam],
           ["Active Members", data.activeMembers],
           ["Inactive Members", data.inactiveMembers],
-        ].map(([label, value]) => <div className="smart-glass-card rounded-[16px] p-3" key={label}><small className="text-[9px] text-[#8B9D94]">{label}</small><b className="mt-1 block text-xl">{value}</b></div>)}
+        ].map(([label, value]) => <div className="smart-glass-card team-stat-card rounded-[16px]" key={label}><small className="text-[9px]">{label}</small><b className="mt-1 block text-xl">{value}</b></div>)}
       </section>
 
       <section id="direct-team" className="smart-glass-card rounded-[20px] p-4">

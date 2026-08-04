@@ -217,6 +217,17 @@
   .wallet-summary-page .smart-glass-card,
   .income-type-card
 ) { background: var(--se-glass-surface); }
+
+/* Full-width mobile summary cards (Income, Wallet and Team only). */
+.income-totals-grid,
+.wallet-summary-grid,
+.team-stats-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:8px;width:100%}
+.income-type-card{min-height:83px;padding:10px 12px}
+.wallet-summary-item{min-height:74px;padding:10px 12px}
+.team-stat-card{min-width:0;padding:10px 12px}
+.income-type-card small,
+.wallet-summary-item small,
+.team-stat-card small{color:#fff}
 .smart-internal-shell [class*="bg-black/10"],
 .smart-internal-shell [class*="bg-black/20"] {
   background-color: var(--se-glass-surface) !important;
