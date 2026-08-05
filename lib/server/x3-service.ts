@@ -230,12 +230,12 @@ export async function releaseHeldX3(client:PoolClient,userId:string,packageId:nu
       userId,incomeType:"X3_HOLD_RELEASE",sourceReference:hold.id,grossAmount:amount,
       idempotencyKey:`x3:hold-release:${hold.id}`,
     },client);
-    if(hold.x3_income_ledger_id)await client.query(
+    await client.query(
       `UPDATE x3_hold_ledger SET status=$2,release_purchase_id=$3,released_amount=$4,
        excess_amount=$5,released_at=now() WHERE id=$1 AND status='HELD'`,
       [hold.id,capped.excess>0n?"PARTIALLY_CAPPED":"RELEASED",purchaseId,capped.credited.toString(),capped.excess.toString()],
     );
-    await client.query(
+    if(hold.x3_income_ledger_id)await client.query(
       `UPDATE x3_income_ledger SET status='RELEASED',credited_amount=$2,excess_amount=$3,
        wallet_ledger_id=$4,released_at=now() WHERE id=$1 AND status='HELD'`,
       [hold.x3_income_ledger_id,capped.credited.toString(),capped.excess.toString(),capped.ledgerId],

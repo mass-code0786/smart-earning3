@@ -11,7 +11,7 @@ afterEach(() => {
 const prices = [8, 16, 32, 64, 128, 256, 512, 1024];
 
 describe("package-wise matrix previews", () => {
-  it("renders all eight X3 package matrices with live cycle, earning and recycle metrics", async () => {
+  it("renders all eight X3 direct-cycle matrices with recipients and completed-cycle metrics", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ packages: prices.map((price, index) => ({
@@ -25,18 +25,23 @@ describe("package-wise matrix previews", () => {
         slots: index === 0 ? [{
           slotNumber: 1,
           wallet: "0x1111111111111111111111111111111111111111",
-          placementType: "DIRECT",
+          recipientWallet: "0x2222222222222222222222222222222222222222",
+          disposition: "OWNER_INCOME",
+          grossAmount: "2000000",
+          createdAt: "2026-08-06T00:00:00.000Z",
         }] : [],
         earnedIncome: index === 0 ? "3000000" : "0",
         heldIncome: "0",
         releasedIncome: "0",
+        flushedIncome: "0",
         recycleCount: index === 0 ? 1 : 0,
       })) }),
     }));
     render(<X3Page />);
     await waitFor(() => expect(screen.getAllByText(/Package \d/)).toHaveLength(8));
     expect(screen.getAllByText("Filled positions / total positions")).toHaveLength(8);
-    expect(screen.getByText("1 times ♻️")).toBeInTheDocument();
+    expect(screen.getAllByText("Completed cycles")[0]).toHaveTextContent("Completed cycles1");
+    expect(screen.getByText("Owner Income")).toBeInTheDocument();
     expect(screen.getByText("$3.00 USDT")).toBeInTheDocument();
     expect(screen.getAllByLabelText(/Package \d X3 structure/)).toHaveLength(8);
   });
@@ -70,10 +75,10 @@ describe("package-wise matrix previews", () => {
     }));
     render(<X4Page />);
     await waitFor(() => expect(screen.getAllByText(/Package \d/)).toHaveLength(8));
-    expect(screen.getByRole("heading", { level: 1, name: "C4 Global Matrix" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "X4 Global Matrix" })).toBeInTheDocument();
     expect(screen.queryByText("GLOBAL PLACEMENT")).not.toBeInTheDocument();
     expect(screen.queryByText("Each package has one independent global, level-order queue.")).not.toBeInTheDocument();
-    expect(screen.queryByText("X4 Global Matrix")).not.toBeInTheDocument();
+    expect(screen.queryByText("C4 Global Matrix")).not.toBeInTheDocument();
     expect(screen.getAllByText("Filled positions / total positions")).toHaveLength(8);
     expect(screen.getByText("2 times ♻️")).toBeInTheDocument();
     expect(screen.getByText("$3.00 USDT")).toBeInTheDocument();
