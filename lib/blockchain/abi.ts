@@ -65,6 +65,8 @@ export const PACKAGE_ABI = [
   "function getRemainingEarningCap(address user) view returns (uint256)",
   "function getCappingStatus(address user) view returns (uint8)",
   "event PackagePurchased(address indexed user,uint8 indexed packageId,uint256 amount,uint256 totalPackageValue,uint256 newEarningCap,uint256 timestamp)",
+  "event X3DirectSlotFilled(address indexed buyer,address indexed owner,uint8 indexed packageId,uint256 cycleNumber,uint8 slotNumber,address recipient,uint8 disposition,uint256 packageAmount,uint256 grossAmount)",
+  "event X3DirectCycleCompleted(address indexed owner,uint8 indexed packageId,uint256 completedCycle,uint256 nextCycle)",
 ] as const;
 
 export const ERC20_ABI = [

@@ -66,11 +66,9 @@ contract SmartEarning is AccessControl, Pausable, ReentrancyGuard {
     mapping(bytes32 => bool) public processedWithdrawals;
     uint256 public withdrawalLiquidityFunded;
     uint256 public withdrawalLiquidityPaid;
-    mapping(uint8 => address[]) private _x3Queue;
-    mapping(uint8 => uint256) private _x3QueueHead;
-    mapping(uint8 => mapping(address => uint8)) public x3SlotCount;
-    mapping(uint8 => mapping(address => uint256)) public x3CycleNumber;
-    mapping(uint8 => mapping(address => uint256)) public x3HeldIncome;
+    enum X3Disposition { OWNER_INCOME, PASS_UP, GENESIS_RETAINED }
+    mapping(uint8 => mapping(address => uint8)) public x3DirectSlotCount;
+    mapping(uint8 => mapping(address => uint256)) public x3DirectCycleNumber;
     mapping(uint8 => address[]) private _x4Queue;
     mapping(uint8 => uint256) private _x4QueueHead;
     mapping(uint8 => mapping(address => uint8)) public x4SlotCount;
@@ -169,8 +167,8 @@ contract SmartEarning is AccessControl, Pausable, ReentrancyGuard {
     event WithdrawalPaid(bytes32 indexed reservationHash,bytes32 indexed reservationId,address indexed user,address destination,bytes32 payoutType,bytes32 earningSource,uint256 grossReservedAmount,uint256 feeAmount,uint256 netAmount,uint256 nonce,address executor,address authorizer);
     event PaymentPauseChanged(bool paused);
     event WithdrawalPauseChanged(bool paused);
-    event X3Placed(address indexed user,address indexed owner,uint8 indexed packageId,uint8 slot,uint256 allocation,uint256 cycle);
-    event X3Recycled(address indexed owner,uint8 indexed packageId,uint256 completedCycle,uint256 newCycle);
+    event X3DirectSlotFilled(address indexed buyer,address indexed owner,uint8 indexed packageId,uint256 cycleNumber,uint8 slotNumber,address recipient,X3Disposition disposition,uint256 packageAmount,uint256 grossAmount);
+    event X3DirectCycleCompleted(address indexed owner,uint8 indexed packageId,uint256 completedCycle,uint256 nextCycle);
     event X4Placed(address indexed user,address indexed owner,uint8 indexed packageId,uint8 slot,uint8 level,uint256 accountingAmount,uint256 cycle);
     event X4Recycled(address indexed owner,uint8 indexed packageId,uint256 completedCycle,uint256 newCycle);
     event BoosterTopup(address indexed user,uint256 amount,bytes32 indexed sourceReference);
@@ -321,13 +319,16 @@ contract SmartEarning is AccessControl, Pausable, ReentrancyGuard {
     function _processX3Package(address user,uint8 packageId,uint256 amount) private {
         if(x3PlacementPaused) revert PlacementModulePaused();
         address owner=sponsorOf[user];
-        if(owner==address(0)){emit X3Placed(user,address(0),packageId,0,amount/4,0);return;}
-        uint256 cycle=x3CycleNumber[packageId][owner];if(cycle==0){cycle=1;x3CycleNumber[packageId][owner]=1;}
-        uint8 slot=++x3SlotCount[packageId][owner];
+        uint256 gross=amount/4;
+        if(owner==address(0)){emit X3DirectSlotFilled(user,address(0),packageId,0,0,address(0),X3Disposition.GENESIS_RETAINED,amount,gross);return;}
+        uint256 cycle=x3DirectCycleNumber[packageId][owner];if(cycle==0){cycle=1;x3DirectCycleNumber[packageId][owner]=1;}
+        uint8 slot=++x3DirectSlotCount[packageId][owner];
+        address recipient=owner;X3Disposition disposition=X3Disposition.OWNER_INCOME;
+        if(slot==3){recipient=sponsorOf[owner];disposition=recipient==address(0)?X3Disposition.GENESIS_RETAINED:X3Disposition.PASS_UP;}
         // X3 financial accounting is projected once by the canonical backend
         // after confirmation. The contract only enforces direct-cycle ordering.
-        emit X3Placed(user,owner,packageId,slot,amount/4,cycle);
-        if(slot==3){x3SlotCount[packageId][owner]=0;x3CycleNumber[packageId][owner]=cycle+1;emit X3Recycled(owner,packageId,cycle,cycle+1);}
+        emit X3DirectSlotFilled(user,owner,packageId,cycle,slot,recipient,disposition,amount,gross);
+        if(slot==3){x3DirectSlotCount[packageId][owner]=0;x3DirectCycleNumber[packageId][owner]=cycle+1;emit X3DirectCycleCompleted(owner,packageId,cycle,cycle+1);}
     }
 
     function _processX4Package(address user,uint8 packageId,uint256 amount) private {
