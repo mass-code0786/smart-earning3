@@ -103,15 +103,15 @@ export async function getMatrixHistory(wallet: string, parameters: URLSearchPara
     );
   } else if (module === "X3") {
     result = await query<MatrixHistoryItem>(
-      `SELECT s.id,s.placed_user_id "memberId",u.wallet_address wallet,'X3' module,
+      `SELECT s.id,s.buyer_user_id "memberId",u.wallet_address wallet,'X3' module,
          1::int level,s.slot_number position,NULL::int "levelPosition",NULL::int "childSlot",
-         c.package_id "packageId",pp.amount_token_units::text amount,s.source_transaction_hash "transactionHash",
-         s.placed_user_cycle_id::text reference,s.placed_at "placedAt"
-       FROM x3_cycle_slots s JOIN x3_cycles c ON c.id=s.cycle_id JOIN users u ON u.id=s.placed_user_id
-       LEFT JOIN package_purchases pp ON pp.id=s.placed_user_purchase_id
-       WHERE c.user_id=$1 AND c.package_id=$2
-         AND ($3::timestamptz IS NULL OR (s.placed_at,s.id)<($3::timestamptz,$4::uuid))
-       ORDER BY s.placed_at DESC,s.id DESC LIMIT $5`,
+         c.package_id "packageId",s.gross_amount::text amount,s.transaction_hash "transactionHash",
+         s.disposition||CASE WHEN ru.wallet_address IS NULL THEN '' ELSE ':'||ru.wallet_address END reference,s.created_at "placedAt"
+       FROM x3_direct_cycle_slots s JOIN x3_direct_cycles c ON c.id=s.cycle_id JOIN users u ON u.id=s.buyer_user_id
+       LEFT JOIN users ru ON ru.id=s.recipient_user_id
+       WHERE c.owner_user_id=$1 AND c.package_id=$2
+         AND ($3::timestamptz IS NULL OR (s.created_at,s.id)<($3::timestamptz,$4::uuid))
+       ORDER BY s.created_at DESC,s.id DESC LIMIT $5`,
       [userId, packageId, ...pageValues],
     );
   } else if (module === "X4") {

@@ -320,16 +320,14 @@ contract SmartEarning is AccessControl, Pausable, ReentrancyGuard {
 
     function _processX3Package(address user,uint8 packageId,uint256 amount) private {
         if(x3PlacementPaused) revert PlacementModulePaused();
-        address[] storage queue=_x3Queue[packageId];
-        x3CycleNumber[packageId][user]+=1;
-        if(queue.length==0){queue.push(user);emit X3Placed(user,address(0),packageId,0,amount/4,x3CycleNumber[packageId][user]);return;}
-        uint256 head=_x3QueueHead[packageId];
-        while(head<queue.length&&x3SlotCount[packageId][queue[head]]>=3){unchecked{++head;}}
-        if(head>=queue.length)revert PlacementModulePaused();
-        address owner=queue[head];uint8 slot=++x3SlotCount[packageId][owner];uint256 allocation=amount/4;
-        if(slot<3){uint256 credit=_applyIncomeCap(owner,keccak256("X3_PACKAGE"),allocation);_splitEarning(owner,keccak256("X3_PACKAGE"),credit);}
-        else{uint256 completed=x3CycleNumber[packageId][owner];x3CycleNumber[packageId][owner]=completed+1;x3SlotCount[packageId][owner]=0;queue.push(owner);_x3QueueHead[packageId]=head+1;emit X3Recycled(owner,packageId,completed,completed+1);}
-        queue.push(user);emit X3Placed(user,owner,packageId,slot,allocation,x3CycleNumber[packageId][user]);
+        address owner=sponsorOf[user];
+        if(owner==address(0)){emit X3Placed(user,address(0),packageId,0,amount/4,0);return;}
+        uint256 cycle=x3CycleNumber[packageId][owner];if(cycle==0){cycle=1;x3CycleNumber[packageId][owner]=1;}
+        uint8 slot=++x3SlotCount[packageId][owner];
+        // X3 financial accounting is projected once by the canonical backend
+        // after confirmation. The contract only enforces direct-cycle ordering.
+        emit X3Placed(user,owner,packageId,slot,amount/4,cycle);
+        if(slot==3){x3SlotCount[packageId][owner]=0;x3CycleNumber[packageId][owner]=cycle+1;emit X3Recycled(owner,packageId,cycle,cycle+1);}
     }
 
     function _processX4Package(address user,uint8 packageId,uint256 amount) private {

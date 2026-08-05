@@ -216,7 +216,7 @@ export async function verifyPackagePurchase(walletInput: string, txHashInput: st
     );
     await processX3PackagePurchase(client,{
       purchaseId:purchase.rows[0].id,userId,packageId,amount,txHash,
-      blockNumber:receipt.blockNumber,sourceEventId:contractEvent.rows[0].id,upgradeTimestamp:confirmedBlockAt,
+      blockNumber:receipt.blockNumber,sourceEventId:contractEvent.rows[0].id,upgradeTimestamp:confirmedBlockAt,logIndex:packageLog.log.index,
     });
     await processX4PackagePurchase(client,{
       purchaseId:purchase.rows[0].id,userId,packageId,amount,txHash,

@@ -81,7 +81,7 @@ module.exports = {
     },
   },
   worker("smart-earning-indexer", "scripts/indexer.ts"),
-  worker("smart-earning-x3-recovery", "scripts/x3-recovery-worker.ts"),
+  // Legacy BFS/recycle recovery retired after direct-cycle migration 029.
   worker("smart-earning-x3-hold-expiry", "scripts/x3-hold-expiry-worker.ts"),
   worker("smart-earning-booster", "scripts/booster-worker.ts"),
   worker("smart-earning-dividend", "scripts/dividend-worker.ts"),

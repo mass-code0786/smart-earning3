@@ -21,7 +21,7 @@ describe("matrix placement history service", () => {
 
   it.each([
     ["MAGIC_LEVEL", "matrix_placements", "p.parent_user_id=$1", new URLSearchParams({ module: "MAGIC_LEVEL" }), [userId, null, null, 21]],
-    ["X3", "x3_cycle_slots", "c.user_id=$1 AND c.package_id=$2", new URLSearchParams({ module: "X3", packageId: "3" }), [userId, 3, null, null, 21]],
+    ["X3", "x3_direct_cycle_slots", "c.owner_user_id=$1 AND c.package_id=$2", new URLSearchParams({ module: "X3", packageId: "3" }), [userId, 3, null, null, 21]],
     ["X4", "x4_positions", "c.user_id=$1 AND c.package_id=$2", new URLSearchParams({ module: "X4", packageId: "3" }), [userId, 3, null, null, 21]],
     ["BOOSTER", "booster_positions", "e.owner_user_id=$1 AND e.id=$2", new URLSearchParams({ module: "BOOSTER", entryId }), [userId, entryId, null, null, 21]],
     ["AUTOPOOL", "autopool_positions", "e.owner_user_id=$1 AND e.id=$2", new URLSearchParams({ module: "AUTOPOOL", entryId }), [userId, entryId, null, null, 21]],

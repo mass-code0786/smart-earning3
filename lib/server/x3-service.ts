@@ -4,10 +4,11 @@ import { creditGrossEarning } from "./earning-split-service";
 import { x3Allocation, X3_PACKAGE_PRICES } from "./x3-math";
 import { assertModuleActive } from "./module-control-service";
 import { flushLockedX3Hold, isX3HoldReleaseEligible } from "./x3-hold-expiry-service";
+import { isDirectX3Purchase, processDirectX3PackagePurchase } from "./x3-direct-service";
 
 type PurchaseInput = {
   purchaseId:string; userId:string; packageId:number; amount:bigint;
-  txHash:string; blockNumber:number;sourceEventId:string|null;upgradeTimestamp:Date;
+  txHash:string; blockNumber:number;sourceEventId:string|null;upgradeTimestamp:Date;logIndex?:number;
 };
 type Cycle = {id:string;user_id:string;cycle_number:number;sponsor_user_id:string};
 
@@ -33,6 +34,10 @@ export async function processX3PackagePurchase(client:PoolClient,input:PurchaseI
     [input.purchaseId,input.userId,input.packageId,input.amount.toString(),x3.toString(),reserved.toString(),`x3:reserve:${input.purchaseId}`],
   );
   await releaseHeldX3(client,input.userId,input.packageId,input.purchaseId,input.upgradeTimestamp);
+  if(input.sourceEventId&&input.logIndex!==undefined&&await isDirectX3Purchase(client,input.blockNumber,input.logIndex)){
+    const direct=await processDirectX3PackagePurchase(client,{...input,sourceEventId:input.sourceEventId,logIndex:input.logIndex});
+    return{membershipId:membership.rows[0].id,x3Allocation:x3,reserved,...direct};
+  }
   const sponsorAnchor=await ensureAnchorCycle(client,sponsor,input.packageId);
   const buyerCycle=await createCycle(client,input.userId,input.packageId,sponsor,null);
   await placeCycle(client,{
@@ -210,8 +215,8 @@ async function createSlotIncome(client:PoolClient,input:{
 }
 
 export async function releaseHeldX3(client:PoolClient,userId:string,packageId:number,purchaseId:string,upgradeTimestamp:Date){
-  const holds=await client.query<{id:string;user_id:string;package_id:number;x3_income_ledger_id:string;amount:string;held_at:Date;expires_at:Date|null}>(
-    `SELECT id,user_id,package_id,x3_income_ledger_id,amount::text,held_at,expires_at FROM x3_hold_ledger
+  const holds=await client.query<{id:string;user_id:string;package_id:number;x3_income_ledger_id:string|null;x3_direct_income_ledger_id:string|null;amount:string;held_at:Date;expires_at:Date|null}>(
+    `SELECT id,user_id,package_id,x3_income_ledger_id,x3_direct_income_ledger_id,amount::text,held_at,expires_at FROM x3_hold_ledger
      WHERE user_id=$1 AND package_id=$2 AND status='HELD' ORDER BY held_at,id FOR UPDATE`,
     [userId,packageId],
   );
@@ -225,7 +230,7 @@ export async function releaseHeldX3(client:PoolClient,userId:string,packageId:nu
       userId,incomeType:"X3_HOLD_RELEASE",sourceReference:hold.id,grossAmount:amount,
       idempotencyKey:`x3:hold-release:${hold.id}`,
     },client);
-    await client.query(
+    if(hold.x3_income_ledger_id)await client.query(
       `UPDATE x3_hold_ledger SET status=$2,release_purchase_id=$3,released_amount=$4,
        excess_amount=$5,released_at=now() WHERE id=$1 AND status='HELD'`,
       [hold.id,capped.excess>0n?"PARTIALLY_CAPPED":"RELEASED",purchaseId,capped.credited.toString(),capped.excess.toString()],
@@ -235,6 +240,10 @@ export async function releaseHeldX3(client:PoolClient,userId:string,packageId:nu
        wallet_ledger_id=$4,released_at=now() WHERE id=$1 AND status='HELD'`,
       [hold.x3_income_ledger_id,capped.credited.toString(),capped.excess.toString(),capped.ledgerId],
     );
+    if(hold.x3_direct_income_ledger_id)await client.query(
+      `UPDATE x3_direct_income_ledger SET status='RELEASED',credited_amount=$2,excess_amount=$3,
+       wallet_ledger_id=$4,released_at=now() WHERE id=$1 AND status='HELD'`,
+      [hold.x3_direct_income_ledger_id,capped.credited.toString(),capped.excess.toString(),capped.ledgerId]);
     await client.query(`INSERT INTO x3_hold_release_history(hold_id,user_id,package_id,release_purchase_id,gross_amount,split_event_id,idempotency_key) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(hold_id) DO NOTHING`,[hold.id,userId,packageId,purchaseId,amount.toString(),capped.splitEventId,`x3:release-history:${hold.id}`]);
   }
   return holds.rowCount;

@@ -6,7 +6,7 @@ import { AlertTriangle, GitBranch, Lock, RefreshCw, RotateCw } from "lucide-reac
 import { MatrixHistoryMenu } from "@/components/matrix-history-menu";
 import { formatTokenUnits } from "@/lib/client/money";
 
-type Slot = { slotNumber: number; wallet: string; placementType: string };
+type Slot = { slotNumber:number;wallet:string;recipientWallet:string|null;disposition:"OWNER_INCOME"|"PASS_UP"|"GENESIS_RETAINED";grossAmount:string;createdAt:string };
 type X3Package = {
   packageId: number;
   priceTokenUnits: string;
@@ -19,6 +19,7 @@ type X3Package = {
   earnedIncome: string;
   heldIncome: string;
   releasedIncome: string;
+  flushedIncome: string;
   recycleCount: number;
 };
 
@@ -69,20 +70,21 @@ export function X3Page() {
             return <span className={`rounded-xl border p-3 text-center text-[9px] ${slot ? "border-[#00f77a]/30 bg-[#00f77a]/5" : "border-dashed border-white/10"}`} key={position}>
               <b className="block">Slot {position}</b>
               <small className="mt-1 block truncate text-[#8b9d94]">{slot ? wallet(slot.wallet) : "Empty"}</small>
-              <em className="not-italic text-[#00f77a]">{slot?.placementType || "—"}</em>
+              <em className="not-italic text-[#00f77a]">{slot ? slot.disposition==="OWNER_INCOME"?"Owner Income":slot.disposition==="PASS_UP"?"Pass-up Income":"Genesis retained" : "—"}</em>
+              {slot&&<small className="mt-1 block truncate text-[#8b9d94]">Recipient: {slot.recipientWallet?wallet(slot.recipientWallet):"Genesis"}</small>}
             </span>;
           })}
         </div>
         <div className="mt-4 grid gap-1 text-[10px] text-[#8b9d94]">
           <Stat label="Sponsor" value={item.permanentSponsor || "Genesis"} />
-          <Stat label="Matrix parent" value={item.matrixParent || "Not placed"} />
           <Stat label="Current cycle number" value={`#${item.currentCycle}`} />
           <Stat label="Current cycle status" value={item.active ? "ACTIVE" : "LOCKED"} />
           <Stat label="Filled positions / total positions" value={`${item.slots.length} / 3`} />
-          <Stat label="Total earning" value={`${units(item.earnedIncome)} USDT`} accent />
-          <Stat label="Recycled" value={`${item.recycleCount} times ♻️`} />
+          <Stat label="Total approved gross" value={`${units(item.earnedIncome)} USDT`} accent />
+          <Stat label="Completed cycles" value={String(item.recycleCount)} />
           <Stat label="Held" value={units(item.heldIncome)} warning />
           <Stat label="Released" value={units(item.releasedIncome)} />
+          <Stat label="Flushed" value={units(item.flushedIncome||"0")} warning />
         </div>
         {!item.active && item.heldIncome !== "0"
           ? <p className="mt-3 text-[10px] text-[#e9ad45]">Activate this package to release your held X3 income.</p>
@@ -94,7 +96,7 @@ export function X3Page() {
     </div>
     <section className="smart-glass-card rounded-[22px] p-5">
       <div className="flex items-center gap-2"><RotateCw size={16} className="text-[#00f77a]" /><h2 className="font-bold">X3 History</h2></div>
-      <p className="mt-2 text-xs text-[#8b9d94]">Placement, held, released, capped and recycle records are package-specific and loaded from verified backend ledgers.</p>
+      <p className="mt-2 text-xs text-[#8b9d94]">Direct-buyer slots, owner income, pass-up income, held, released and flushed records are package-specific.</p>
     </section>
   </div>;
 }

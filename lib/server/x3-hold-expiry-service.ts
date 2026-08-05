@@ -15,7 +15,7 @@ export function isX3HoldReleaseEligible(upgradeTimestamp: Date, expiresAt: Date 
 
 export async function flushLockedX3Hold(
   client: PoolClient,
-  hold: { id:string; user_id:string; package_id:number; x3_income_ledger_id:string; amount:string; held_at:Date; expires_at:Date },
+  hold: { id:string; user_id:string; package_id:number; x3_income_ledger_id:string|null; x3_direct_income_ledger_id?:string|null; amount:string; held_at:Date; expires_at:Date },
   trigger: X3HoldTrigger,
   workerInstance: string | null = null,
 ) {
@@ -26,10 +26,14 @@ export async function flushLockedX3Hold(
     [hold.id],
   );
   if (!updated.rows[0]) return false;
-  await client.query(
+  if(hold.x3_income_ledger_id)await client.query(
     `UPDATE x3_income_ledger SET status='FLUSHED'
      WHERE id=$1 AND status='HELD'`,
     [hold.x3_income_ledger_id],
+  );
+  if(hold.x3_direct_income_ledger_id)await client.query(
+    `UPDATE x3_direct_income_ledger SET status='FLUSHED' WHERE id=$1 AND status='HELD'`,
+    [hold.x3_direct_income_ledger_id],
   );
   await client.query(
     `INSERT INTO x3_hold_expiry_history(
@@ -46,10 +50,10 @@ export async function flushLockedX3Hold(
 async function flushDueBatch(limit:number,workerInstance:string) {
   return transaction(async client => {
     const holds = await client.query<{
-      id:string;user_id:string;package_id:number;x3_income_ledger_id:string;
+      id:string;user_id:string;package_id:number;x3_income_ledger_id:string|null;x3_direct_income_ledger_id:string|null;
       amount:string;held_at:Date;expires_at:Date;
     }>(
-      `SELECT id,user_id,package_id,x3_income_ledger_id,amount::text,held_at,expires_at
+      `SELECT id,user_id,package_id,x3_income_ledger_id,x3_direct_income_ledger_id,amount::text,held_at,expires_at
        FROM x3_hold_ledger
        WHERE status='HELD' AND expires_at IS NOT NULL
          AND expires_at<=transaction_timestamp()

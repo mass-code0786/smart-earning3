@@ -37,6 +37,8 @@
     "x3:recovery": "tsx scripts/x3-recovery.ts",
     "x3:recovery-audit": "tsx scripts/x3-recovery-audit.ts",
     "x3:hold-expiry-worker": "tsx scripts/x3-hold-expiry-worker.ts",
+    "x3:direct:readiness": "tsx scripts/x3-direct-readiness.ts",
+    "x3:direct:activate": "tsx scripts/activate-x3-direct.ts",
     "booster:worker": "tsx scripts/booster-worker.ts",
     "booster:reconcile-interval": "tsx scripts/reconcile-booster-interval.ts",
     "dividend:worker": "tsx scripts/dividend-worker.ts",
