@@ -26,8 +26,8 @@ describe("contract-scoped registration matrix indexes", () => {
         )).rows[0].id));
       await client.query(
         `INSERT INTO matrix_placements(user_id,parent_user_id,position,bfs_index)
-         VALUES($1,NULL,NULL,1) ON CONFLICT(bfs_index) DO NOTHING`,
-        [users[2]],
+         VALUES($1,$2,0,1) ON CONFLICT(bfs_index) DO NOTHING`,
+        [users[2], users[0]],
       );
       const registration = (await client.query<{ id: string }>(
         `INSERT INTO registrations(user_id,sponsor_user_id,tx_hash,chain_id,amount_token_units,status,block_number,confirmed_at)
@@ -53,6 +53,9 @@ describe("contract-scoped registration matrix indexes", () => {
       )).rows[0];
       expect(placement).toMatchObject({ contract_matrix_index: "1", contract_address: contractAddress });
       expect(placement.bfs_index).not.toBe("1");
+      expect((await client.query(
+        "SELECT 1 FROM matrix_placements WHERE parent_user_id=$1 AND position=0", [users[0]],
+      )).rowCount).toBe(2);
       expect((await client.query(
         "SELECT 1 FROM matrix_placements WHERE user_id=$1", [users[1]],
       )).rowCount).toBe(1);

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const query = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/server/db", () => ({ query }));
 import { getMatrixHistory } from "@/lib/server/matrix-history-service";
+import { smartEarningDeployment } from "@/lib/blockchain/deployment-metadata";
 
 const wallet = "0x1234567890abcdef1234567890abcdef12345678";
 const userId = "20000000-0000-0000-0000-000000000001";
@@ -20,7 +21,7 @@ describe("matrix placement history service", () => {
   beforeEach(() => query.mockReset());
 
   it.each([
-    ["MAGIC_LEVEL", "matrix_placements", "p.parent_user_id=$1", new URLSearchParams({ module: "MAGIC_LEVEL" }), [userId, null, null, 21]],
+    ["MAGIC_LEVEL", "matrix_placements", "p.parent_user_id=$1", new URLSearchParams({ module: "MAGIC_LEVEL" }), [userId, smartEarningDeployment().address, null, null, 21]],
     ["X3", "x3_direct_cycle_slots", "c.owner_user_id=$1 AND c.package_id=$2", new URLSearchParams({ module: "X3", packageId: "3" }), [userId, 3, null, null, 21]],
     ["X4", "x4_positions", "c.user_id=$1 AND c.package_id=$2", new URLSearchParams({ module: "X4", packageId: "3" }), [userId, 3, null, null, 21]],
     ["BOOSTER", "booster_positions", "e.owner_user_id=$1 AND e.id=$2", new URLSearchParams({ module: "BOOSTER", entryId }), [userId, entryId, null, null, 21]],
@@ -58,6 +59,8 @@ describe("matrix placement history service", () => {
     const sql = String(query.mock.calls[1][0]);
     expect(sql).toContain("(p.position+1)::int visible_position");
     expect(sql).toContain("parent.visible_position*2+child.position+1");
+    expect(sql).toContain("p.contract_address=$2");
+    expect(sql).toContain("child.contract_address=parent.contract_address");
     expect(sql).toContain('p.visible_position position');
     expect(sql).toContain('NULL::int "childSlot"');
     expect(result.items[0]).toMatchObject({ position: 3, childSlot: null });

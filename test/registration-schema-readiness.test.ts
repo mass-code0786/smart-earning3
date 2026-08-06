@@ -23,6 +23,7 @@ function row(overrides: Record<string, unknown> = {}) {
     migration_022: true,
     repair_migration_024: true,
     matrix_index_migration_030: true,
+    matrix_parent_position_migration_031: true,
     history_table: true,
     history_function: true,
     trigger_names: [...REQUIRED_HISTORY_TRIGGERS],
@@ -57,6 +58,7 @@ describe("registration schema readiness", () => {
   it.each([
     ["migration row", { migration_022: false }],
     ["matrix index migration", { matrix_index_migration_030: false }],
+    ["matrix parent-position migration", { matrix_parent_position_migration_031: false }],
     ["table", { history_table: false }],
     ["function", { history_function: false }],
     ["trigger", { trigger_names: REQUIRED_HISTORY_TRIGGERS.slice(1) }],

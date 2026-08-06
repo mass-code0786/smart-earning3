@@ -1,4 +1,5 @@
 import { normalizeWallet } from "./auth";
+import { smartEarningDeployment } from "../blockchain/deployment-metadata";
 import { query } from "./db";
 import { ApiError } from "./http";
 
@@ -48,17 +49,21 @@ function cursorFrom(value: string | null): Cursor | null {
 const descendantsCte = `WITH RECURSIVE descendants AS (
   SELECT p.*,1::int relative_level,ARRAY[$1::uuid,p.user_id]::uuid[] traversal_path,
     (p.position+1)::int visible_position
-  FROM matrix_placements p WHERE p.parent_user_id=$1
+  FROM matrix_placements p
+  WHERE p.parent_user_id=$1 AND p.contract_address=$2
   UNION ALL
   SELECT child.*,parent.relative_level+1,parent.traversal_path||child.user_id,
     (parent.visible_position*2+child.position+1)::int visible_position
   FROM descendants parent
-  JOIN matrix_placements child ON child.parent_user_id=parent.user_id
+  JOIN matrix_placements child
+    ON child.parent_user_id=parent.user_id
+   AND child.contract_address=parent.contract_address
   WHERE parent.relative_level<20 AND NOT child.user_id=ANY(parent.traversal_path)
 )`;
 
 export async function getMagicLevelStructure(wallet: string) {
   const userId = await activeUserId(wallet);
+  const contractAddress = smartEarningDeployment().address;
   const result = await query<{ level: number; userCount: number }>(
     `${descendantsCte}, counts AS (
        SELECT relative_level,count(DISTINCT user_id)::int user_count
@@ -68,7 +73,7 @@ export async function getMagicLevelStructure(wallet: string) {
      FROM generate_series(1,20) levels(level)
      LEFT JOIN counts ON counts.relative_level=levels.level
      ORDER BY levels.level`,
-    [userId],
+    [userId, contractAddress],
   );
   return { levels: result.rows };
 }
@@ -79,15 +84,16 @@ export async function getMagicLevelUsers(wallet: string, parameters: URLSearchPa
   const requested = Number(parameters.get("limit") || 20);
   const limit = Number.isInteger(requested) ? Math.min(50, Math.max(1, requested)) : 20;
   const userId = await activeUserId(wallet);
+  const contractAddress = smartEarningDeployment().address;
   const result = await query<MagicLevelUser>(
     `${descendantsCte}
      SELECT p.id,p.user_id "memberId",u.wallet_address wallet,p.relative_level level,
        p.visible_position position,p.registration_id "registrationId",p.transaction_hash "transactionHash",p.created_at "placedAt"
      FROM descendants p JOIN users u ON u.id=p.user_id
-     WHERE p.relative_level=$2
-       AND ($3::timestamptz IS NULL OR (p.created_at,p.id)<($3::timestamptz,$4::uuid))
-     ORDER BY p.created_at DESC,p.id DESC LIMIT $5`,
-    [userId, level, cursor?.placedAt || null, cursor?.id || null, limit + 1],
+     WHERE p.relative_level=$3
+       AND ($4::timestamptz IS NULL OR (p.created_at,p.id)<($4::timestamptz,$5::uuid))
+     ORDER BY p.created_at DESC,p.id DESC LIMIT $6`,
+    [userId, contractAddress, level, cursor?.placedAt || null, cursor?.id || null, limit + 1],
   );
   const hasMore = result.rows.length > limit;
   const items = result.rows.slice(0, limit);

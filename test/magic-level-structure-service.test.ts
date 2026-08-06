@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const query = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/server/db", () => ({ query }));
 import { getMagicLevelStructure, getMagicLevelUsers } from "@/lib/server/magic-level-structure-service";
+import { smartEarningDeployment } from "@/lib/blockchain/deployment-metadata";
 
 const wallet = "0x1234567890abcdef1234567890abcdef12345678";
 const ownerId = "20000000-0000-0000-0000-000000000001";
@@ -23,8 +24,10 @@ describe("Magic Level structure service", () => {
     const result = await getMagicLevelStructure(wallet);
     expect(result.levels).toEqual(levels);
     const sql = String(query.mock.calls[1][0]);
-    expect(query.mock.calls[1][1]).toEqual([ownerId]);
+    expect(query.mock.calls[1][1]).toEqual([ownerId, smartEarningDeployment().address]);
     expect(sql).toContain("p.parent_user_id=$1");
+    expect(sql).toContain("p.contract_address=$2");
+    expect(sql).toContain("child.contract_address=parent.contract_address");
     expect(sql).toContain("parent.relative_level+1");
     expect(sql).toContain("parent.relative_level<20");
     expect(sql).toContain("NOT child.user_id=ANY(parent.traversal_path)");
@@ -39,11 +42,14 @@ describe("Magic Level structure service", () => {
     query.mockResolvedValueOnce({ rows: [{ id: ownerId }] }).mockResolvedValueOnce({ rows: firstRows });
     const first = await getMagicLevelUsers(wallet, new URLSearchParams({ level: "2" }));
     expect(first.items).toHaveLength(20);
-    expect(String(query.mock.calls[1][0])).toContain("p.relative_level=$2");
-    expect(query.mock.calls[1][1]).toEqual([ownerId, 2, null, null, 21]);
+    expect(String(query.mock.calls[1][0])).toContain("p.relative_level=$3");
+    expect(query.mock.calls[1][1]).toEqual([ownerId, smartEarningDeployment().address, 2, null, null, 21]);
     query.mockResolvedValueOnce({ rows: [{ id: ownerId }] }).mockResolvedValueOnce({ rows: [row(20)] });
     await getMagicLevelUsers(wallet, new URLSearchParams({ level: "2", cursor: first.nextCursor! }));
-    expect(query.mock.calls[3][1]).toEqual([ownerId, 2, first.items[19].placedAt.toISOString(), first.items[19].id, 21]);
+    expect(query.mock.calls[3][1]).toEqual([
+      ownerId, smartEarningDeployment().address, 2,
+      first.items[19].placedAt.toISOString(), first.items[19].id, 21,
+    ]);
   });
 
   it("derives owner-relative binary-tree positions for the first three levels", () => {
