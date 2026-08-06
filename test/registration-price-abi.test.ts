@@ -28,5 +28,8 @@ describe("registration price contract wrapper", () => {
     expect(service).toContain("registrationPrice = magicCredit * 2n");
     expect(service).toContain("registrationContract.getTotalEarningCap(sponsor)");
     expect(service).not.toContain("blockTag: receipt.blockNumber");
+    expect(service).toContain('"[registration:blockchain-call]"');
+    expect(service).toContain('functionName: "getTotalEarningCap(address)"');
+    expect(service).toContain("revertData:");
   });
 });

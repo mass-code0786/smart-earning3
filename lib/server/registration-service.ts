@@ -13,6 +13,41 @@ import type { PoolClient } from "pg";
 const hashSchema = z.string().regex(/^0x[a-fA-F0-9]{64}$/);
 const iface = new Interface(SMART_EARNING_ABI);
 
+type BlockchainDiagnostic = {
+  functionName: string;
+  contractAddress: string;
+  txHash: string;
+  calldata?: string;
+};
+
+async function diagnosticBlockchainCall<T>(
+  diagnostic: BlockchainDiagnostic,
+  operation: () => Promise<T>,
+) {
+  try {
+    const result = await operation();
+    console.info("[registration:blockchain-call]", { ...diagnostic, success: true });
+    return result;
+  } catch (error) {
+    const ethersError = error as {
+      code?: string; reason?: string | null; data?: string | null;
+      shortMessage?: string; action?: string;
+      info?: { error?: { code?: number | string; message?: string; data?: string } };
+    };
+    console.error("[registration:blockchain-call]", {
+      ...diagnostic,
+      success: false,
+      ethersCode: ethersError.code,
+      action: ethersError.action,
+      reason: ethersError.reason,
+      revertData: ethersError.data ?? ethersError.info?.error?.data,
+      rpcCode: ethersError.info?.error?.code,
+      message: ethersError.shortMessage ?? ethersError.info?.error?.message,
+    });
+    throw error;
+  }
+}
+
 async function ensureConfirmedMatrixParent(
   client: PoolClient,
   wallet: string,
@@ -309,9 +344,21 @@ export async function verifyAndActivateRegistration(
   const [receipt, network, latestBlock] = repairEvidence
     ? [repairEvidence.receipt, { chainId: BigInt(CHAIN_ID) }, repairEvidence.latestBlock]
     : await Promise.all([
-        provider.getTransactionReceipt(txHash),
-        provider.getNetwork(),
-        provider.getBlockNumber(),
+        diagnosticBlockchainCall({
+          functionName: "eth_getTransactionReceipt",
+          contractAddress: config.SMART_EARNING_CONTRACT_ADDRESS,
+          txHash,
+        }, () => provider.getTransactionReceipt(txHash)),
+        diagnosticBlockchainCall({
+          functionName: "eth_chainId",
+          contractAddress: config.SMART_EARNING_CONTRACT_ADDRESS,
+          txHash,
+        }, () => provider.getNetwork()),
+        diagnosticBlockchainCall({
+          functionName: "eth_blockNumber",
+          contractAddress: config.SMART_EARNING_CONTRACT_ADDRESS,
+          txHash,
+        }, () => provider.getBlockNumber()),
       ]);
 
   if (Number(network.chainId) !== CHAIN_ID) {
@@ -352,7 +399,12 @@ export async function verifyAndActivateRegistration(
     const registrationContract = new Contract(
       config.SMART_EARNING_CONTRACT_ADDRESS, SMART_EARNING_ABI, provider,
     );
-    sponsorEarningCap = BigInt(await registrationContract.getTotalEarningCap(sponsor));
+    sponsorEarningCap = BigInt(await diagnosticBlockchainCall({
+      functionName: "getTotalEarningCap(address)",
+      contractAddress: config.SMART_EARNING_CONTRACT_ADDRESS,
+      txHash,
+      calldata: iface.encodeFunctionData("getTotalEarningCap", [sponsor]),
+    }, () => registrationContract.getTotalEarningCap(sponsor)));
     if (sponsorEarningCap < directIncome) {
       throw new ApiError(409, "Sponsor on-chain cap is inconsistent with the event", "CAP_RECONCILIATION_FAILED");
     }
