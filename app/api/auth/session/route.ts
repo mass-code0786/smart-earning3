@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { apiError } from "@/lib/server/http";
 import { requireSession } from "@/lib/server/auth";
 import { query } from "@/lib/server/db";
+import { isConfiguredAdmin } from "@/lib/server/admin-policy";
 
 export async function GET() {
   try {
@@ -18,6 +19,7 @@ export async function GET() {
       ...session,
       registered: Boolean(registered.rows[0]?.registered),
       registrationStatus: registered.rows[0]?.status ?? null,
+      isAdmin: isConfiguredAdmin(session.wallet),
     });
   } catch (error) {
     return apiError(error);

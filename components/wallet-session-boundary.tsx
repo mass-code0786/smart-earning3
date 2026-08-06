@@ -8,10 +8,12 @@ const protectedApis = [
   "/api/auth/session", "/api/dashboard", "/api/wallet", "/api/team", "/api/history",
   "/api/packages", "/api/x3", "/api/x4", "/api/booster", "/api/autopool",
   "/api/dividend", "/api/withdrawals", "/api/registrations",
+  "/api/admin",
 ];
 const protectedPages = [
   "/dashboard", "/wallet", "/team", "/income", "/matrix", "/packages", "/booster",
   "/autopool", "/dividend", "/history", "/magic-level", "/menu",
+  "/admin",
 ];
 
 function pathOf(input: RequestInfo | URL) {

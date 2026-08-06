@@ -6,9 +6,11 @@ import { config, proxy } from "@/proxy";
 
 const originalSecret = process.env.SESSION_SECRET;
 const secret = "test-only-proxy-secret-at-least-32-characters";
+const admin = "0x000000000000000000000000000000000000dead";
 
 afterEach(() => {
   process.env.SESSION_SECRET = originalSecret;
+  delete process.env.ADMIN_WALLETS;
 });
 
 describe("protected wallet routes", () => {
@@ -42,5 +44,21 @@ describe("protected wallet routes", () => {
     }));
     expect(denied.status).toBe(307);
     expect(denied.cookies.get("se_session")?.value).toBe("");
+  });
+
+  it("protects the admin page with the canonical allowlist", async () => {
+    process.env.SESSION_SECRET = secret;
+    process.env.ADMIN_WALLETS = admin;
+    const allowedToken = await new SignJWT({ chainId: 97 }).setProtectedHeader({ alg: "HS256" })
+      .setSubject(admin).setExpirationTime("1h").sign(new TextEncoder().encode(secret));
+    expect((await proxy(new NextRequest("http://localhost:3000/admin", {
+      headers: { cookie: `se_session=${allowedToken}` },
+    }))).status).toBe(200);
+    const deniedToken = await new SignJWT({ chainId: 97 }).setProtectedHeader({ alg: "HS256" })
+      .setSubject("0x1111111111111111111111111111111111111111").setExpirationTime("1h")
+      .sign(new TextEncoder().encode(secret));
+    expect((await proxy(new NextRequest("http://localhost:3000/admin", {
+      headers: { cookie: `se_session=${deniedToken}` },
+    }))).status).toBe(307);
   });
 });

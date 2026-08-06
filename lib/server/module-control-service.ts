@@ -1,8 +1,8 @@
-import type{PoolClient}from"pg";import{query,transaction}from"./db";import{ApiError}from"./http";
+import type{PoolClient}from"pg";import{query,transaction}from"./db";import{ApiError}from"./http";import{assertConfiguredAdmin}from"./admin-policy";
 export const OPERATION_MODULES=["MAGIC_FUNDING_WORKER","MAGIC_DISTRIBUTION_WORKER","DIVIDEND_WORKER","BOOSTER_WORKER","GLOBAL_AUTOPOOL_WORKER","AUTO_WITHDRAW_WORKER","WITHDRAWAL_BROADCAST","X3_PLACEMENT","X4_PLACEMENT","PACKAGE_PURCHASE"]as const;
 export type OperationModule=typeof OPERATION_MODULES[number];
 export function isOperationModule(value:string):value is OperationModule{return(OPERATION_MODULES as readonly string[]).includes(value)}
-async function adminId(client:PoolClient,wallet:string){const row=(await client.query<{id:string}>("SELECT id FROM users WHERE wallet_address=$1 AND role='ADMIN'",[wallet])).rows[0];if(!row)throw new ApiError(403,"Administrator access required","ADMIN_REQUIRED");return row.id}
+async function adminId(client:PoolClient,wallet:string){const normalized=assertConfiguredAdmin(wallet),row=(await client.query<{id:string}>("SELECT id FROM users WHERE wallet_address=$1",[normalized])).rows[0];if(!row)throw new ApiError(403,"Administrator user record required","ADMIN_USER_REQUIRED");return row.id}
 export async function isModulePaused(moduleName:OperationModule,client?:PoolClient){const run=(c:PoolClient)=>c.query<{is_paused:boolean}>("SELECT is_paused FROM system_module_controls WHERE module_name=$1",[moduleName]).then(r=>r.rows[0]?.is_paused??false);return client?run(client):transaction(run)}
 export async function assertModuleActive(moduleName:OperationModule,client?:PoolClient){if(await isModulePaused(moduleName,client))throw new ApiError(503,`${moduleName} is paused`,"MODULE_PAUSED")}
 export async function getAllModuleStates(){return(await query(`SELECT c.*,p.wallet_address paused_by_wallet,r.wallet_address resumed_by_wallet FROM system_module_controls c LEFT JOIN users p ON p.id=c.paused_by LEFT JOIN users r ON r.id=c.resumed_by ORDER BY c.module_name`)).rows}

@@ -21,6 +21,7 @@ import { GET } from "@/app/api/auth/session/route";
 
 describe("authenticated registration status", () => {
   beforeEach(() => {
+    process.env.ADMIN_WALLETS = state.wallet;
     state.wallet = "0x000000000000000000000000000000000000dead";
     state.row = { registered: true, status: "ACTIVE" };
     state.query.mockReset();
@@ -34,6 +35,7 @@ describe("authenticated registration status", () => {
       chainId: 97,
       registered: true,
       registrationStatus: "ACTIVE",
+      isAdmin: true,
     });
     expect(state.query.mock.calls[0][0]).toContain("lower(wallet_address)=lower($1)");
     expect(state.query.mock.calls[0][0]).toContain("status='ACTIVE'");
@@ -52,5 +54,11 @@ describe("authenticated registration status", () => {
       registered: false,
       registrationStatus: null,
     });
+  });
+
+  it("does not expose admin status for an unlisted wallet", async () => {
+    process.env.ADMIN_WALLETS = "0x1111111111111111111111111111111111111111";
+    const response = await GET();
+    await expect(response.json()).resolves.toMatchObject({ isAdmin: false });
   });
 });

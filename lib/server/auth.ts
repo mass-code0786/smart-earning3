@@ -6,6 +6,7 @@ import { transaction } from "./db";
 import { ApiError } from "./http";
 import { getAuthConfig } from "./config";
 import { CHAIN_ID } from "./config";
+import { assertConfiguredAdmin } from "./admin-policy";
 
 const COOKIE = "se_session";
 const encoder = new TextEncoder();
@@ -135,12 +136,7 @@ export async function requireSession() {
 
 export async function requireAdmin() {
   const session = await requireSession();
-  const result = await transaction((client) =>
-    client.query<{ role: string }>("SELECT role FROM users WHERE wallet_address=$1", [session.wallet]),
-  );
-  if (result.rows[0]?.role !== "ADMIN") {
-    throw new ApiError(403, "Administrator access required", "ADMIN_REQUIRED");
-  }
+  assertConfiguredAdmin(session.wallet);
   return session;
 }
 

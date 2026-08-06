@@ -6,8 +6,11 @@ const wallet = "0x1234567890abcdef1234567890abcdef12345678";
 
 describe("mobile Menu page", () => {
   beforeEach(() => {
-    vi.stubGlobal("fetch", vi.fn(async () => ({
-      ok: true, json: async () => ({ referralIdentifier: wallet }),
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => ({
+      ok: true,
+      json: async () => String(input).includes("/api/auth/session")
+        ? { isAdmin: false }
+        : { referralIdentifier: wallet },
     })));
     Object.defineProperty(navigator, "clipboard", {
       configurable: true, value: { writeText: vi.fn(async () => undefined) },
@@ -54,6 +57,17 @@ describe("mobile Menu page", () => {
     const expected = `${window.location.origin}/?ref=${wallet}`;
     await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(expected));
     expect(screen.getByRole("status")).toHaveTextContent("Invite link copied");
+  });
+
+  it("shows Admin Panel only when the server session marks the wallet as admin", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => ({
+      ok: true,
+      json: async () => String(input).includes("/api/auth/session")
+        ? { isAdmin: true }
+        : { referralIdentifier: wallet },
+    })));
+    render(<MenuPage />);
+    expect(await screen.findByRole("link", { name: "Admin Panel" })).toHaveAttribute("href", "/admin");
   });
 
   it("requires confirmation before secure logout", async () => {

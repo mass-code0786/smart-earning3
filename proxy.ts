@@ -1,8 +1,9 @@
 import{NextRequest,NextResponse}from"next/server";
 import{jwtVerify}from"jose";
+import{isConfiguredAdmin}from"@/lib/server/admin-policy";
 
 const SESSION_COOKIE="se_session",MAX_BODY_BYTES=1_048_576;
-const protectedPrefixes=["/dashboard","/packages","/matrix","/team","/wallet","/booster","/autopool","/dividend","/income","/magic-level","/history","/menu"];
+const protectedPrefixes=["/dashboard","/packages","/matrix","/team","/wallet","/booster","/autopool","/dividend","/income","/magic-level","/history","/menu","/admin"];
 const buckets=new Map<string,{count:number;resetAt:number}>();
 
 function securityHeaders(response:NextResponse){
@@ -27,7 +28,7 @@ export async function proxy(request:NextRequest){
  }
  if(!protectedPrefixes.some(prefix=>pathname===prefix||pathname.startsWith(`${prefix}/`)))return securityHeaders(NextResponse.next());
  const token=request.cookies.get(SESSION_COOKIE)?.value,secret=process.env.SESSION_SECRET;
- if(token&&secret){try{await jwtVerify(token,new TextEncoder().encode(secret),{algorithms:["HS256"]});return securityHeaders(NextResponse.next())}catch{}}
+ if(token&&secret){try{const{payload}=await jwtVerify(token,new TextEncoder().encode(secret),{algorithms:["HS256"]});if((pathname==="/admin"||pathname.startsWith("/admin/"))&&!isConfiguredAdmin(String(payload.sub||"")))throw new Error("Admin required");return securityHeaders(NextResponse.next())}catch{}}
  const response=NextResponse.redirect(new URL("/",request.url));if(token)response.cookies.delete(SESSION_COOKIE);return securityHeaders(response);
 }
 

@@ -5,11 +5,12 @@ import { useEffect, useMemo, useState } from "react";
 import {
   BadgeDollarSign, ChevronRight, CircleDollarSign, Copy, FileClock, GitBranch,
   HandCoins, Headphones, History, Layers3, LogOut, Network, PackagePlus, Share2,
-  Sparkles, TrendingUp, Users, Wallet, Zap,
+  Settings, Sparkles, TrendingUp, Users, Wallet, Zap,
 } from "lucide-react";
 import { logoutAndRedirect } from "@/lib/client/logout";
 
 type TeamData = { referralIdentifier: string };
+type SessionData = { isAdmin?: boolean };
 type MenuRow = { label: string; href: string; icon: typeof History };
 
 const sections: { title: string; rows: MenuRow[] }[] = [
@@ -66,6 +67,7 @@ export default function MenuPage() {
   const [identifier, setIdentifier] = useState("");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [isAdmin, setIsAdmin] = useState(false);
   const inviteLink = useMemo(() => identifier && typeof window !== "undefined"
     ? `${window.location.origin}/?ref=${encodeURIComponent(identifier)}` : "", [identifier]);
 
@@ -77,6 +79,10 @@ export default function MenuPage() {
         setIdentifier((body as TeamData).referralIdentifier);
       })
       .catch(reason => setError(reason instanceof Error ? reason.message : "Invite link could not be loaded"));
+    void fetch("/api/auth/session", { cache: "no-store", credentials: "same-origin" })
+      .then(async response => response.ok ? response.json() as Promise<SessionData> : null)
+      .then(session => setIsAdmin(session?.isAdmin === true))
+      .catch(() => setIsAdmin(false));
   }, []);
 
   async function copyInvite() {
@@ -111,6 +117,14 @@ export default function MenuPage() {
           </Link>)}
       </div>
     </section>)}
+    {isAdmin && <section className="menu-section">
+      <h2>ADMINISTRATION</h2>
+      <div className="menu-group smart-glass-card">
+        <Link className="menu-row" href="/admin">
+          <i><Settings size={17}/></i><span>Admin Panel</span><ChevronRight size={16}/>
+        </Link>
+      </div>
+    </section>}
     <button type="button" className="menu-logout smart-glass-card" onClick={() => void logoutFromMenu()}>
       <i><LogOut size={18}/></i><span>Logout</span><ChevronRight size={16}/>
     </button>

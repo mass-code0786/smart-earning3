@@ -52,6 +52,14 @@ describe("wallet account-change isolation", () => {
       .toBe("0x00000000000000000000000000000000000000bb");
   });
 
+  it("wallet-binds admin API requests", async () => {
+    render(<WalletSessionBoundary />);
+    await fetch("/api/admin/overview");
+    const options = state.fetch.mock.calls[0][1] as RequestInit;
+    expect(new Headers(options.headers).get("x-connected-wallet"))
+      .toBe("0x00000000000000000000000000000000000000bb");
+  });
+
   it.each(["accountsChanged", "disconnect", "chainChanged"])(
     "invalidates the server session and all client state on %s",
     async event => {
