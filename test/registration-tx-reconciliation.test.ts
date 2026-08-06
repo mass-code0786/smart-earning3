@@ -8,6 +8,11 @@ import {
   findRegistrationTransactionForWallet,
   reconcileRegistrationTransaction,
 } from "@/lib/server/registration-tx-reconciliation";
+import {
+  diagnosticRegistrationClient,
+  safePostgreSqlDiagnostic,
+} from "@/lib/server/registration-service";
+import type { PoolClient } from "pg";
 
 const iface = new Interface(SMART_EARNING_ABI);
 const contract = "0x4509301aa843F504936999850f4bCaF57a03Cd99";
@@ -59,6 +64,35 @@ function fixture(overrides: {
 }
 
 describe("exact BSC Testnet registration transaction reconciliation", () => {
+  it("reports the exact failing PostgreSQL operation without logging query parameters", async () => {
+    const postgresError = Object.assign(new Error("violates check constraint"), {
+      code: "23514",
+      constraint: "activity_history_category_check",
+      table: "activity_history",
+      column: undefined,
+      schema: "public",
+      detail: "Failing row rejected",
+      routine: "ExecConstraints",
+    });
+    const query = vi.fn(async () => { throw postgresError; });
+    const client = diagnosticRegistrationClient({ query } as unknown as PoolClient, txHash);
+    const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    await expect(client.query(
+      "INSERT INTO activity_history(user_wallet) VALUES($1)",
+      ["database-password-must-not-be-logged"],
+    )).rejects.toBe(postgresError);
+
+    expect(logged).toHaveBeenCalledWith("[registration:postgres-operation]", {
+      operation: "INSERT INTO:activity_history",
+      txHash,
+      success: false,
+      ...safePostgreSqlDiagnostic(postgresError),
+    });
+    expect(JSON.stringify(logged.mock.calls)).not.toContain("database-password-must-not-be-logged");
+    logged.mockRestore();
+  });
+
   it("keeps the registration indexing diagnostic read-only", () => {
     const source = readFileSync(
       resolve("scripts/diagnose-registration-indexing.ts"),

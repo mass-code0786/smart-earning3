@@ -47,7 +47,24 @@ async function main() {
 }
 
 main().catch((error: unknown) => {
-  const candidate = error as { code?: string; message?: string };
+  const candidate = error as {
+    code?: string; message?: string; cause?: unknown; databaseCode?: string;
+  };
+  const postgres = (candidate.cause || error) as {
+    code?: string; constraint?: string; table?: string; column?: string;
+    schema?: string; detail?: string; routine?: string; message?: string;
+  };
   console.error(`[registration-reconciliation:${candidate.code || "ERROR"}] ${candidate.message || "Failed"}`);
+  console.error("[registration-reconciliation:postgres]", {
+    databaseCode: candidate.databaseCode,
+    postgresCode: postgres.code,
+    constraint: postgres.constraint,
+    table: postgres.table,
+    column: postgres.column,
+    schema: postgres.schema,
+    detail: postgres.detail,
+    routine: postgres.routine,
+    message: postgres.message?.slice(0, 500),
+  });
   process.exitCode = 1;
 });

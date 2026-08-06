@@ -85,7 +85,8 @@ describe("live registration while historical replay is behind", () => {
       "blockchain_transactions", "blockchain_processed_events",
       "direct_income_ledger", "magic_wallet_ledger",
     ]) expect(source).toContain(table);
-    expect(source).toContain("transaction(async (client)");
+    expect(source).toContain("transaction(async (rawClient)");
+    expect(source).toContain("diagnosticRegistrationClient(rawClient, txHash)");
     expect(source).toContain("confirmedOnchainCredit:directIncome");
     expect(source).not.toContain("SPONSOR_NOT_INDEXED");
   });

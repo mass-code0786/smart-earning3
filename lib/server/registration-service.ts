@@ -20,6 +20,63 @@ type BlockchainDiagnostic = {
   calldata?: string;
 };
 
+type PostgreSqlDiagnostic = {
+  code?: string;
+  constraint?: string;
+  table?: string;
+  column?: string;
+  schema?: string;
+  detail?: string;
+  routine?: string;
+  message?: string;
+};
+
+export function safePostgreSqlDiagnostic(error: unknown): PostgreSqlDiagnostic {
+  const candidate = error as PostgreSqlDiagnostic;
+  return {
+    code: candidate?.code,
+    constraint: candidate?.constraint,
+    table: candidate?.table,
+    column: candidate?.column,
+    schema: candidate?.schema,
+    detail: candidate?.detail,
+    routine: candidate?.routine,
+    message: candidate?.message?.slice(0, 500),
+  };
+}
+
+function databaseOperationName(sql: unknown) {
+  if (typeof sql !== "string") return "prepared-query";
+  const normalized = sql.replace(/\s+/g, " ").trim();
+  const tableOperation = normalized.match(/^(INSERT INTO|UPDATE|DELETE FROM) ([a-z_]+)/i);
+  if (tableOperation) return `${tableOperation[1].toUpperCase()}:${tableOperation[2].toLowerCase()}`;
+  if (/^SELECT pg_advisory_xact_lock/i.test(normalized)) return "LOCK:registration";
+  const selectTable = normalized.match(/^SELECT .*? FROM ([a-z_]+)/i);
+  if (selectTable) return `SELECT:${selectTable[1].toLowerCase()}`;
+  return normalized.split(" ", 1)[0]?.toUpperCase() || "QUERY";
+}
+
+export function diagnosticRegistrationClient(client: PoolClient, txHash: string): PoolClient {
+  return new Proxy(client, {
+    get(target, property, receiver) {
+      if (property !== "query") return Reflect.get(target, property, receiver);
+      return async (...args: unknown[]) => {
+        const operation = databaseOperationName(args[0]);
+        try {
+          const result = await Reflect.apply(target.query, target, args);
+          console.info("[registration:postgres-operation]", { operation, txHash, success: true });
+          return result;
+        } catch (error) {
+          console.error("[registration:postgres-operation]", {
+            operation, txHash, success: false, ...safePostgreSqlDiagnostic(error),
+          });
+          throw error;
+        }
+      };
+    },
+  });
+}
+
 async function diagnosticBlockchainCall<T>(
   diagnostic: BlockchainDiagnostic,
   operation: () => Promise<T>,
@@ -410,7 +467,8 @@ export async function verifyAndActivateRegistration(
     }
   }
 
-  return transaction(async (client) => {
+  return transaction(async (rawClient) => {
+    const client = diagnosticRegistrationClient(rawClient, txHash);
     await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`registration:${txHash}`]);
     await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`registration-sponsor:${sponsor}`]);
     const sponsorUserId = await ensureConfirmedSponsor(
