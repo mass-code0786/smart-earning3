@@ -51,6 +51,20 @@ async function main() {
 
 main().catch((error) => {
   const diagnostic = classifyDatabaseError(error);
+  const postgres = error as {
+    code?: string; constraint?: string; table?: string; column?: string;
+    schema?: string; detail?: string; routine?: string; message?: string;
+  };
   console.error(`[database:${diagnostic.databaseCode}] ${diagnostic.message}`);
+  console.error("[database:postgres]", {
+    code: postgres.code,
+    constraint: postgres.constraint,
+    table: postgres.table,
+    column: postgres.column,
+    schema: postgres.schema,
+    detail: postgres.detail,
+    routine: postgres.routine,
+    message: postgres.message?.slice(0, 500),
+  });
   process.exitCode = 1;
 });
