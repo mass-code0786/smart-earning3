@@ -95,6 +95,7 @@ export async function inspectRegistrationProjection(
   matrixParent: string,
   matrixIndex: bigint,
   matrixPosition: number,
+  contractAddress = getServerConfig().SMART_EARNING_CONTRACT_ADDRESS,
 ) {
   const result = await query<{
     user_exists: boolean; registration_exists: boolean; relation_exists: boolean;
@@ -142,7 +143,8 @@ export async function inspectRegistrationProjection(
          JOIN users parent ON parent.id=mp.parent_user_id
          WHERE lower(child.wallet_address)=lower($1)
            AND lower(parent.wallet_address)=lower($5)
-           AND mp.bfs_index=$6 AND mp.position=$7
+           AND lower(mp.contract_address)=lower($8)
+           AND mp.contract_matrix_index=$6 AND mp.position=$7
        ) expected_placement_exists,
        (SELECT count(*)::int FROM direct_income_ledger d JOIN users u ON u.id=d.source_user_id
         WHERE lower(u.wallet_address)=lower($1) AND lower(d.tx_hash)=lower($3)) direct_income_count,
@@ -151,6 +153,7 @@ export async function inspectRegistrationProjection(
     [
       wallet, sponsor, txHash, `registration:${txHash.toLowerCase()}:magic`,
       matrixParent, matrixIndex.toString(), matrixPosition,
+      normalizeWallet(contractAddress),
     ],
   );
   const state = result.rows[0];
@@ -367,7 +370,7 @@ export async function reconcileRegistrationTransaction(
   if (dependencies.dryRun) {
     const projection = await (dependencies.inspectProjection ?? inspectRegistrationProjection)(
       intendedWallet, eventSponsor, txHash,
-      eventMatrixParent, eventMatrixIndex, eventMatrixPosition,
+      eventMatrixParent, eventMatrixIndex, eventMatrixPosition, contractAddress,
     );
     return {
       txHash,

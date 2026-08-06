@@ -255,14 +255,18 @@ export async function repairUserOwnership(input: {
     if (!parent) throw new Error("Decoded matrix parent is not uniquely indexed");
     const placementUpdate = await client.query(
       `UPDATE matrix_placements SET user_id=$1,parent_user_id=$2,position=$3,
-         bfs_index=$4,registration_id=$5 WHERE registration_id=$5 OR user_id=$1`,
-      [referralUserId, parent.id, event.matrixPosition, event.matrixIndex, registration.id],
+         contract_address=$4,contract_matrix_index=$5,registration_id=$6
+       WHERE registration_id=$6 OR user_id=$1`,
+      [referralUserId, parent.id, event.matrixPosition, event.contractAddress,
+        event.matrixIndex, registration.id],
     );
     if (!placementUpdate.rowCount) {
       await client.query(
-        `INSERT INTO matrix_placements(user_id,parent_user_id,position,bfs_index,registration_id)
-         VALUES($1,$2,$3,$4,$5)`,
-        [referralUserId, parent.id, event.matrixPosition, event.matrixIndex, registration.id],
+        `INSERT INTO matrix_placements(
+           user_id,parent_user_id,position,contract_address,contract_matrix_index,registration_id
+         ) VALUES($1,$2,$3,$4,$5,$6)`,
+        [referralUserId, parent.id, event.matrixPosition, event.contractAddress,
+          event.matrixIndex, registration.id],
       );
     }
     await client.query(

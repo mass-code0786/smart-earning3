@@ -5,6 +5,7 @@ import { loadAuthoritativeEnvironment, redactDatabaseIdentity } from "./producti
 
 export const HISTORY_MIGRATION = "022_activity_history.sql";
 export const HISTORY_REPAIR_MIGRATION = "024_repair_activity_history_schema.sql";
+export const MATRIX_INDEX_MIGRATION = "030_contract_scoped_matrix_index.sql";
 export const REQUIRED_HISTORY_TRIGGERS = [
   "activity_history_append_only",
   "activity_history_package",
@@ -38,6 +39,7 @@ export type RegistrationSchemaReadiness = {
   searchPath: string | null;
   migration022: boolean;
   repairMigration024: boolean;
+  matrixIndexMigration030: boolean;
   activityHistoryTable: boolean;
   historyFunction: boolean;
   requiredTriggers: string[];
@@ -69,6 +71,7 @@ function unavailableReadiness(error: unknown): RegistrationSchemaReadiness {
     searchPath: null,
     migration022: false,
     repairMigration024: false,
+    matrixIndexMigration030: false,
     activityHistoryTable: false,
     historyFunction: false,
     requiredTriggers: [...REQUIRED_HISTORY_TRIGGERS],
@@ -113,6 +116,7 @@ export async function inspectRegistrationSchema(): Promise<RegistrationSchemaRea
       search_path: string;
       migration_022: boolean;
       repair_migration_024: boolean;
+      matrix_index_migration_030: boolean;
       history_table: boolean;
       history_function: boolean;
       trigger_names: string[];
@@ -124,6 +128,7 @@ export async function inspectRegistrationSchema(): Promise<RegistrationSchemaRea
          current_setting('search_path') search_path,
          EXISTS(SELECT 1 FROM schema_migrations WHERE filename=$1) migration_022,
          EXISTS(SELECT 1 FROM schema_migrations WHERE filename=$2) repair_migration_024,
+         EXISTS(SELECT 1 FROM schema_migrations WHERE filename=$5) matrix_index_migration_030,
          to_regclass('public.activity_history') IS NOT NULL history_table,
          to_regprocedure('public.write_activity_history_from_source()') IS NOT NULL history_function,
          COALESCE(ARRAY(
@@ -135,7 +140,8 @@ export async function inspectRegistrationSchema(): Promise<RegistrationSchemaRea
            WHERE table_schema='public' AND table_name='activity_history'
              AND column_name=ANY($4::text[]) ORDER BY column_name
          ),ARRAY[]::text[]) column_names`,
-      [HISTORY_MIGRATION, HISTORY_REPAIR_MIGRATION, REQUIRED_HISTORY_TRIGGERS, REQUIRED_HISTORY_COLUMNS],
+      [HISTORY_MIGRATION, HISTORY_REPAIR_MIGRATION, REQUIRED_HISTORY_TRIGGERS,
+        REQUIRED_HISTORY_COLUMNS, MATRIX_INDEX_MIGRATION],
     );
     const row = result.rows[0];
     const presentTriggers = row?.trigger_names || [];
@@ -145,11 +151,12 @@ export async function inspectRegistrationSchema(): Promise<RegistrationSchemaRea
     const missingColumns = REQUIRED_HISTORY_COLUMNS.filter((name) =>
       !presentColumns.includes(name));
     const registrationReady = Boolean(
-      row?.migration_022 && row.history_table && row.history_function
+      row?.migration_022 && row.matrix_index_migration_030
+      && row.history_table && row.history_function
       && missingTriggers.length === 0 && missingColumns.length === 0,
     );
     const fingerprintSource = JSON.stringify({
-      migrations: [row?.migration_022, row?.repair_migration_024],
+      migrations: [row?.migration_022, row?.repair_migration_024, row?.matrix_index_migration_030],
       table: row?.history_table,
       function: row?.history_function,
       triggers: presentTriggers,
@@ -164,6 +171,7 @@ export async function inspectRegistrationSchema(): Promise<RegistrationSchemaRea
       searchPath: row?.search_path || null,
       migration022: Boolean(row?.migration_022),
       repairMigration024: Boolean(row?.repair_migration_024),
+      matrixIndexMigration030: Boolean(row?.matrix_index_migration_030),
       activityHistoryTable: Boolean(row?.history_table),
       historyFunction: Boolean(row?.history_function),
       requiredTriggers: [...REQUIRED_HISTORY_TRIGGERS],

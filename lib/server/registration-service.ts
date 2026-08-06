@@ -287,26 +287,28 @@ export async function reconcileExistingRegistrationProjection(
     input.matrixParent !== undefined
     && input.matrixIndex !== undefined
     && input.matrixPosition !== undefined
+    && input.contractAddress !== undefined
   ) {
     const parentUserId = await ensureConfirmedMatrixParent(
       client, input.matrixParent, input.confirmedAt,
     );
     const inserted = await client.query<{ id: string }>(
       `INSERT INTO matrix_placements(
-         user_id,parent_user_id,position,bfs_index,registration_id,sponsor_user_id,
-         transaction_hash,block_number,log_index
-       ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
+         user_id,parent_user_id,position,registration_id,sponsor_user_id,
+         transaction_hash,block_number,log_index,contract_address,contract_matrix_index
+       ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
        ON CONFLICT(user_id) DO NOTHING RETURNING id`,
       [
         input.userId, parentUserId, input.matrixPosition,
-        input.matrixIndex.toString(), input.registrationId, input.sponsorUserId,
-        input.txHash, input.blockNumber, input.logIndex,
+        input.registrationId, input.sponsorUserId, input.txHash, input.blockNumber,
+        input.logIndex, normalizeWallet(input.contractAddress), input.matrixIndex.toString(),
       ],
     );
     const placement = await client.query<{
-      parent_user_id: string; position: number; bfs_index: string; registration_id: string;
+      parent_user_id: string; position: number; contract_address: string;
+      contract_matrix_index: string; registration_id: string;
     }>(
-      `SELECT parent_user_id,position,bfs_index::text,registration_id
+      `SELECT parent_user_id,position,contract_address,contract_matrix_index::text,registration_id
        FROM matrix_placements WHERE user_id=$1`,
       [input.userId],
     );
@@ -315,7 +317,8 @@ export async function reconcileExistingRegistrationProjection(
       !row
       || row.parent_user_id !== parentUserId
       || row.position !== input.matrixPosition
-      || row.bfs_index !== input.matrixIndex.toString()
+      || normalizeWallet(row.contract_address) !== normalizeWallet(input.contractAddress)
+      || row.contract_matrix_index !== input.matrixIndex.toString()
       || row.registration_id !== input.registrationId
     ) {
       throw new ApiError(
@@ -586,12 +589,13 @@ export async function verifyAndActivateRegistration(
     );
     await client.query(
       `INSERT INTO matrix_placements(
-        user_id,parent_user_id,position,bfs_index,registration_id,sponsor_user_id,
-        transaction_hash,block_number,log_index
-       ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        user_id,parent_user_id,position,registration_id,sponsor_user_id,
+        transaction_hash,block_number,log_index,contract_address,contract_matrix_index
+       ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
       [
-        userId,parentUserId,matrixPosition,matrixIndex.toString(),registrationId,
-        sponsorUserId,txHash,receipt.blockNumber,log.index,
+        userId,parentUserId,matrixPosition,registrationId,sponsorUserId,txHash,
+        receipt.blockNumber,log.index,normalizeWallet(config.SMART_EARNING_CONTRACT_ADDRESS),
+        matrixIndex.toString(),
       ],
     );
     await client.query(

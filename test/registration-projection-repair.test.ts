@@ -148,7 +148,8 @@ describe("idempotent confirmed-registration projection repair", () => {
           return { rows: [{
             parent_user_id: "matrix-parent",
             position: 1,
-            bfs_index: "42",
+            contract_address: input.contractAddress,
+            contract_matrix_index: "42",
             registration_id: "registration-b",
           }] };
         }
@@ -170,6 +171,8 @@ describe("idempotent confirmed-registration projection repair", () => {
     expect(sql).toContain("INSERT INTO users(wallet_address,status,activated_at)");
     expect(sql).toContain("ON CONFLICT(wallet_address) DO UPDATE");
     expect(sql).toContain("ON CONFLICT(user_id) DO NOTHING");
+    expect(sql).toContain("contract_address,contract_matrix_index");
+    expect(sql).not.toContain("position,bfs_index");
     expect(sql).not.toMatch(/direct_income_ledger|magic_wallet_ledger/);
   });
 });

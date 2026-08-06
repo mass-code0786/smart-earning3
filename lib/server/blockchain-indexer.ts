@@ -236,7 +236,8 @@ async function handleLog(log: IndexerLog, eventName: string, _receipt: IndexerRe
       const wallet = String(event.args.user).toLowerCase();
       const actual = await query(
         `SELECT u.wallet_address,p.wallet_address parent_wallet,s.wallet_address sponsor_wallet,
-                mp.position,mp.bfs_index::text matrix_index,r.tx_hash
+                mp.position,mp.contract_matrix_index::text matrix_index,
+                mp.bfs_index::text database_bfs_index,r.tx_hash
          FROM users u
          LEFT JOIN matrix_placements mp ON mp.user_id=u.id
          LEFT JOIN users p ON p.id=mp.parent_user_id

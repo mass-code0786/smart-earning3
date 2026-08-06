@@ -192,7 +192,9 @@ async function main() {
         EXISTS(SELECT 1 FROM users WHERE lower(wallet_address)=lower($4)) matrix_parent_indexed,
         EXISTS(SELECT 1 FROM matrix_placements mp JOIN users child ON child.id=mp.user_id
           JOIN users parent ON parent.id=mp.parent_user_id WHERE lower(child.wallet_address)=lower($1)
-          AND lower(parent.wallet_address)=lower($4) AND mp.bfs_index=$5 AND mp.position=$6)
+          AND lower(parent.wallet_address)=lower($4)
+          AND lower(mp.contract_address)=lower($8)
+          AND mp.contract_matrix_index=$5 AND mp.position=$6)
           expected_placement_exists,
         (SELECT count(*)::int FROM direct_income_ledger d JOIN users u ON u.id=d.source_user_id
           WHERE lower(u.wallet_address)=lower($1) AND lower(d.tx_hash)=lower($3)) direct_income_count,
@@ -200,7 +202,7 @@ async function main() {
           WHERE lower(u.wallet_address)=lower($1)
             AND m.idempotency_key=$7) magic_credit_count`, [wallet, discovered.sponsor, discovered.txHash,
         discovered.matrixParent, discovered.matrixIndex, discovered.matrixPosition,
-        `registration:${discovered.txHash.toLowerCase()}:magic`]),
+        `registration:${discovered.txHash.toLowerCase()}:magic`, discovered.contractAddress]),
       DATABASE_TIMEOUT_MS,
     );
     const state = projectionResult.rows[0];

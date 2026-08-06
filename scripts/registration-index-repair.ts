@@ -30,7 +30,7 @@ async function snapshot(events: EventProjection[]) {
     matrix_index: string | null; matrix_position: number | null;
   }>(
     `SELECT u.wallet_address wallet,s.wallet_address sponsor,p.wallet_address matrix_parent,
-            mp.bfs_index::text matrix_index,mp.position matrix_position
+            mp.contract_matrix_index::text matrix_index,mp.position matrix_position
      FROM registrations r JOIN users u ON u.id=r.user_id
      JOIN users s ON s.id=r.sponsor_user_id
      LEFT JOIN matrix_placements mp ON mp.registration_id=r.id
