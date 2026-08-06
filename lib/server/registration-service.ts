@@ -348,13 +348,11 @@ export async function verifyAndActivateRegistration(
     registrationPrice = magicCredit * 2n;
     sponsorEarningCap = registrationPrice * 5n;
   } else {
+    registrationPrice = magicCredit * 2n;
     const registrationContract = new Contract(
       config.SMART_EARNING_CONTRACT_ADDRESS, SMART_EARNING_ABI, provider,
     );
-    [registrationPrice, sponsorEarningCap] = await Promise.all([
-      registrationContract.registrationPrice({ blockTag: receipt.blockNumber }),
-      registrationContract.totalEarningCap(sponsor, { blockTag: receipt.blockNumber }),
-    ]).then(([price, cap]) => [BigInt(price), BigInt(cap)] as const);
+    sponsorEarningCap = BigInt(await registrationContract.getTotalEarningCap(sponsor));
     if (sponsorEarningCap < directIncome) {
       throw new ApiError(409, "Sponsor on-chain cap is inconsistent with the event", "CAP_RECONCILIATION_FAILED");
     }

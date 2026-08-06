@@ -1,5 +1,7 @@
 // @vitest-environment node
 import { Contract, Interface } from "ethers";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { SMART_EARNING_ABI } from "@/lib/blockchain/abi";
 
@@ -19,5 +21,12 @@ describe("registration price contract wrapper", () => {
     );
 
     expect(typeof contract.registrationPrice).toBe("function");
+  });
+
+  it("avoids historical RPC reads after validating the canonical registration event", () => {
+    const service = readFileSync(resolve("lib/server/registration-service.ts"), "utf8");
+    expect(service).toContain("registrationPrice = magicCredit * 2n");
+    expect(service).toContain("registrationContract.getTotalEarningCap(sponsor)");
+    expect(service).not.toContain("blockTag: receipt.blockNumber");
   });
 });
