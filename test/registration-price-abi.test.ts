@@ -26,10 +26,10 @@ describe("registration price contract wrapper", () => {
   it("avoids historical RPC reads after validating the canonical registration event", () => {
     const service = readFileSync(resolve("lib/server/registration-service.ts"), "utf8");
     expect(service).toContain("registrationPrice = magicCredit * 2n");
-    expect(service).toContain("registrationContract.getTotalEarningCap(sponsor)");
+    expect(service).toContain("registrationContract.totalEarningCap(sponsor)");
     expect(service).not.toContain("blockTag: receipt.blockNumber");
     expect(service).toContain('"[registration:blockchain-call]"');
-    expect(service).toContain('functionName: "getTotalEarningCap(address)"');
+    expect(service).toContain('functionName: "totalEarningCap(address)"');
     expect(service).toContain("revertData:");
   });
 });

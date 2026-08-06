@@ -20,7 +20,9 @@ async function recordConfirmedOnchainCredit(client:PoolClient,input:{userId:stri
  const state=(await client.query<{total_earning_cap:string;total_earned:string}>(`SELECT total_earning_cap::text,total_earned::text FROM user_package_states WHERE user_id=$1 FOR UPDATE`,[input.userId])).rows[0];
  if(!state)throw new Error("Confirmed earning user cap state is not initialized");
  const cap=BigInt(state.total_earning_cap),earned=BigInt(state.total_earned),totalEarned=earned+credited;
- if(totalEarned>cap)throw new Error("Confirmed on-chain credit exceeds projected earning cap");
+ if(totalEarned>cap)throw new Error(
+  `Confirmed on-chain credit exceeds projected earning cap (user=${input.userId}, confirmed=${credited}, projectedCap=${cap}, projectedEarned=${earned})`
+ );
  const excess=input.grossAmount-credited,remaining=cap-totalEarned,status=remaining===0n?"CAPPED":totalEarned*100n>=cap*90n?"NEAR_CAP":"ACTIVE";
  const ledger=(await client.query<{id:string}>(`INSERT INTO income_credit_ledger(user_id,income_type,source_reference,calculated_amount,credited_amount,excess_amount,total_earned_after,idempotency_key) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,[input.userId,input.incomeType,input.sourceReference,input.grossAmount.toString(),credited.toString(),excess.toString(),totalEarned.toString(),`${input.idempotencyKey}:cap`])).rows[0];
  if(excess>0n)await client.query(`INSERT INTO capped_excess_ledger(user_id,income_type,source_reference,calculated_amount,credited_amount,excess_amount) VALUES($1,$2,$3,$4,$5,$6)`,[input.userId,input.incomeType,input.sourceReference,input.grossAmount.toString(),credited.toString(),excess.toString()]);

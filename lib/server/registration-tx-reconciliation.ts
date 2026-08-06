@@ -103,6 +103,7 @@ export async function inspectRegistrationProjection(
     sponsor_direct_count: number | null; placement_count: number;
     matrix_parent_indexed: boolean; expected_placement_exists: boolean;
     direct_income_count: number; magic_credit_count: number;
+    sponsor_cap: string | null; sponsor_earned: string | null; sponsor_remaining: string | null;
   }>(
     `SELECT
        EXISTS(SELECT 1 FROM users WHERE lower(wallet_address)=lower($1) AND status='ACTIVE') user_exists,
@@ -132,6 +133,12 @@ export async function inspectRegistrationProjection(
        ) history_count,
        (SELECT direct_count::int FROM users WHERE lower(wallet_address)=lower($2) LIMIT 1)
          sponsor_direct_count,
+       (SELECT ups.total_earning_cap::text FROM user_package_states ups JOIN users su ON su.id=ups.user_id
+        WHERE lower(su.wallet_address)=lower($2)) sponsor_cap,
+       (SELECT ups.total_earned::text FROM user_package_states ups JOIN users su ON su.id=ups.user_id
+        WHERE lower(su.wallet_address)=lower($2)) sponsor_earned,
+       (SELECT ups.remaining_cap::text FROM user_package_states ups JOIN users su ON su.id=ups.user_id
+        WHERE lower(su.wallet_address)=lower($2)) sponsor_remaining,
        (SELECT count(*)::int FROM matrix_placements mp JOIN users u ON u.id=mp.user_id
         WHERE lower(u.wallet_address)=lower($1)) placement_count,
        EXISTS(

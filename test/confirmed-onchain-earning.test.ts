@@ -37,4 +37,22 @@ describe("confirmed on-chain registration earning projection", () => {
     expect(split?.values).toEqual(expect.arrayContaining(["100000", "900000"]));
     expect(calls.some(call => call.text.startsWith("UPDATE user_package_states"))).toBe(true);
   });
+
+  it("rolls back a genuine confirmed credit above the deployment-backed projection", async () => {
+    const client = { query: vi.fn(async (text: string) => {
+      if (text.startsWith("SELECT id,income_credit_ledger_id")) return { rows: [] };
+      if (text.startsWith("SELECT total_earning_cap")) {
+        return { rows: [{ total_earning_cap: "10000000", total_earned: "9500000" }] };
+      }
+      throw new Error(`Unexpected write: ${text}`);
+    }) };
+    await expect(creditGrossEarning({
+      userId: "sponsor", incomeType: "DIRECT_INCOME", sourceReference: "registration",
+      grossAmount: 1_000_000n, confirmedOnchainCredit: 1_000_000n,
+      idempotencyKey: "registration:over-cap", magicAlreadyOnchain: true,
+    }, client as never)).rejects.toThrow(
+      /confirmed=1000000, projectedCap=10000000, projectedEarned=9500000/,
+    );
+    expect(client.query).toHaveBeenCalledTimes(2);
+  });
 });

@@ -460,11 +460,11 @@ export async function verifyAndActivateRegistration(
       config.SMART_EARNING_CONTRACT_ADDRESS, SMART_EARNING_ABI, provider,
     );
     sponsorEarningCap = BigInt(await diagnosticBlockchainCall({
-      functionName: "getTotalEarningCap(address)",
+      functionName: "totalEarningCap(address)",
       contractAddress: config.SMART_EARNING_CONTRACT_ADDRESS,
       txHash,
-      calldata: iface.encodeFunctionData("getTotalEarningCap", [sponsor]),
-    }, () => registrationContract.getTotalEarningCap(sponsor)));
+      calldata: iface.encodeFunctionData("totalEarningCap", [sponsor]),
+    }, () => registrationContract.totalEarningCap(sponsor)));
     if (sponsorEarningCap < directIncome) {
       throw new ApiError(409, "Sponsor on-chain cap is inconsistent with the event", "CAP_RECONCILIATION_FAILED");
     }
