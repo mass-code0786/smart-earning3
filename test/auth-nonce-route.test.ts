@@ -7,6 +7,7 @@ const createNonce = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/server/auth", () => ({ createNonce }));
 
 import { POST } from "@/app/api/auth/nonce/route";
+import { resetConfigCacheForTests, ServerConfigError } from "@/lib/server/config";
 
 const wallet = "0x000000000000000000000000000000000000dEaD";
 
@@ -23,6 +24,7 @@ function request(body: unknown, origin = "http://localhost:3000") {
 
 describe("POST /api/auth/nonce request validation", () => {
   beforeEach(() => {
+    resetConfigCacheForTests();
     process.env.DATABASE_URL = "postgresql://localhost/smart_earning_test";
     process.env.SESSION_SECRET = "test-only-session-secret-at-least-32-characters";
     process.env.APP_ORIGIN = "http://localhost:3000";
@@ -47,6 +49,22 @@ describe("POST /api/auth/nonce request validation", () => {
       message: expect.stringContaining("Chain ID: 97"),
     });
     expect(createNonce).toHaveBeenCalledWith(wallet);
+  });
+
+  it("accepts production same-origin auth when APP_ORIGIN has a trailing carriage return", async () => {
+    process.env.APP_ORIGIN = "https://smartearning.io\r";
+    const response = await POST(request({ wallet }, "https://smartearning.io"));
+    expect(response.status).toBe(200);
+  });
+
+  it("retains SERVER_CONFIG_INCOMPLETE for genuinely invalid required configuration", async () => {
+    createNonce.mockRejectedValueOnce(new ServerConfigError(["SESSION_SECRET"], "wallet authentication"));
+    const response = await POST(request({ wallet }));
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({
+      error: "Server configuration incomplete",
+      code: "SERVER_CONFIG_INCOMPLETE",
+    });
   });
 
   it("rejects a malformed wallet address", async () => {

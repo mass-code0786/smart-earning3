@@ -1,7 +1,8 @@
 import { z } from "zod";
+import { normalizedEnv, trimmedEnvValue } from "./env";
 
 const optionalNonEmpty = z.preprocess(
-  (value) => typeof value === "string" && value.trim() === "" ? undefined : value,
+  (value) => typeof value === "string" && value.trim() === "" ? undefined : trimmedEnvValue(value),
   z.string().min(1).optional(),
 );
 
@@ -34,11 +35,26 @@ const serverSchema = z.object({
   APP_ORIGIN: z.string().url().default("http://localhost:3000"),
 });
 
+// These values are deployment scalars. Surrounding whitespace is never meaningful
+// and commonly appears when environment files have CRLF line endings. DATABASE_SSL_CA
+// is deliberately excluded because its internal formatting is certificate data.
+const normalizedConfigKeys = [
+  "DATABASE_URL", "DATABASE_SSL_MODE", "SESSION_SECRET", "APP_ORIGIN",
+  "BSC_TESTNET_RPC_URL", "SMART_EARNING_CHAIN_ID",
+  "SMART_EARNING_CONTRACT_ADDRESS", "BSC_TESTNET_USDT_ADDRESS",
+  "KEEPER_PRIVATE_KEY", "KEEPER_SECRET", "CONFIRMATIONS_REQUIRED",
+] as const;
+
 export type ServerConfig = z.infer<typeof serverSchema>;
 export type AuthConfig = z.infer<typeof authSchema>;
 
 let cached: ServerConfig | undefined;
 let cachedAuth: AuthConfig | undefined;
+
+export function resetConfigCacheForTests() {
+  cached = undefined;
+  cachedAuth = undefined;
+}
 
 export class ServerConfigError extends Error {
   constructor(public readonly missingOrInvalid: string[], public readonly scope: string) {
@@ -48,7 +64,7 @@ export class ServerConfigError extends Error {
 }
 
 function parseConfig<T>(schema: z.ZodType<T>, scope: string): T {
-  const parsed = schema.safeParse(process.env);
+  const parsed = schema.safeParse(normalizedEnv(process.env, normalizedConfigKeys));
   if (!parsed.success) {
     throw new ServerConfigError(
       [...new Set(parsed.error.issues.map((issue) => String(issue.path[0] || "environment")))],
@@ -72,6 +88,10 @@ export const CHAIN_ID = Number(process.env.SMART_EARNING_CHAIN_ID||97);
 
 export function validateAuthEnvironment() {
   return parseConfig(authSchema, "wallet authentication");
+}
+
+export function validateServerEnvironment() {
+  return parseConfig(serverSchema, "blockchain service");
 }
 
 const registrationKeys = [

@@ -1,4 +1,5 @@
 import { Pool, PoolClient, PoolConfig, QueryResultRow } from "pg";
+import { trimmedEnvValue } from "./env";
 
 export type DatabaseSslMode = "disable" | "require" | "verify-full";
 export type DatabaseErrorCode =
@@ -69,15 +70,16 @@ export function databaseSslConfig(
 export function databasePoolConfig(
   connectionString = process.env.DATABASE_URL,
 ): PoolConfig {
-  if (!connectionString) {
+  const normalizedConnectionString = trimmedEnvValue(connectionString) as string | undefined;
+  if (!normalizedConnectionString) {
     throw new DatabaseConnectionError("DATABASE_ERROR", "DATABASE_URL is required");
   }
   return {
-    connectionString,
+    connectionString: normalizedConnectionString,
     max: 10,
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 10_000,
-    ssl: databaseSslConfig(connectionString),
+    ssl: databaseSslConfig(normalizedConnectionString),
   };
 }
 

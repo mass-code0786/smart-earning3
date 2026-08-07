@@ -1,6 +1,7 @@
 import{NextRequest,NextResponse}from"next/server";
 import{jwtVerify}from"jose";
 import{isConfiguredAdmin}from"@/lib/server/admin-policy";
+import{canonicalUrlOrigin}from"@/lib/server/env";
 
 const SESSION_COOKIE="se_session",MAX_BODY_BYTES=1_048_576;
 const protectedPrefixes=["/dashboard","/packages","/matrix","/team","/wallet","/booster","/autopool","/dividend","/income","/magic-level","/history","/menu","/admin"];
@@ -23,7 +24,12 @@ export async function proxy(request:NextRequest){
  const pathname=request.nextUrl.pathname,isApi=pathname.startsWith("/api/");
  if(isApi){
   const length=Number(request.headers.get("content-length")||0);if(Number.isFinite(length)&&length>MAX_BODY_BYTES)return securityHeaders(NextResponse.json({error:"Request body too large",code:"PAYLOAD_TOO_LARGE"},{status:413}));
-  const origin=request.headers.get("origin"),allowed=process.env.APP_ORIGIN;if(origin&&allowed&&origin!==allowed)return securityHeaders(NextResponse.json({error:"Cross-origin request denied",code:"ORIGIN_DENIED"},{status:403}));
+  const origin=request.headers.get("origin"),allowed=process.env.APP_ORIGIN;
+  if(origin&&allowed){
+   let requestOrigin:string,allowedOrigin:string;
+   try{requestOrigin=canonicalUrlOrigin(origin);allowedOrigin=canonicalUrlOrigin(allowed)}catch{return securityHeaders(NextResponse.json({error:"Cross-origin request denied",code:"ORIGIN_DENIED"},{status:403}))}
+   if(requestOrigin!==allowedOrigin)return securityHeaders(NextResponse.json({error:"Cross-origin request denied",code:"ORIGIN_DENIED"},{status:403}));
+  }
   if(rateLimited(request,pathname)){const response=NextResponse.json({error:"Too many requests",code:"RATE_LIMITED"},{status:429});response.headers.set("Retry-After","60");return securityHeaders(response)}
  }
  if(!protectedPrefixes.some(prefix=>pathname===prefix||pathname.startsWith(`${prefix}/`)))return securityHeaders(NextResponse.next());
