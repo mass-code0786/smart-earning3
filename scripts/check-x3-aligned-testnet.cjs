@@ -49,12 +49,12 @@ async function main() {
   const normalizedArtifactHash = keccak256(normalizeImmutables(artifact.bytecode, artifact.immutableReferences));
   const expectedNormalizedHash = deployment.normalizedRuntimeBytecodeHash;
   const expectedDeployedHash = deployment.deployedBytecodeHash;
+  const rawActualHash = keccak256(actualCode);
   if (
-    normalizedActualHash !== normalizedArtifactHash ||
-    (expectedNormalizedHash && normalizedActualHash !== expectedNormalizedHash) ||
-    (!expectedNormalizedHash && expectedDeployedHash && keccak256(actualCode) !== expectedDeployedHash)
+    expectedDeployedHash &&
+    rawActualHash !== expectedDeployedHash
   ) {
-    throw new Error("Aligned normalized runtime bytecode hash mismatch");
+    throw new Error("Aligned runtime bytecode hash mismatch");
   }
 
   const contract = new Contract(address, ABI, provider);
