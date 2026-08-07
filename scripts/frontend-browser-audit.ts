@@ -97,8 +97,8 @@ async function seedBrowserFixtures(db:Client,walletAddress:string,basePackage:an
     financial:{income_wallet:"900000",income_reserved:"1000000",total_withdrawn:"900000",hold_wallet:"500000",booster_wallet:"2500000",dividend_income:"120000",
       gross_earned:"10000000",magic_contribution:"1000000",income_credited:"9000000",cap_total:"50000000",cap_used:"10000000",cap_remaining:"40000000",active_package:"8000000"},
     earningHistory:[{id:"earning-1",income_type:"DIRECT_INCOME",source_reference:source,gross_calculated:"1000000",capped_gross_credit:"1000000",capped_excess:"0",magic_amount:"100000",income_amount:"900000",created_at:now}]}};
-  const packages={...basePackage,registered:true,nextPackage:2,totalPackageValue:"8000000",registrationValue:"2000000",totalEligibleValue:"10000000",
-    totalEarningCap:"50000000",totalEarned:"10000000",remainingCap:"40000000",cappingStatus:"ACTIVE",
+  const packages={...basePackage,registered:true,nextPackage:2,totalPackageValue:"8000000",registrationValue:"2000000",totalEligibleValue:"8000000",
+    totalEarningCap:"40000000",totalEarned:"10000000",remainingCap:"30000000",cappingStatus:"ACTIVE",
     packages:basePackage.packages.map((item:any)=>({...item,status:item.packageId===1?"PURCHASED":item.packageId===2?"AVAILABLE":"LOCKED"}))};
   const x3={packages:Array.from({length:8},(_,index)=>({packageId:index+1,priceTokenUnits:String(8_000_000n*2n**BigInt(index)),x3Allocation:String(2_000_000n*2n**BigInt(index)),
     active:index===0,permanentSponsor:"0x0000000000000000000000000000000000000001",matrixParent:"0x0000000000000000000000000000000000000002",

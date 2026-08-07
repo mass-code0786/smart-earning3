@@ -126,14 +126,16 @@ async function ensureConfirmedSponsor(
   wallet: string,
   confirmedAt: Date,
   registrationValue: bigint,
+  currentPackageValue: bigint,
   currentEarningCap: bigint,
 ) {
   const userId = await ensureConfirmedMatrixParent(client, wallet, confirmedAt);
   await client.query(
     `INSERT INTO user_package_states(
-       user_id,registration_value,total_eligible_value,total_earning_cap,total_earned,remaining_cap
-     ) VALUES($1,$2,$2,$3,0,$3) ON CONFLICT(user_id) DO NOTHING`,
-    [userId, registrationValue.toString(), currentEarningCap.toString()],
+       user_id,total_package_value,registration_value,total_eligible_value,
+       total_earning_cap,total_earned,remaining_cap
+     ) VALUES($1,$2,$3,$2,$4,0,$4) ON CONFLICT(user_id) DO NOTHING`,
+    [userId, currentPackageValue.toString(), registrationValue.toString(), currentEarningCap.toString()],
   );
   return userId;
 }
@@ -204,20 +206,9 @@ export async function reconcileExistingRegistrationProjection(
     await client.query(
       `INSERT INTO user_package_states(
          user_id,registration_value,total_eligible_value,total_earning_cap,total_earned,remaining_cap
-       ) VALUES($1,$2,$2,$3,0,$3) ON CONFLICT(user_id) DO NOTHING`,
+       ) VALUES($1,$2,0,0,0,0) ON CONFLICT(user_id) DO NOTHING`,
       [
         input.userId, input.registrationValue.toString(),
-        (input.registrationValue * 5n).toString(),
-      ],
-    );
-    await client.query(
-      `INSERT INTO earning_cap_ledger(
-         user_id,source_type,source_reference,eligible_value,cap_increase,total_cap_after
-       ) VALUES($1,'REGISTRATION',$2,$3,$4,$4)
-       ON CONFLICT(source_type,source_reference) DO NOTHING`,
-      [
-        input.userId, input.registrationId, input.registrationValue.toString(),
-        (input.registrationValue * 5n).toString(),
       ],
     );
     const magic = await client.query(
@@ -450,24 +441,31 @@ export async function verifyAndActivateRegistration(
     throw new ApiError(403, "Transaction belongs to another wallet", "WALLET_MISMATCH");
   }
   let registrationPrice: bigint;
+  let sponsorPackageValue: bigint;
   let sponsorEarningCap: bigint;
-  if (repairEvidence) {
-    registrationPrice = magicCredit * 2n;
-    sponsorEarningCap = registrationPrice * 5n;
-  } else {
-    registrationPrice = magicCredit * 2n;
-    const registrationContract = new Contract(
-      config.SMART_EARNING_CONTRACT_ADDRESS, SMART_EARNING_ABI, provider,
-    );
-    sponsorEarningCap = BigInt(await diagnosticBlockchainCall({
+  registrationPrice = magicCredit * 2n;
+  const registrationContract = new Contract(
+    config.SMART_EARNING_CONTRACT_ADDRESS, SMART_EARNING_ABI, provider,
+  );
+  [sponsorPackageValue, sponsorEarningCap] = await Promise.all([
+    diagnosticBlockchainCall({
+      functionName: "totalPackageValue(address)",
+      contractAddress: config.SMART_EARNING_CONTRACT_ADDRESS,
+      txHash,
+      calldata: iface.encodeFunctionData("totalPackageValue", [sponsor]),
+    }, async () => BigInt(await registrationContract.totalPackageValue(sponsor))),
+    diagnosticBlockchainCall({
       functionName: "totalEarningCap(address)",
       contractAddress: config.SMART_EARNING_CONTRACT_ADDRESS,
       txHash,
       calldata: iface.encodeFunctionData("totalEarningCap", [sponsor]),
-    }, () => registrationContract.totalEarningCap(sponsor)));
-    if (sponsorEarningCap < directIncome) {
-      throw new ApiError(409, "Sponsor on-chain cap is inconsistent with the event", "CAP_RECONCILIATION_FAILED");
-    }
+    }, async () => BigInt(await registrationContract.totalEarningCap(sponsor))),
+  ]);
+  if (sponsorEarningCap !== sponsorPackageValue * 5n) {
+    throw new ApiError(409, "Sponsor on-chain cap includes an invalid principal", "CAP_RECONCILIATION_FAILED");
+  }
+  if (sponsorEarningCap < directIncome) {
+    throw new ApiError(409, "Sponsor on-chain cap is inconsistent with the event", "CAP_RECONCILIATION_FAILED");
   }
 
   return transaction(async (rawClient) => {
@@ -475,7 +473,7 @@ export async function verifyAndActivateRegistration(
     await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`registration:${txHash}`]);
     await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`registration-sponsor:${sponsor}`]);
     const sponsorUserId = await ensureConfirmedSponsor(
-      client, sponsor, new Date(), registrationPrice, sponsorEarningCap,
+      client, sponsor, new Date(), registrationPrice, sponsorPackageValue, sponsorEarningCap,
     );
 
     const existing = await client.query<{
@@ -572,14 +570,8 @@ export async function verifyAndActivateRegistration(
     await client.query(
       `INSERT INTO user_package_states(
         user_id,registration_value,total_eligible_value,total_earning_cap,total_earned,remaining_cap
-       ) VALUES($1,$2,$2,$3,0,$3)`,
-      [userId, registrationValue.toString(), (registrationValue * 5n).toString()],
-    );
-    await client.query(
-      `INSERT INTO earning_cap_ledger(
-        user_id,source_type,source_reference,eligible_value,cap_increase,total_cap_after
-       ) VALUES($1,'REGISTRATION',$2,$3,$4,$4)`,
-      [userId, registrationId, registrationValue.toString(), (registrationValue * 5n).toString()],
+       ) VALUES($1,$2,0,0,0,0)`,
+      [userId, registrationValue.toString()],
     );
 
     await client.query(

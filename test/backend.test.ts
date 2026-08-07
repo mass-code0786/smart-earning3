@@ -16,6 +16,9 @@ describe("wallet authentication normalization", () => {
 });
 
 describe("central earning cap",()=>{
+ it("preserves historical over-cap earnings and leaves zero remaining capacity",()=>{
+  expect(calculateCappedCredit(40n,45n,10n)).toEqual({credited:0n,excess:10n,totalEarned:45n,remainingAfter:0n,status:"CAPPED"});
+ });
   it("credits only the remaining amount and preserves excess",()=>{
     const result=calculateCappedCredit(50_000_000n,49_970_000n,50_000n);
     expect(result.credited).toBe(30_000n);

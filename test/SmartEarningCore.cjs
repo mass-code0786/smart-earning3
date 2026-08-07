@@ -11,11 +11,11 @@ describe("SmartEarning unified registration and Magic", function () {
   });
   it("registers atomically, forwards treasury payment, and credits Magic accounting", async function () {
     const before=await token.balanceOf(admin.address);
-    await expect(plan.connect(alice).register(genesis.address)).to.emit(plan,"UserRegistered").withArgs(alice.address,genesis.address,genesis.address,1n,0,dollar,dollar);
+    await expect(plan.connect(alice).register(genesis.address)).to.emit(plan,"UserRegistered").withArgs(alice.address,genesis.address,genesis.address,1n,0,0,dollar);
     expect(await token.balanceOf(admin.address)).to.equal(before+2n*dollar);
     expect(await token.balanceOf(await plan.getAddress())).to.equal(0);
     expect(await plan.magicBalance(alice.address)).to.equal(dollar);
-    expect(await plan.magicBalance(genesis.address)).to.equal(100_000n);
+    expect(await plan.magicBalance(genesis.address)).to.equal(0);
   });
   it("rejects duplicate, self, and nonexistent sponsors", async function () {
     await expect(plan.connect(alice).register(alice.address)).to.be.revertedWithCustomError(plan,"SelfReferral");
@@ -26,7 +26,7 @@ describe("SmartEarning unified registration and Magic", function () {
   it("places B referrals below B's already occupied global children",async function(){
     const signers=await ethers.getSigners(),[B,C,D,E,X,Y]=signers.slice(7,13);
     await plan.connect(alice).register(genesis.address);
-    for(const member of[B,C,D,E,X,Y]){await token.mint(member.address,2n*dollar);await token.connect(member).approve(await plan.getAddress(),2n*dollar)}
+    for(const member of[B,C,D,E,X,Y]){await token.mint(member.address,member===B?10n*dollar:2n*dollar);await token.connect(member).approve(await plan.getAddress(),member===B?10n*dollar:2n*dollar)}
     for(const member of[B,C,D,E])await plan.connect(member).register(alice.address);
     await plan.connect(X).register(B.address);await plan.connect(Y).register(B.address);
     expect(await plan.matrixParentOf(B.address)).to.equal(alice.address);
@@ -42,6 +42,7 @@ describe("SmartEarning unified registration and Magic", function () {
     expect([bLeft,bRight]).to.deep.equal([D.address,E.address]);
     expect([dLeft,dRight]).to.deep.equal([X.address,Y.address]);
     for(const node of[alice,B,C,D,E,X,Y])expect(await plan.getMatrixChildCount(node.address)).to.be.lte(2n);
+    await plan.connect(B).purchasePackage(1,8n*dollar);
     const magicBefore=await plan.magicBalance(B.address);await plan.distributeBatch([X.address],await plan.currentCycle());
     expect(await plan.pendingUnqualified(D.address,1)).to.equal(50_000n);
     expect(await plan.claimableMagicIncome(B.address)).to.equal(45_000n);
@@ -110,6 +111,7 @@ describe("SmartEarning unified registration and Magic", function () {
   });
   it("distributes $0.05 at 20 levels and prevents replay", async function () {
     await plan.connect(alice).register(genesis.address);await plan.connect(bob).register(genesis.address);await plan.connect(carol).register(alice.address);
+    await plan.connect(alice).purchasePackage(1,8n*dollar);await token.mint(genesis.address,8n*dollar);await token.connect(genesis).approve(await plan.getAddress(),8n*dollar);await plan.connect(genesis).purchasePackage(1,8n*dollar);
     const cycle=await plan.currentCycle();await plan.distributeBatch([carol.address],cycle);
     expect(await plan.magicBalance(carol.address)).to.equal(0);expect(await plan.claimableMagicIncome(alice.address)).to.equal(45_000n);expect(await plan.claimableMagicIncome(genesis.address)).to.equal(45_000n);expect(await plan.pendingNoUpline(carol.address,20)).to.equal(50_000n);
     await expect(plan.distributeBatch([carol.address],cycle)).to.be.revertedWithCustomError(plan,"AlreadyDistributed");

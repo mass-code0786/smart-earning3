@@ -74,8 +74,8 @@ async function main() {
   const registrationPrice = await smart.registrationPrice();
   if (
     await smart.matrixIndexOf(genesis) !== 0n ||
-    await smart.totalEligibleValue(genesis) !== registrationPrice ||
-    await smart.totalEarningCap(genesis) !== registrationPrice * 5n
+    await smart.totalEligibleValue(genesis) !== 0n ||
+    await smart.totalEarningCap(genesis) !== 0n
   ) {
     throw new Error("Configured genesis wallet does not have constructor-initialized state");
   }

@@ -53,12 +53,16 @@ describe("Genesis sponsor bootstrap on real PostgreSQL", () => {
     expect(first.createdUser).toBe(true);
     expect(second).toMatchObject({ createdUser: false, wallet: genesis.toLowerCase(), status: "ACTIVE" });
 
-    for (const table of ["users", "matrix_placements", "user_package_states", "earning_cap_ledger"]) {
+    for (const table of ["users", "matrix_placements", "user_package_states"]) {
       expect(Number((await client.query(`SELECT count(*) count FROM ${table}`)).rows[0].count)).toBe(1);
     }
-    for (const table of ["registrations", "referral_relations", "package_purchases", "income_credit_ledger"]) {
+    for (const table of ["earning_cap_ledger", "registrations", "referral_relations", "package_purchases", "income_credit_ledger"]) {
       expect(Number((await client.query(`SELECT count(*) count FROM ${table}`)).rows[0].count)).toBe(0);
     }
+    expect((await client.query(`SELECT total_eligible_value::text eligible,total_earning_cap::text cap,
+      remaining_cap::text remaining FROM user_package_states`)).rows[0]).toEqual({
+      eligible: "0", cap: "0", remaining: "0",
+    });
     expect((await client.query(
       "SELECT status,role,activated_at IS NOT NULL activated FROM users WHERE wallet_address=$1",
       [genesis.toLowerCase()],

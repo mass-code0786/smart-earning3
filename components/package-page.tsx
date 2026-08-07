@@ -108,12 +108,12 @@ export function PackagePage({ compact = false }: { compact?: boolean }) {
             ["Next Package", data.nextPackage ? `Package ${data.nextPackage}` : "Maximum reached"],
             ["Total Package Purchase", money(data.totalPackageValue)],
             ["5X Earning Cap", money(data.totalEarningCap)],
-            ["Capping Status", data.cappingStatus],
+            ["Capping Status", data.cappingStatus.replaceAll("_", " ")],
           ].map(([label, value]) => <span className="rounded-xl border border-[#00f77a]/10 bg-black/10 p-3" key={label}><small className="block text-[9px] text-[#8b9d94]">{label}</small><b className="mt-1 block text-sm">{value}</b></span>)}
         </div>
         <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/5"><i className="block h-full bg-[#00f77a]" style={{ width: `${progress}%` }} /></div>
         <div className="mt-2 flex justify-between text-[9px] text-[#8b9d94]"><span>Earned {money(data.totalEarned)} · {progress.toFixed(2)}%</span><span>Remaining {money(data.remainingCap)}</span></div>
-        <div className="mt-3 grid grid-cols-2 gap-2 text-xs"><span>Registration Value <b className="block">{money(data.registrationValue)}</b></span><span>Total Eligible Value <b className="block">{money(data.totalEligibleValue)}</b></span></div>
+        <div className="mt-3 grid grid-cols-2 gap-2 text-xs"><span>Registration Value (not capped) <b className="block">{money(data.registrationValue)}</b></span><span>Package Cap Principal <b className="block">{money(data.totalEligibleValue)}</b></span></div>
       </section>
       {paused && <section role="status" className="smart-glass-card rounded-[18px] border-[#e9ad45]/30 p-4 text-xs text-[#e9c47c]">{pauseMessage}</section>}
       {!data.registered && <section className="smart-glass-card rounded-[22px] border-[#e9ad45]/30 p-5"><h2 className="font-bold">Complete Registration First</h2><p className="mt-2 text-xs text-[#8b9d94]">Package purchases require confirmed on-chain registration.</p><Link href="/register" className="mt-4 inline-block rounded-xl bg-[#00f77a] px-4 py-3 text-xs font-bold text-black">Open Registration</Link></section>}

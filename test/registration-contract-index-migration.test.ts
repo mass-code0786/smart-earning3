@@ -15,6 +15,9 @@ describe("contract-scoped registration matrix index migration", () => {
   const capMigration = readFileSync(
     resolve("database/migrations/032_aligned_genesis_cap_baseline.sql"), "utf8",
   );
+  const packageOnlyCapMigration = readFileSync(
+    resolve("database/migrations/033_package_only_earning_cap.sql"), "utf8",
+  );
 
   it("preserves the global bfs uniqueness constraint and allocates new database indexes by sequence", () => {
     expect(migration).toContain("matrix_placements_bfs_index_seq");
@@ -50,11 +53,11 @@ describe("contract-scoped registration matrix index migration", () => {
     expect(runner).not.toContain("DATABASE_URL:");
   });
 
-  it("bridges the aligned genesis constructor cap through an idempotent ledger", () => {
-    expect(capMigration).toContain("'CONTRACT_GENESIS',aligned_contract");
-    expect(capMigration).toContain("ON CONFLICT(source_type,source_reference) DO NOTHING");
-    expect(capMigration).toContain("inserted_ledger IS NOT NULL");
-    expect(capMigration).toContain("p.contract_address IS NULL");
-    expect(capMigration).not.toMatch(/UPDATE\s+(?:earning_cap_ledger|income_credit_ledger)/i);
+  it("retires the genesis baseline and reconciles only confirmed package principal", () => {
+    expect(capMigration).toContain("Genesis registration does not contribute");
+    expect(packageOnlyCapMigration).toContain("p.status='CONFIRMED'");
+    expect(packageOnlyCapMigration).toContain("package_principal*5");
+    expect(packageOnlyCapMigration).toContain("PACKAGE_ONLY_5X_V1");
+    expect(packageOnlyCapMigration).not.toMatch(/UPDATE\s+(?:earning_cap_ledger|income_credit_ledger)/i);
   });
 });

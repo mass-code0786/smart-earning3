@@ -17,7 +17,6 @@ export async function bootstrapGenesis(
   const wallet = getAddress(walletInput.trim()).toLowerCase();
   if (registrationValueInput <= 0n) throw new Error("Genesis registration value must be positive");
   const registrationValue = registrationValueInput.toString();
-  const earningCap = (registrationValueInput * 5n).toString();
 
   await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["genesis-bootstrap"]);
   const existingRoot = await client.query<{ wallet_address: string }>(
@@ -59,8 +58,8 @@ export async function bootstrapGenesis(
   await client.query(
     `INSERT INTO user_package_states(
        user_id,registration_value,total_eligible_value,total_earning_cap,total_earned,remaining_cap
-     ) VALUES($1,$2,$2,$3,0,$3) ON CONFLICT(user_id) DO NOTHING`,
-    [userId, registrationValue, earningCap],
+     ) VALUES($1,$2,0,0,0,0) ON CONFLICT(user_id) DO NOTHING`,
+    [userId, registrationValue],
   );
   const packageState = await client.query<{
     registration_value: string; total_eligible_value: string; total_earning_cap: string;
@@ -72,30 +71,11 @@ export async function bootstrapGenesis(
   const state = packageState.rows[0];
   if (
     state?.registration_value !== registrationValue
-    || BigInt(state.total_eligible_value) < registrationValueInput
-    || BigInt(state.total_earning_cap) < registrationValueInput * 5n
+    || BigInt(state.total_eligible_value) !== 0n
+    || BigInt(state.total_earning_cap) !== 0n
   ) {
     throw new Error("Genesis bootstrap refused: registration baseline conflicts with existing state");
   }
-
-  const sourceReference = `genesis:${wallet}`;
-  await client.query(
-    `INSERT INTO earning_cap_ledger(
-       user_id,source_type,source_reference,eligible_value,cap_increase,total_cap_after
-     ) VALUES($1,'REGISTRATION',$2,$3,$4,$4)
-     ON CONFLICT(source_type,source_reference) DO NOTHING`,
-    [userId, sourceReference, registrationValue, earningCap],
-  );
-  const ledger = await client.query<{ user_id: string; eligible_value: string; cap_increase: string }>(
-    `SELECT user_id,eligible_value::text,cap_increase::text FROM earning_cap_ledger
-     WHERE source_type='REGISTRATION' AND source_reference=$1`,
-    [sourceReference],
-  );
-  if (
-    ledger.rows[0]?.user_id !== userId
-    || ledger.rows[0]?.eligible_value !== registrationValue
-    || ledger.rows[0]?.cap_increase !== earningCap
-  ) throw new Error("Genesis bootstrap refused: earning-cap baseline conflicts with existing state");
 
   return { wallet, userId, status: "ACTIVE", rootPlacement: true, createdUser: existing.rowCount === 0 };
 }

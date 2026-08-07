@@ -42,10 +42,10 @@ async function isolated(assertion: (client: PoolClient) => Promise<void>) {
   }
 }
 
-describe("aligned genesis cap baseline on real PostgreSQL", () => {
+describe("retired aligned genesis cap baseline on real PostgreSQL", () => {
   afterAll(async () => { await pool.end(); });
 
-  it("adds the constructor entitlement once without rewriting legacy ledgers", async () => isolated(async client => {
+  it("does not add registration principal or rewrite legacy ledgers", async () => isolated(async client => {
     const id = randomUUID();
     await client.query("INSERT INTO users VALUES($1,'0xfd314f3a6e47a802a73da6d620ab3114f14d042f')", [id]);
     await client.query(`INSERT INTO user_package_states VALUES(
@@ -56,9 +56,9 @@ describe("aligned genesis cap baseline on real PostgreSQL", () => {
     expect((await client.query(`SELECT total_eligible_value::text eligible,total_earning_cap::text cap,
       total_earned::text earned,remaining_cap::text remaining,capping_status status
       FROM user_package_states WHERE user_id=$1`, [id])).rows[0]).toEqual({
-      eligible: "4000000", cap: "20000000", earned: "10000000", remaining: "10000000", status: "ACTIVE",
+      eligible: "2000000", cap: "10000000", earned: "10000000", remaining: "0", status: "CAPPED",
     });
-    expect((await client.query("SELECT count(*)::int count FROM earning_cap_ledger")).rows[0].count).toBe(1);
+    expect((await client.query("SELECT count(*)::int count FROM earning_cap_ledger")).rows[0].count).toBe(0);
     await expect(client.query("UPDATE earning_cap_ledger SET total_cap_after=1"))
       .rejects.toThrow(/append-only/);
   }));

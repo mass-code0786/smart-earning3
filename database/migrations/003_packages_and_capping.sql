@@ -128,38 +128,14 @@ INSERT INTO user_package_states(
 SELECT
   u.id,
   r.amount_token_units,
-  r.amount_token_units,
-  r.amount_token_units*5,
-  LEAST(
-    r.amount_token_units*5,
-    COALESCE((SELECT sum(d.amount_token_units) FROM direct_income_ledger d WHERE d.sponsor_user_id=u.id),0)
-    + COALESCE((SELECT sum(m.amount_token_units) FROM magic_income_ledger m WHERE m.beneficiary_user_id=u.id AND m.status='CLAIMABLE'),0)
-  ),
-  GREATEST(
-    r.amount_token_units*5
-    - COALESCE((SELECT sum(d.amount_token_units) FROM direct_income_ledger d WHERE d.sponsor_user_id=u.id),0)
-    - COALESCE((SELECT sum(m.amount_token_units) FROM magic_income_ledger m WHERE m.beneficiary_user_id=u.id AND m.status='CLAIMABLE'),0),
-    0
-  ),
-  CASE
-    WHEN COALESCE((SELECT sum(d.amount_token_units) FROM direct_income_ledger d WHERE d.sponsor_user_id=u.id),0)
-       + COALESCE((SELECT sum(m.amount_token_units) FROM magic_income_ledger m WHERE m.beneficiary_user_id=u.id AND m.status='CLAIMABLE'),0) >= r.amount_token_units*5 THEN 'CAPPED'
-    WHEN (
-      COALESCE((SELECT sum(d.amount_token_units) FROM direct_income_ledger d WHERE d.sponsor_user_id=u.id),0)
-      + COALESCE((SELECT sum(m.amount_token_units) FROM magic_income_ledger m WHERE m.beneficiary_user_id=u.id AND m.status='CLAIMABLE'),0)
-    )*100 >= r.amount_token_units*5*90 THEN 'NEAR_CAP'
-    ELSE 'ACTIVE'
-  END
+  0,
+  0,
+  0,
+  0,
+  'CAPPED'
 FROM users u
 JOIN registrations r ON r.user_id=u.id AND r.status='CONFIRMED'
 ON CONFLICT(user_id) DO NOTHING;
-
-INSERT INTO earning_cap_ledger(
-  user_id,source_type,source_reference,eligible_value,cap_increase,total_cap_after
-)
-SELECT user_id,'REGISTRATION',id::text,amount_token_units,amount_token_units*5,amount_token_units*5
-FROM registrations WHERE status='CONFIRMED'
-ON CONFLICT(source_type,source_reference) DO NOTHING;
 
 CREATE TRIGGER earning_cap_ledger_append_only
 BEFORE UPDATE OR DELETE ON earning_cap_ledger

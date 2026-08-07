@@ -78,7 +78,9 @@ export async function getPackageDashboard(walletInput: string) {
     totalEarningCap: totalEarningCap.toString(),
     totalEarned: totalEarned.toString(),
     remainingCap: remainingCap.toString(),
-    cappingStatus: ["ACTIVE","NEAR_CAP","CAPPED"][Number(cappingStatus)] || "CAPPED",
+    cappingStatus: totalPackageValue === 0n
+      ? "NOT_APPLICABLE"
+      : ["ACTIVE","NEAR_CAP","CAPPED"][Number(cappingStatus)] || "CAPPED",
     modulePauses: {
       packagePurchase: await isModulePaused("PACKAGE_PURCHASE"),
       x3Placement: await isModulePaused("X3_PLACEMENT"),
@@ -144,6 +146,9 @@ export async function verifyPackagePurchase(walletInput: string, txHashInput: st
   if (eventWallet !== wallet) throw new ApiError(403, "Event belongs to another wallet", "WALLET_MISMATCH");
   if (packageId !== requestedPackage) throw new ApiError(422, "Package event ID is incorrect", "WRONG_PACKAGE_ID");
   if (amount !== expectedAmount) throw new ApiError(422, "Package event amount is incorrect", "WRONG_PACKAGE_AMOUNT");
+  if (newCap !== totalPackageValue * 5n) {
+    throw new ApiError(409, "Package event earning cap includes an invalid principal", "CAP_RECONCILIATION_FAILED");
+  }
 
   return transaction(async (client) => {
     await assertModuleActive("PACKAGE_PURCHASE",client);
@@ -188,7 +193,7 @@ export async function verifyPackagePurchase(walletInput: string, txHashInput: st
     );
     await client.query(
       `UPDATE user_package_states SET highest_package_id=$2,total_package_value=$3,
-       total_eligible_value=registration_value+$3,total_earning_cap=$4,
+       total_eligible_value=$3,total_earning_cap=$4,
        remaining_cap=GREATEST($4-total_earned,0),
        capping_status=CASE WHEN total_earned >= $4 THEN 'CAPPED'
          WHEN total_earned*100 >= $4*90 THEN 'NEAR_CAP' ELSE 'ACTIVE' END,

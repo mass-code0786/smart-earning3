@@ -214,8 +214,8 @@ contract SmartEarning is AccessControl, Pausable, ReentrancyGuard {
 
         registered[genesisUser] = true;
         matrixIndexOf[genesisUser] = 0;
-        totalEligibleValue[genesisUser] = registrationPrice;
-        totalEarningCap[genesisUser] = registrationPrice * 5;
+        totalEligibleValue[genesisUser] = 0;
+        totalEarningCap[genesisUser] = 0;
         _registeredUsers.push(genesisUser);
     }
 
@@ -249,8 +249,8 @@ contract SmartEarning is AccessControl, Pausable, ReentrancyGuard {
         matrixParentOf[user] = parent;
         matrixIndexOf[user] = index;
         magicBalance[user] = oneDollar;
-        totalEligibleValue[user] = registrationPrice;
-        totalEarningCap[user] = registrationPrice * 5;
+        totalEligibleValue[user] = 0;
+        totalEarningCap[user] = 0;
         _registeredUsers.push(user);
         _matrixChildren[parent][position] = user;
         _matrixChildCount[parent] += 1;
@@ -300,7 +300,7 @@ contract SmartEarning is AccessControl, Pausable, ReentrancyGuard {
         processedPaymentSources[paymentSourceKey_]=true;
         uint256 previousCap=totalEarningCap[user];
         uint256 increase=amount*5;
-        totalEligibleValue[user]+=amount;
+        totalEligibleValue[user]=totalPackageValue[user];
         totalEarningCap[user]=previousCap+increase;
         uint256 magicAmount=amount/8;
         magicBalance[user]+=magicAmount;
