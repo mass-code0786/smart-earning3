@@ -1,7 +1,7 @@
 import{NextRequest,NextResponse}from"next/server";
 import{jwtVerify}from"jose";
 import{isConfiguredAdmin}from"@/lib/server/admin-policy";
-import{canonicalUrlOrigin}from"@/lib/server/env";
+import{canonicalUrlOrigin,trimmedEnvValue}from"@/lib/server/env";
 
 const SESSION_COOKIE="se_session",MAX_BODY_BYTES=1_048_576;
 const protectedPrefixes=["/dashboard","/packages","/matrix","/team","/wallet","/booster","/autopool","/dividend","/income","/magic-level","/history","/menu","/admin"];
@@ -33,7 +33,7 @@ export async function proxy(request:NextRequest){
   if(rateLimited(request,pathname)){const response=NextResponse.json({error:"Too many requests",code:"RATE_LIMITED"},{status:429});response.headers.set("Retry-After","60");return securityHeaders(response)}
  }
  if(!protectedPrefixes.some(prefix=>pathname===prefix||pathname.startsWith(`${prefix}/`)))return securityHeaders(NextResponse.next());
- const token=request.cookies.get(SESSION_COOKIE)?.value,secret=process.env.SESSION_SECRET;
+ const token=request.cookies.get(SESSION_COOKIE)?.value,secret=trimmedEnvValue(process.env.SESSION_SECRET)as string|undefined;
  if(token&&secret){try{const{payload}=await jwtVerify(token,new TextEncoder().encode(secret),{algorithms:["HS256"]});if((pathname==="/admin"||pathname.startsWith("/admin/"))&&!isConfiguredAdmin(String(payload.sub||"")))throw new Error("Admin required");return securityHeaders(NextResponse.next())}catch{}}
  const response=NextResponse.redirect(new URL("/",request.url));if(token)response.cookies.delete(SESSION_COOKIE);return securityHeaders(response);
 }

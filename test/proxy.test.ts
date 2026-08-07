@@ -46,6 +46,26 @@ describe("protected wallet routes", () => {
     expect(denied.cookies.get("se_session")?.value).toBe("");
   });
 
+  it("allows an ACTIVE registered wallet session when the process secret has CRLF whitespace", async () => {
+    process.env.SESSION_SECRET = ` ${secret}\r\n`;
+    const activeWalletToken = await new SignJWT({
+      wallet: "0x000000000000000000000000000000000000dead",
+      chainId: 97,
+    })
+      .setProtectedHeader({ alg: "HS256" })
+      .setSubject("0x000000000000000000000000000000000000dead")
+      .setExpirationTime("1h")
+      .sign(new TextEncoder().encode(secret));
+
+    const response = await proxy(new NextRequest("https://smartearning.io/dashboard", {
+      headers: { cookie: `se_session=${activeWalletToken}` },
+    }));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("location")).toBeNull();
+    expect(response.cookies.get("se_session")).toBeUndefined();
+  });
+
   it("protects the admin page with the canonical allowlist", async () => {
     process.env.SESSION_SECRET = secret;
     process.env.ADMIN_WALLETS = admin;
