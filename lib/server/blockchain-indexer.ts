@@ -10,6 +10,7 @@ import { getPool, query } from "./db";
 import { smartEarningDeployment } from "@/lib/blockchain/deployment-metadata";
 import { getSmartEarningContract as getOnchainRegistrationState } from "@/lib/blockchain/provider";
 import { transaction } from "./db";
+import { bootstrapGenesis } from "./genesis-bootstrap";
 import { verifyAndActivateRegistration } from "./registration-service";
 import { verifyPackagePurchase } from "./package-service";
 import { ApiError } from "./http";
@@ -179,37 +180,7 @@ const processedEvents: ProcessedEventStore = {
 
 async function ensureGenesisProjection(genesis: string) {
   const registrationPrice = BigInt(await getOnchainRegistrationState().registrationPrice());
-  await transaction(async (client) => {
-    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", ["registration-genesis-projection"]);
-    const user = await client.query<{ id: string }>(
-      `INSERT INTO users(wallet_address,status,role,activated_at)
-       VALUES($1,'ACTIVE','ADMIN',now())
-       ON CONFLICT(wallet_address) DO UPDATE SET status='ACTIVE'
-       RETURNING id`,
-      [genesis],
-    );
-    await client.query(
-      `INSERT INTO matrix_placements(user_id,parent_user_id,position,bfs_index)
-       VALUES($1,NULL,NULL,0) ON CONFLICT(user_id) DO NOTHING`,
-      [user.rows[0].id],
-    );
-    await client.query(
-      `INSERT INTO user_package_states(
-         user_id,registration_value,total_eligible_value,total_earning_cap,total_earned,remaining_cap
-       ) VALUES($1,$2,$2,$3,0,$3) ON CONFLICT(user_id) DO NOTHING`,
-      [user.rows[0].id, registrationPrice.toString(), (registrationPrice * 5n).toString()],
-    );
-    await client.query(
-      `INSERT INTO earning_cap_ledger(
-         user_id,source_type,source_reference,eligible_value,cap_increase,total_cap_after
-       ) VALUES($1,'REGISTRATION',$2,$3,$4,$4)
-       ON CONFLICT(source_type,source_reference) DO NOTHING`,
-      [
-        user.rows[0].id, `genesis:${genesis}`, registrationPrice.toString(),
-        (registrationPrice * 5n).toString(),
-      ],
-    );
-  });
+  await transaction((client) => bootstrapGenesis(client, genesis, registrationPrice));
 }
 
 export function decodedIndexerEventName(log: IndexerLog) {

@@ -55,6 +55,19 @@ describe("registration preparation preflight", () => {
     expect(state.getCode).toHaveBeenCalledTimes(2);
   });
 
+  it("normalizes sponsor address case without allowing an unregistered wallet", async () => {
+    const mixedCaseSponsor = "0x00000000000000000000000000000000000000AA";
+    await expect(registrationPreflight(registrant, mixedCaseSponsor)).resolves.toEqual({
+      registrant,
+      sponsor,
+    });
+    const random = "0x00000000000000000000000000000000000000cc";
+    await expect(registrationPreflight(registrant, random)).rejects.toMatchObject({
+      stage: "CHECK_SPONSOR",
+      original: expect.objectContaining({ code: "SPONSOR_NOT_ACTIVE" }),
+    });
+  });
+
   it("returns stable non-500 expected registration errors", async () => {
     state.query.mockImplementation(async (sql: string) => sql.includes("FROM users")
       ? { rows: [{ active: false }] }
