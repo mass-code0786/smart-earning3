@@ -1,6 +1,6 @@
 "use client";
 
-import { BrowserProvider, Contract, Eip1193Provider, parseUnits, keccak256, toUtf8Bytes } from "ethers";
+import { BrowserProvider, Contract, Eip1193Provider, getAddress, parseUnits, keccak256, toUtf8Bytes } from "ethers";
 import { ERC20_ABI, PACKAGE_ABI, SMART_EARNING_ABI } from "@/lib/blockchain/abi";
 
 export type InjectedProvider = Eip1193Provider & {
@@ -44,11 +44,33 @@ const TESTNET = {
   blockExplorerUrls: ["https://testnet.bscscan.com"],
 };
 
-function publicContracts() {
-  const app = process.env.NEXT_PUBLIC_SMART_EARNING_CONTRACT_ADDRESS;
-  const usdt = process.env.NEXT_PUBLIC_BSC_TESTNET_USDT_ADDRESS;
-  const packages = process.env.NEXT_PUBLIC_SMART_EARNING_CONTRACT_ADDRESS;
-  if (!app || !usdt || !packages) throw new Error("BNB Testnet contract addresses are not configured");
+export function transactionAddress(value: unknown, fieldName: string) {
+  if (typeof value !== "string" || !/^0x[a-fA-F0-9]{40}$/.test(value.trim())) {
+    throw new RegistrationFlowError(
+      "INVALID_TRANSACTION_ADDRESS",
+      `${fieldName} must be a valid EVM address`,
+    );
+  }
+  try {
+    return getAddress(value.trim());
+  } catch {
+    throw new RegistrationFlowError(
+      "INVALID_TRANSACTION_ADDRESS",
+      `${fieldName} must be a valid EVM address`,
+    );
+  }
+}
+
+export function publicContracts() {
+  const app = transactionAddress(
+    process.env.NEXT_PUBLIC_SMART_EARNING_CONTRACT_ADDRESS,
+    "NEXT_PUBLIC_SMART_EARNING_CONTRACT_ADDRESS",
+  );
+  const usdt = transactionAddress(
+    process.env.NEXT_PUBLIC_BSC_TESTNET_USDT_ADDRESS,
+    "NEXT_PUBLIC_BSC_TESTNET_USDT_ADDRESS",
+  );
+  const packages = app;
   return { app, usdt, packages };
 }
 
@@ -276,6 +298,7 @@ export async function walletLogin(onStage?: (stage: "Connecting wallet…" | "Re
 }
 
 export async function registerOnTestnet(sponsor: string, onStatus: (status: string) => void) {
+  const normalizedSponsor = transactionAddress(sponsor, "sponsor");
   const { signer, wallet } = await connectTestnet();
   const authenticated = await authRequest("/api/auth/session");
   if (!authenticated.response.ok ||
@@ -283,7 +306,7 @@ export async function registerOnTestnet(sponsor: string, onStatus: (status: stri
     throw new WalletLoginError("SESSION_FAILED", "Wallet session mismatch");
   }
   onStatus("Finding placement…");
-  const preparationStorageKey = `registration-preparation:${wallet}:${sponsor.toLowerCase()}`;
+  const preparationStorageKey = `registration-preparation:${wallet}:${normalizedSponsor.toLowerCase()}`;
   let requestKey = sessionStorage.getItem(preparationStorageKey);
   if (!requestKey) {
     requestKey = crypto.randomUUID();
@@ -291,7 +314,7 @@ export async function registerOnTestnet(sponsor: string, onStatus: (status: stri
   }
   const preparation = await fetch("/api/registrations/prepare", {
     method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ sponsor, requestKey }),
+    body: JSON.stringify({ sponsor: normalizedSponsor, requestKey }),
   });
   const placement = await preparation.json();
   if (preparation.status === 409 && placement.code === "ALREADY_REGISTERED") {
@@ -302,6 +325,12 @@ export async function registerOnTestnet(sponsor: string, onStatus: (status: stri
     throw new RegistrationFlowError(
       String(placement.code || "REGISTRATION_PREPARATION_FAILED"),
       String(placement.error || "Registration preparation failed"),
+    );
+  }
+  if (placement.ready !== true || placement.status !== "READY_TO_REGISTER") {
+    throw new RegistrationFlowError(
+      "INVALID_REGISTRATION_PREPARATION",
+      "Registration preparation response is invalid",
     );
   }
   const currentAccounts = await getInjectedProvider().request({ method: "eth_accounts" });
@@ -338,7 +367,7 @@ export async function registerOnTestnet(sponsor: string, onStatus: (status: stri
   onStatus("Confirm registration. Your wallet will show the separate BNB gas fee.");
   let sent;
   try {
-    sent = await registration.register(sponsor);
+    sent = await registration.register(normalizedSponsor);
   } catch (error) {
     if (isWalletRejection(error)) {
       throw new RegistrationFlowError("TRANSACTION_REJECTED", "Registration transaction was rejected");
@@ -348,7 +377,7 @@ export async function registerOnTestnet(sponsor: string, onStatus: (status: stri
   sessionStorage.removeItem(preparationStorageKey);
   onStatus(`Submitted ${sent.hash}. Waiting for confirmation…`);
   await sent.wait();
-  return verifyRegistrationWithRetry(sent.hash, sponsor, onStatus);
+  return verifyRegistrationWithRetry(sent.hash, normalizedSponsor, onStatus);
 }
 
 const permanentRegistrationVerificationCodes = new Set([

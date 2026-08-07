@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { resolveAddress } from "ethers";
 
 const getAddress = vi.fn(async () => "0x000000000000000000000000000000000000dEaD");
 const signMessage = vi.fn(async () => "0xsigned");
@@ -17,9 +18,38 @@ import {
   connectTestnet,
   getInjectedProvider,
   registerOnTestnet,
+  transactionAddress,
   walletLogin,
   WalletLoginError,
 } from "@/lib/client/wallet";
+
+describe("registration transaction addresses", () => {
+  it("normalizes BSC Testnet addresses without invoking ENS resolution", async () => {
+    const resolveName = vi.fn();
+    const usdt = transactionAddress(
+      "0x29c52A2A617EabB3d2A81979B551ECE998fC5774\r",
+      "NEXT_PUBLIC_BSC_TESTNET_USDT_ADDRESS",
+    );
+    expect(usdt).toBe("0x29c52A2A617EabB3d2A81979B551ECE998fC5774");
+    expect(resolveAddress(usdt, {
+      getNetwork: async () => ({ chainId: 97n, name: "bnbt" }),
+      resolveName,
+    } as never)).toBe(usdt);
+    expect(resolveName).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["NEXT_PUBLIC_BSC_TESTNET_USDT_ADDRESS", "bnbt"],
+    ["NEXT_PUBLIC_SMART_EARNING_CONTRACT_ADDRESS", "bscTestnet"],
+    ["sponsor", "GENESIS_WALLET"],
+    ["sponsor", undefined],
+  ])("rejects invalid %s before ethers can resolve it", (field, value) => {
+    expect(() => transactionAddress(value, field)).toThrowError(expect.objectContaining({
+      code: "INVALID_TRANSACTION_ADDRESS",
+      message: `${field} must be a valid EVM address`,
+    }));
+  });
+});
 
 afterEach(() => {
   vi.unstubAllGlobals();
