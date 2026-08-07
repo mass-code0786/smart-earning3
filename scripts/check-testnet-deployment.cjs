@@ -1,6 +1,6 @@
 const { readFile } = require("node:fs/promises");
 const { resolve } = require("node:path");
-const { Contract, JsonRpcProvider, getAddress } = require("ethers");
+const { Contract, JsonRpcProvider, Wallet, getAddress, keccak256 } = require("ethers");
 
 const EXPECTED_DEPLOYER = getAddress("0xf3a86386FE213901C8e02067c83B8cEb1f3aF508");
 const MOCK_ABI = ["function decimals() view returns (uint8)"];
@@ -35,6 +35,14 @@ function address(name) {
   }
 }
 
+function signerAddress(name) {
+  try {
+    return getAddress(new Wallet(required(name)).address);
+  } catch {
+    throw new Error(`${name} must be a valid private key`);
+  }
+}
+
 async function metadata() {
   try {
     return JSON.parse(await readFile(resolve("deployments", "bsc-testnet.json"), "utf8"));
@@ -53,6 +61,8 @@ async function main() {
   const treasury = address("TREASURY_WALLET");
   const genesis = address("GENESIS_WALLET");
   const authorizer = address("WITHDRAWAL_AUTHORIZER_ADDRESS");
+  const keeper = signerAddress("KEEPER_PRIVATE_KEY");
+  const withdrawalExecutor = signerAddress("AUTO_WITHDRAW_PRIVATE_KEY");
   const deployment = await metadata();
 
   if (getAddress(deployment.address) !== smartAddress) throw new Error("Smart Earning metadata address mismatch");
@@ -60,9 +70,14 @@ async function main() {
   if (getAddress(deployment.genesis) !== genesis) throw new Error("Genesis metadata address mismatch");
   if (getAddress(deployment.treasury) !== treasury) throw new Error("Treasury metadata address mismatch");
   if (getAddress(deployment.authorizer) !== authorizer) throw new Error("Authorizer metadata address mismatch");
+  if (deployment.policy !== "PACKAGE_ONLY_5X_V1") throw new Error("Deployment metadata cap policy mismatch");
 
   if (await provider.getCode(usdtAddress) === "0x") throw new Error("Mock USDT bytecode is missing");
-  if (await provider.getCode(smartAddress) === "0x") throw new Error("Smart Earning bytecode is missing");
+  const smartBytecode = await provider.getCode(smartAddress);
+  if (smartBytecode === "0x") throw new Error("Smart Earning bytecode is missing");
+  if (deployment.deployedBytecodeHash && keccak256(smartBytecode) !== deployment.deployedBytecodeHash) {
+    throw new Error("Smart Earning runtime bytecode hash mismatch");
+  }
 
   const token = new Contract(usdtAddress, MOCK_ABI, provider);
   if (Number(await token.decimals()) !== 6) throw new Error("Mock USDT decimals are not 6");
@@ -95,9 +110,12 @@ async function main() {
     ["deployer KEEPER_ROLE", await smart.hasRole(roles.keeper, deployer)],
     ["deployer PAUSER_ROLE", await smart.hasRole(roles.pauser, deployer)],
     ["deployer WITHDRAWAL_EXECUTOR_ROLE", await smart.hasRole(roles.withdrawalExecutor, deployer)],
+    ["configured keeper KEEPER_ROLE", await smart.hasRole(roles.keeper, keeper)],
+    ["configured withdrawal executor WITHDRAWAL_EXECUTOR_ROLE", await smart.hasRole(roles.withdrawalExecutor, withdrawalExecutor)],
     ["treasury TREASURY_ROLE", await smart.hasRole(roles.treasury, treasury)],
     ["authorizer AUTHORIZER_ROLE", await smart.hasRole(roles.authorizer, authorizer)],
     ["authorizer lacks WITHDRAWAL_EXECUTOR_ROLE", !await smart.hasRole(roles.withdrawalExecutor, authorizer)],
+    ["withdrawal executor lacks AUTHORIZER_ROLE", !await smart.hasRole(roles.authorizer, withdrawalExecutor)],
   ];
   const failed = checks.filter(([, passed]) => !passed).map(([name]) => name);
   if (failed.length) throw new Error(`Role validation failed: ${failed.join(", ")}`);
@@ -111,6 +129,8 @@ async function main() {
     genesis,
     treasury,
     authorizer,
+    keeper,
+    withdrawalExecutor,
     deployer,
     roleChecks: checks.map(([name]) => name),
   }, null, 2)}\n`);

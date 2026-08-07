@@ -47,8 +47,13 @@ async function main() {
   const artifact = await artifactRuntime();
   const normalizedActualHash = keccak256(normalizeImmutables(actualCode, artifact.immutableReferences));
   const normalizedArtifactHash = keccak256(normalizeImmutables(artifact.bytecode, artifact.immutableReferences));
-  const expectedHash = deployment.normalizedRuntimeBytecodeHash || deployment.deployedBytecodeHash;
-  if (normalizedActualHash !== normalizedArtifactHash || normalizedActualHash !== expectedHash) {
+  const expectedNormalizedHash = deployment.normalizedRuntimeBytecodeHash;
+  const expectedDeployedHash = deployment.deployedBytecodeHash;
+  if (
+    normalizedActualHash !== normalizedArtifactHash ||
+    (expectedNormalizedHash && normalizedActualHash !== expectedNormalizedHash) ||
+    (!expectedNormalizedHash && expectedDeployedHash && keccak256(actualCode) !== expectedDeployedHash)
+  ) {
     throw new Error("Aligned normalized runtime bytecode hash mismatch");
   }
 

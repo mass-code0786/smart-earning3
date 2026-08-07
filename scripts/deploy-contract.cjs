@@ -9,6 +9,9 @@ async function main() {
   if (hre.network.name !== "bscTestnet" || Number(network.chainId) !== 97) {
     throw new Error("Deployment is restricted to BNB Smart Chain Testnet (chainId 97)");
   }
+  if (process.env.SMART_EARNING_DEPLOY_CONFIRM !== "DEPLOY_PACKAGE_ONLY_CAP_TESTNET") {
+    throw new Error("SMART_EARNING_DEPLOY_CONFIRM=DEPLOY_PACKAGE_ONLY_CAP_TESTNET is required");
+  }
   if (!process.env.DEPLOYER_PRIVATE_KEY) throw new Error("DEPLOYER_PRIVATE_KEY is required");
   let derivedDeployer;
   try {
@@ -38,19 +41,28 @@ async function main() {
   const contract = await factory.deploy(usdt, genesis, deployer.address, treasury, authorizer);
   await contract.waitForDeployment();
   const receipt = await contract.deploymentTransaction().wait();
+  const contractAddress = await contract.getAddress();
+  const deployedBytecodeHash = hre.ethers.keccak256(await hre.ethers.provider.getCode(contractAddress));
   const deployment = {
     network: "bscTestnet",
     chainId: 97,
+    policy: "PACKAGE_ONLY_5X_V1",
+    alignment: "DIRECT_REFERRAL_X3_V1",
+    rolloutMode: "TRANSITIONAL",
     deployer: EXPECTED_DEPLOYER,
-    address: await contract.getAddress(),
+    address: contractAddress,
     txHash: receipt.hash,
     blockNumber: receipt.blockNumber,
     usdt,
     genesis,
     treasury,
     authorizer,
+    deployedBytecodeHash,
   };
-  await writeFile(resolve("deployments", "bsc-testnet.json"), JSON.stringify(deployment, null, 2));
+  await Promise.all([
+    writeFile(resolve("deployments", "bsc-testnet.json"), JSON.stringify(deployment, null, 2)),
+    writeFile(resolve("deployments", "bsc-testnet-x3-aligned.json"), JSON.stringify(deployment, null, 2)),
+  ]);
   process.stdout.write(`${JSON.stringify(deployment, null, 2)}\n`);
 }
 
