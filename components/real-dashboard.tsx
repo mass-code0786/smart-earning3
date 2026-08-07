@@ -21,6 +21,7 @@ type DashboardData = {
   wallet_address: string;
   direct_count: number;
   total_team: number;
+  incomeTotals?: { incomeType: string; total: string }[];
 };
 
 type X3Package = {
@@ -172,6 +173,10 @@ export default function RealDashboard() {
               href="/matrix/x4"
               unavailable={data.moduleErrors.x4}
             />
+            <section className="home-magic-report-card">
+              <div><small>Magic Level Report</small><span>MAGIC INCOME</span><b>{formatTokenUnits(data.user.incomeTotals?.find(item=>item.incomeType==="MAGIC_LEVEL_INCOME")?.total||"0")} <em>USDT</em></b></div>
+              <Link href="/magic-level">View ↗</Link>
+            </section>
           </div>
         </div>
       )}

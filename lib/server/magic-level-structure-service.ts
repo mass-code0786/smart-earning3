@@ -61,6 +61,49 @@ const descendantsCte = `WITH RECURSIVE descendants AS (
   WHERE parent.relative_level<20 AND NOT child.user_id=ANY(parent.traversal_path)
 )`;
 
+const reportDescendantsCte = `WITH RECURSIVE descendants(user_id,relative_level,traversal_path) AS (
+  SELECT p.user_id,1::int,ARRAY[$1::uuid,p.user_id]::uuid[]
+  FROM matrix_placements p WHERE p.parent_user_id=$1
+  UNION ALL
+  SELECT child.user_id,parent.relative_level+1,parent.traversal_path||child.user_id
+  FROM descendants parent JOIN matrix_placements child ON child.parent_user_id=parent.user_id
+  WHERE parent.relative_level<20 AND NOT child.user_id=ANY(parent.traversal_path)
+)`;
+
+export function requiredMagicDirects(level: number) {
+  if (!Number.isInteger(level) || level < 1 || level > 20) throw new Error("Invalid Magic Level");
+  return Math.ceil(level / 2);
+}
+
+export function magicLevelStatus(level: number, userCount: number, qualifiedDirects: number) {
+  return userCount > 0 && qualifiedDirects >= requiredMagicDirects(level) ? "ACHIEVED" as const : "PENDING" as const;
+}
+
+export async function getMagicLevelReport(wallet: string) {
+  const userId = await activeUserId(wallet);
+  const [counts, directs, income] = await Promise.all([
+    query<{ level: number; userCount: number }>(`${reportDescendantsCte},counts AS (
+      SELECT relative_level,count(DISTINCT user_id)::int user_count FROM descendants GROUP BY relative_level
+    ) SELECT levels.level,COALESCE(counts.user_count,0)::int "userCount"
+      FROM generate_series(1,20) levels(level) LEFT JOIN counts ON counts.relative_level=levels.level
+      ORDER BY levels.level`, [userId]),
+    query<{ count: number }>(`SELECT count(*)::int count FROM referral_relations rr
+      JOIN users u ON u.id=rr.user_id AND u.status='ACTIVE' WHERE rr.sponsor_user_id=$1`, [userId]),
+    query<{ total: string }>(`SELECT COALESCE(sum(income_amount),0)::text total FROM earning_split_events
+      WHERE user_id=$1 AND income_type='MAGIC_LEVEL_INCOME'`, [userId]),
+  ]);
+  const qualifiedDirects = directs.rows[0]?.count || 0;
+  return {
+    magicIncome: income.rows[0]?.total || "0",
+    qualifiedDirects,
+    levels: counts.rows.map(row => ({
+      level: row.level, requiredDirects: requiredMagicDirects(row.level),
+      qualifiedDirects, currentTeam: row.userCount,
+      status: magicLevelStatus(row.level, row.userCount, qualifiedDirects),
+    })),
+  };
+}
+
 export async function getMagicLevelStructure(wallet: string) {
   const userId = await activeUserId(wallet);
   const contractAddress = smartEarningDeployment().address;

@@ -46,6 +46,7 @@ describe("locked mobile Home composition", () => {
         ? { user: {
           wallet_address: "0x000000000000000000000000000000000000dEaD",
           direct_count: 4,
+          incomeTotals: [{ incomeType: "MAGIC_LEVEL_INCOME", total: "50000" }],
         } }
         : input === "/api/x3/packages"
           ? { packages: prices.map((price, index) => ({
@@ -96,6 +97,9 @@ describe("locked mobile Home composition", () => {
     expect(matrixCards[0].querySelectorAll(".is-active")).toHaveLength(2);
     expect(matrixCards[1].querySelectorAll(".is-active")).toHaveLength(1);
     expect(container.querySelector(".home-matrix-tree")).not.toBeInTheDocument();
+    expect(screen.getByText("Magic Level Report")).toBeInTheDocument();
+    expect(screen.getByText("0.05", { exact: false })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "View ↗" })).toHaveAttribute("href", "/magic-level");
 
     const order = [
       container.querySelector(".home-team-summary"),
@@ -152,9 +156,10 @@ describe("locked mobile Home composition", () => {
     expect(screen.getByRole("button", { name: "Open menu" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Light theme" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Log out" })).toBeInTheDocument();
-    for (const label of ["Home", "Income", "Matrix", "Team", "Wallet"]) {
+    for (const label of ["Home", "Income", "Team", "Wallet", "Summary"]) {
       expect(screen.getAllByRole("link", { name: label }).length).toBeGreaterThan(0);
     }
+    expect(screen.queryByRole("link", { name: "Matrix" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
     expect(push).toHaveBeenCalledWith("/menu");
   });

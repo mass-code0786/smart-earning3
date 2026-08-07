@@ -2,10 +2,10 @@
 import Image from'next/image';
 import Link from'next/link';
 import{usePathname,useRouter}from'next/navigation';
-import{ArrowLeft,ChartNoAxesCombined,GitBranch,Home,LogOut,Menu,Sun,Users,Wallet}from'lucide-react';
+import{ArrowLeft,ChartNoAxesCombined,Home,Landmark,LogOut,Menu,Sun,Users,Wallet}from'lucide-react';
 import{logoutAndRedirect}from'@/lib/client/logout';
 
-const appNav:[string,string,typeof Home][]=[['/dashboard','Home',Home],['/income','Income',ChartNoAxesCombined],['/matrix','Matrix',GitBranch],['/team','Team',Users],['/wallet','Wallet',Wallet]];
+const appNav:[string,string,typeof Home][]=[['/dashboard','Home',Home],['/income','Income',ChartNoAxesCombined],['/team','Team',Users],['/wallet','Wallet',Wallet],['/summary','Summary',Landmark]];
 function SmartLogo(){return <Link href="/dashboard" className="header-logo-crop" aria-label="Smart Earning dashboard"><Image src="/logo.png" alt="Smart Earning" width={1048} height={356} priority className="header-logo-image object-contain"/></Link>}
 
 export function FixedMetaverseBackground(){return <div className="fixed-metaverse-background" aria-hidden><Image src="/images/smart-earning-metaverse-man.png" alt="" fill priority sizes="100vw" draggable={false}/><div className="fixed-metaverse-overlay"/></div>}

@@ -21,7 +21,7 @@ vi.mock("@/lib/client/authenticated-fetch", () => ({
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); navigation.push.mockReset(); navigation.path = "/matrix"; });
 
 describe("Matrix default navigation", () => {
-  it("renders Magic Level directly at /matrix and keeps the Matrix tab active", async () => {
+  it("renders Magic Level directly at /matrix while keeping Matrix out of bottom navigation", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ user: {
       direct_count: 0, magicBalance: "0", magicIncomeHistory: [], incomeTotals: [],
     } }), { status: 200 })));
@@ -37,9 +37,7 @@ describe("Matrix default navigation", () => {
     expect(screen.getAllByRole("button", { name: "View More" })).toHaveLength(20);
     expect(screen.queryByText("VERIFIED MATRIX RECORDS")).not.toBeInTheDocument();
     expect(screen.queryByText("Choose a matrix backed by an available server endpoint.")).not.toBeInTheDocument();
-    const matrixTab = screen.getAllByRole("link", { name: "Matrix" }).find(link => link.className.includes("min-w-[58px]"))!;
-    expect(matrixTab).toHaveAttribute("href", "/matrix");
-    expect(matrixTab.className).toContain("text-[#F5FFF9]");
+    expect(screen.queryByRole("link", { name: "Matrix" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
     expect(navigation.push).toHaveBeenCalledWith("/menu");
     expect(readFileSync(resolve("components/page-sections.tsx"), "utf8")).toContain('className="px-4 py-3 sm:px-5 sm:py-4"');
@@ -56,9 +54,9 @@ describe("Matrix default navigation", () => {
     ]) expect(screen.getByRole("link", { name })).toHaveAttribute("href", href);
   });
 
-  it("keeps the Matrix tab active on the legacy Magic Level URL", () => {
+  it("uses the required Home, Income, Team, Wallet, Summary order", () => {
     navigation.path = "/magic-level";
     render(<SmartEarningBottomNav/>);
-    expect(screen.getByRole("link", { name: "Matrix" }).className).toContain("text-[#F5FFF9]");
+    expect(screen.getAllByRole("link").map(link=>link.textContent)).toEqual(["Home","Income","Team","Wallet","Summary"]);
   });
 });

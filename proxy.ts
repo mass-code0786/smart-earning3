@@ -4,7 +4,7 @@ import{isConfiguredAdmin}from"@/lib/server/admin-policy";
 import{canonicalUrlOrigin,trimmedEnvValue}from"@/lib/server/env";
 
 const SESSION_COOKIE="se_session",MAX_BODY_BYTES=1_048_576;
-const protectedPrefixes=["/dashboard","/packages","/matrix","/team","/wallet","/booster","/autopool","/dividend","/income","/magic-level","/history","/menu","/admin"];
+const protectedPrefixes=["/dashboard","/packages","/matrix","/team","/wallet","/summary","/booster","/autopool","/dividend","/income","/magic-level","/history","/menu","/admin"];
 const buckets=new Map<string,{count:number;resetAt:number}>();
 
 function securityHeaders(response:NextResponse){

@@ -1,0 +1,1 @@
+import{Shell}from"@/components/ui";import{CompactPageTitle}from"@/components/page-sections";import{SummaryPage}from"@/components/summary-page";export default function Page(){return <Shell><CompactPageTitle title="Summary"/><div className="mt-3"><SummaryPage/></div></Shell>}
