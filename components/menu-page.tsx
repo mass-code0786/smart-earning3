@@ -15,7 +15,7 @@ type MenuRow = { label: string; href: string; icon: typeof History };
 
 const sections: { title: string; rows: MenuRow[] }[] = [
   { title: "MATRIX", rows: [
-    { label: "Magic Level Matrix", href: "/matrix", icon: Sparkles },
+    { label: "Magic Level Report", href: "/magic-level", icon: Sparkles },
     { label: "X3 Matrix", href: "/matrix/x3", icon: GitBranch },
     { label: "X4 Matrix", href: "/matrix/x4", icon: GitBranch },
     { label: "Booster", href: "/booster", icon: Zap },

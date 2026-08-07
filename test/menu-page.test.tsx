@@ -26,6 +26,7 @@ describe("mobile Menu page", () => {
     render(<MenuPage />);
     await screen.findByText(new RegExp(wallet, "i"));
     const routes: [string, string][] = [
+      ["Magic Level Report", "/magic-level"],
       ["Booster Wallet Topup", "/booster"],
       ["Booster History", "/history?category=BOOSTER"],
       ["Buy Package", "/packages"],
@@ -45,7 +46,7 @@ describe("mobile Menu page", () => {
       ["Support", "/support"],
     ];
     for (const [label, href] of routes) expect(screen.getByRole("link", { name: label })).toHaveAttribute("href", href);
-    for (const removed of ["Account Summary", "Transaction List", "Non Working X4 Matrix Income", "Magic Wallet Report", "Magic Level Report", "Hold Wallet Report", "Direct Affiliate", "Team Affiliate"])
+    for (const removed of ["Account Summary", "Transaction List", "Non Working X4 Matrix Income", "Magic Wallet Report", "Magic Level Matrix", "Hold Wallet Report", "Direct Affiliate", "Team Affiliate"])
       expect(screen.queryByText(removed)).not.toBeInTheDocument();
     expect(screen.queryByText("Plan")).not.toBeInTheDocument();
   });
