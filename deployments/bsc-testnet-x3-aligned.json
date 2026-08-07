@@ -1,0 +1,16 @@
+{
+  "network": "bscTestnet",
+  "chainId": 97,
+  "policy": "PACKAGE_ONLY_5X_V1",
+  "alignment": "DIRECT_REFERRAL_X3_V1",
+  "rolloutMode": "TRANSITIONAL",
+  "deployer": "0xf3a86386FE213901C8e02067c83B8cEb1f3aF508",
+  "address": "0xe8849043da1b0105f13cBDadE8471D82E1847876",
+  "txHash": "0xcdf11dda2c3ea1c26517dce3ba883ccfa5596b558d80ee5e1fb7756dabb56130",
+  "blockNumber": 123687054,
+  "usdt": "0x29c52A2A617EabB3d2A81979B551ECE998fC5774",
+  "genesis": "0xfd314f3A6E47a802A73da6d620ab3114f14d042F",
+  "treasury": "0x66cE23966a5374A5cf42B0FF639C0A909836f371",
+  "authorizer": "0x36c08FBFDCC8Ec7a9ba406b4889d19bf41282322",
+  "deployedBytecodeHash": "0xb7c509062c894767b72ff9d875da3fa4810df1edfaad99e0e14b46a7cc1f5418"
+}
