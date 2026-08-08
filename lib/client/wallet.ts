@@ -232,14 +232,6 @@ async function authRequest(path: string, body?: unknown) {
   let response: Response;
   try {
     const headers: Record<string, string> = {};
-    if (path === "/api/auth/session") {
-      const accounts = await getInjectedProvider().request({ method: "eth_accounts" });
-      const connected = Array.isArray(accounts) ? accounts[0] : undefined;
-      if (typeof connected !== "string") {
-        throw new WalletLoginError("SESSION_FAILED", "Wallet session mismatch");
-      }
-      headers["x-connected-wallet"] = connected.toLowerCase();
-    }
     response = await fetch(path, body === undefined ? { cache: "no-store", headers } : {
       method: "POST",
       credentials: "same-origin",
@@ -252,6 +244,28 @@ async function authRequest(path: string, body?: unknown) {
   let result: Record<string, unknown> = {};
   try { result = await response.json(); } catch { /* use a safe stage-specific error */ }
   return { response, result };
+}
+
+export type AuthenticatedWalletSession = {
+  wallet: string;
+  chainId: number;
+  registered: boolean;
+  registrationStatus?: string | null;
+  registrationState: "ACTIVE" | "UNREGISTERED" | "SYNCHRONIZATION_PENDING" | "UNKNOWN";
+};
+
+export async function authenticatedWalletSession(): Promise<AuthenticatedWalletSession> {
+  const session = await authRequest("/api/auth/session");
+  if (!session.response.ok) throw new WalletLoginError("SESSION_FAILED", "Session could not be created");
+  const result = session.result as Partial<AuthenticatedWalletSession>;
+  const registered = result.registered === true || result.registrationStatus === "ACTIVE";
+  return {
+    wallet: String(result.wallet || "").toLowerCase(),
+    chainId: Number(result.chainId),
+    registered,
+    registrationStatus: result.registrationStatus,
+    registrationState: registered ? "ACTIVE" : result.registrationState || "UNKNOWN",
+  };
 }
 
 export async function walletLogin(onStage?: (stage: "Connecting wallet…" | "Requesting signature…" | "Verifying…" | "Connected") => void) {
@@ -282,20 +296,9 @@ export async function walletLogin(onStage?: (stage: "Connecting wallet…" | "Re
     }
     throw new WalletLoginError("VERIFY_FAILED", "Signature verification failed");
   }
-  const session = await authRequest("/api/auth/session");
-  if (!session.response.ok) throw new WalletLoginError("SESSION_FAILED", "Session could not be created");
-  const result = session.result as {
-    wallet: string;
-    chainId: number;
-    registered?: boolean;
-    registrationStatus?: string | null;
-  };
+  const result = await authenticatedWalletSession();
   onStage?.("Connected");
-  return {
-    ...result,
-    wallet: result.wallet.toLowerCase(),
-    registered: result.registered === true || result.registrationStatus === "ACTIVE",
-  };
+  return result;
 }
 
 export async function registerOnTestnet(sponsor: string, onStatus: (status: string) => void) {

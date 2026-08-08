@@ -76,6 +76,7 @@ describe("wallet login UI", () => {
       wallet: "0x000000000000000000000000000000000000dead",
       chainId: 97,
       registered: false,
+      registrationState: "UNREGISTERED",
     });
     render(<WalletLogin />);
     fireEvent.click(screen.getByRole("button", { name: "Connect" }));

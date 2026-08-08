@@ -1,9 +1,9 @@
 "use client";
 
-import { FormEvent, useRef, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2 } from "lucide-react";
-import { RegistrationFlowError, registerOnTestnet, walletLogin } from "@/lib/client/wallet";
+import { authenticatedWalletSession, RegistrationFlowError, registerOnTestnet, walletLogin } from "@/lib/client/wallet";
 import { presentBlockchainError } from "@/lib/client/blockchain-error";
 
 export function RegistrationForm({
@@ -21,6 +21,15 @@ export function RegistrationForm({
   const [connectedWallet, setConnectedWallet] = useState("");
   const locked = useRef(false);
   const router = useRouter();
+
+  useEffect(() => {
+    void authenticatedWalletSession().then(session => {
+      if (session.registrationState === "ACTIVE" || session.registered) {
+        sessionStorage.removeItem("landing-inline-mode");
+        router.replace("/dashboard");
+      }
+    }).catch(() => undefined);
+  }, [router]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -47,10 +56,7 @@ export function RegistrationForm({
       }
       const result = await registerOnTestnet(sponsor, setStatus);
       if (result.alreadyRegistered) {
-        sessionStorage.removeItem("landing-inline-mode");
-        setStatus("Wallet is already registered. Redirecting to dashboard.");
-        router.replace("/dashboard");
-        router.refresh();
+        setStatus("Wallet is already registered on-chain and synchronization is pending.");
         return;
       }
       setHash(result.txHash);

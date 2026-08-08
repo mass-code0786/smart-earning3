@@ -21,7 +21,9 @@ export function WalletLogin() {
     try {
       const session = await walletLogin();
       setStatus("Wallet verified.");
-      router.push(session.registered ? "/dashboard" : "/register");
+      if (session.registrationState === "ACTIVE" || session.registered) router.push("/dashboard");
+      else if (session.registrationState === "UNREGISTERED") router.push("/register");
+      else setStatus("Registration synchronization is still pending. Please try again shortly.");
       router.refresh();
     } catch (error) {
       const known = error instanceof WalletLoginError;

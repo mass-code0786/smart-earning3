@@ -50,7 +50,7 @@ describe("landing inline wallet actions", () => {
   });
 
   it("moves a genuinely unregistered authenticated wallet into inline Signup", async () => {
-    walletLoginMock.mockResolvedValue({ registered: false, wallet: sponsor, chainId: 97 });
+    walletLoginMock.mockResolvedValue({ registered: false, registrationState: "UNREGISTERED", wallet: sponsor, chainId: 97 });
     render(<Subject/>);
     fireEvent.click(screen.getAllByRole("button", { name: "Connect" })[0]);
     expect(await screen.findByTestId("registration-form")).toHaveTextContent(sponsor);
@@ -76,7 +76,7 @@ describe("landing inline wallet actions", () => {
   });
 
   it("shows authentication stages only on the clicked Connect button", async () => {
-    let finish!: (value: { registered: boolean; wallet: string; chainId: number }) => void;
+    let finish!: (value: { registered: boolean; registrationState: "ACTIVE"; wallet: string; chainId: number }) => void;
     walletLoginMock.mockImplementation((onStage: (stage: string) => void) => {
       onStage("Requesting signature…");
       return new Promise(resolve => { finish = resolve; });
@@ -86,7 +86,7 @@ describe("landing inline wallet actions", () => {
     expect(await screen.findByRole("button", { name: "Requesting signature…" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
     expect(screen.queryByText("Requesting signature…", { selector: "p,div,small" })).not.toBeInTheDocument();
-    finish({ registered: true, wallet: sponsor, chainId: 97 });
+    finish({ registered: true, registrationState: "ACTIVE", wallet: sponsor, chainId: 97 });
     await waitFor(() => expect(push).toHaveBeenCalledWith("/dashboard"));
   });
 

@@ -67,14 +67,17 @@ export function LandingInteractionProvider({
         await switchToTestnet();
         session = await authenticate();
       }
-      if (session.registered) {
+      if (session.registrationState === "ACTIVE" || session.registered) {
         sessionStorage.removeItem("landing-inline-mode");
         router.push("/dashboard");
-      } else {
+      } else if (session.registrationState === "UNREGISTERED") {
         setStatus("");
         sessionStorage.setItem("landing-inline-mode", "signup");
         setMode("signup");
         revealSignup();
+      } else {
+        setStatus("");
+        setError("Registration synchronization is still pending. Please try again shortly.");
       }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Wallet login failed");

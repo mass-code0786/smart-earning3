@@ -8,6 +8,7 @@ const state = vi.hoisted(() => ({
     status: string | null;
   },
   query: vi.fn(),
+  onchainRegistered: false,
 }));
 
 vi.mock("@/lib/server/auth", () => ({
@@ -15,6 +16,9 @@ vi.mock("@/lib/server/auth", () => ({
 }));
 vi.mock("@/lib/server/db", () => ({
   query: (...args: unknown[]) => state.query(...args),
+}));
+vi.mock("@/lib/blockchain/provider", () => ({
+  getSmartEarningContract: () => ({ registered: async () => state.onchainRegistered }),
 }));
 
 import { GET } from "@/app/api/auth/session/route";
@@ -26,6 +30,7 @@ describe("authenticated registration status", () => {
     state.row = { registered: true, status: "ACTIVE" };
     state.query.mockReset();
     state.query.mockImplementation(async () => ({ rows: [state.row] }));
+    state.onchainRegistered = false;
   });
 
   it("returns registered for a valid session with an indexed active user", async () => {
@@ -35,6 +40,7 @@ describe("authenticated registration status", () => {
       chainId: 97,
       registered: true,
       registrationStatus: "ACTIVE",
+      registrationState: "ACTIVE",
       isAdmin: true,
     });
     expect(state.query.mock.calls[0][0]).toContain("lower(wallet_address)=lower($1)");
@@ -53,6 +59,17 @@ describe("authenticated registration status", () => {
     await expect(response.json()).resolves.toMatchObject({
       registered: false,
       registrationStatus: null,
+      registrationState: "UNREGISTERED",
+    });
+  });
+
+  it("does not classify an on-chain registration with a lagging projection as unregistered", async () => {
+    state.row = { registered: false, status: null };
+    state.onchainRegistered = true;
+    const response = await GET();
+    await expect(response.json()).resolves.toMatchObject({
+      registered: false,
+      registrationState: "SYNCHRONIZATION_PENDING",
     });
   });
 
