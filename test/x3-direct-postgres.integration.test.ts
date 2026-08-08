@@ -1,7 +1,8 @@
 // @vitest-environment node
 import{afterAll,beforeAll,describe,expect,it}from"vitest";
 import{Pool,PoolClient}from"pg";import{randomUUID}from"node:crypto";
-import{processDirectX3PackagePurchase,isDirectX3Purchase}from"@/lib/server/x3-direct-service";
+import{processDirectX3PackagePurchase,isDirectX3Purchase,ensureCurrentDirectX3Alignment}from"@/lib/server/x3-direct-service";
+import{smartEarningDeployment}from"@/lib/blockchain/deployment-metadata";
 import{releaseHeldX3}from"@/lib/server/x3-service";
 import{runX3HoldExpiryScheduler}from"@/lib/server/x3-hold-expiry-service";
 
@@ -16,6 +17,7 @@ async function user(client:PoolClient,sponsor?:string){
  return id;
 }
 async function purchase(client:PoolClient,buyer:string,packageId=1,block=100,log=0){
+ block=smartEarningDeployment().blockNumber+block;
  const amount=8n*(1n<<BigInt(packageId-1))*dollar,hash=tx(),def=(await client.query<{id:string}>("SELECT id FROM package_definitions WHERE serial_number=$1",[packageId])).rows[0].id;
  const p=(await client.query<{id:string}>(`INSERT INTO package_purchases(user_id,wallet_address,package_definition_id,package_id,amount_token_units,tx_hash,block_number,status,purchased_at,confirmed_block_at) SELECT $1,wallet_address,$2,$3,$4,$5,$6,'CONFIRMED',now(),now() FROM users WHERE id=$1 RETURNING id`,[buyer,def,packageId,amount.toString(),hash,block])).rows[0].id;
  await client.query(`UPDATE user_package_states SET total_package_value=$2::numeric,total_eligible_value=$2::numeric,
@@ -26,11 +28,11 @@ async function purchase(client:PoolClient,buyer:string,packageId=1,block=100,log
  return{purchaseId:p,userId:buyer,packageId,amount,txHash:hash,blockNumber:block,sourceEventId:e,logIndex:log};
 }
 async function qualify(client:PoolClient,id:string,packageId=1){const p=await purchase(client,id,packageId,50+serial,0);await client.query("INSERT INTO x3_package_memberships(user_id,package_id,activation_purchase_id,activated_at) VALUES($1,$2,$3,now())",[id,packageId,p.purchaseId]);return p;}
-async function aligned(client:PoolClient,b=90){await client.query("UPDATE x3_direct_rollout SET mode='CONTRACT_ALIGNED',boundary_block_number=$1,boundary_log_index=-1 WHERE singleton=true",[b]);}
+async function aligned(client:PoolClient,_b=90){await ensureCurrentDirectX3Alignment(client);}
 async function setup(client:PoolClient,qualifyRecipients=true){const genesis=await user(client),passup=await user(client,genesis),owner=await user(client,passup),buyers=[await user(client,owner),await user(client,owner),await user(client,owner),await user(client,owner)];if(qualifyRecipients){await qualify(client,owner);await qualify(client,passup)}await aligned(client);return{genesis,passup,owner,buyers};}
 
 db.sequential("direct-referral X3 on PostgreSQL",()=>{
- beforeAll(()=>{process.env.AUTO_WITHDRAW_ENABLED="false";pool=new Pool({connectionString:url,max:8})});afterAll(async()=>{if(pool){await pool.query("UPDATE x3_direct_rollout SET mode='TRANSITIONAL' WHERE singleton=true");await pool.end()}});
+ beforeAll(()=>{process.env.AUTO_WITHDRAW_ENABLED="false";pool=new Pool({connectionString:url,max:8})});afterAll(async()=>{if(pool)await pool.end()});
 
  it("fills slots 1/2/3, passes up slot 3, completes and opens the next cycle",async()=>{const c=await pool.connect();await c.query("BEGIN");try{const f=await setup(c);for(let i=0;i<3;i++)await processDirectX3PackagePurchase(c,await purchase(c,f.buyers[i],1,100+i,i));const cycles=await c.query("SELECT cycle_number,status FROM x3_direct_cycles WHERE owner_user_id=$1 ORDER BY cycle_number",[f.owner]);expect(cycles.rows).toEqual([{cycle_number:1,status:"COMPLETED"},{cycle_number:2,status:"ACTIVE"}]);const slots=await c.query("SELECT slot_number,buyer_user_id,recipient_user_id,disposition FROM x3_direct_cycle_slots s JOIN x3_direct_cycles c ON c.id=s.cycle_id WHERE c.owner_user_id=$1 ORDER BY slot_number",[f.owner]);expect(slots.rows).toEqual([{slot_number:1,buyer_user_id:f.buyers[0],recipient_user_id:f.owner,disposition:"OWNER_INCOME"},{slot_number:2,buyer_user_id:f.buyers[1],recipient_user_id:f.owner,disposition:"OWNER_INCOME"},{slot_number:3,buyer_user_id:f.buyers[2],recipient_user_id:f.passup,disposition:"PASS_UP"}]);expect((await c.query("SELECT count(*)::int n FROM x3_direct_cycle_slots s JOIN x3_direct_cycles c ON c.id=s.cycle_id WHERE c.owner_user_id=$1",[f.passup])).rows[0].n).toBe(0)}finally{await c.query("ROLLBACK");c.release()}});
 
@@ -50,7 +52,7 @@ db.sequential("direct-referral X3 on PostgreSQL",()=>{
 
  it("serializes concurrent direct buyers into distinct slots",async()=>{const seed=await pool.connect();await seed.query("BEGIN");const f=await setup(seed),p1=await purchase(seed,f.buyers[0],1,170,0),p2=await purchase(seed,f.buyers[1],1,171,0);await seed.query("COMMIT");seed.release();const a=await pool.connect(),b=await pool.connect();try{await a.query("BEGIN");await b.query("BEGIN");const one=await processDirectX3PackagePurchase(a,p1),twoPromise=processDirectX3PackagePurchase(b,p2);await a.query("COMMIT");const two=await twoPromise;await b.query("COMMIT");expect([one.slot,two.slot]).toEqual([1,2])}finally{await a.query("ROLLBACK").catch(()=>{});await b.query("ROLLBACK").catch(()=>{});a.release();b.release()}});
 
- it("enforces rollout ordering and transitional safety",async()=>{const c=await pool.connect();await c.query("BEGIN");try{await c.query("UPDATE x3_direct_rollout SET mode='TRANSITIONAL',boundary_block_number=200,boundary_log_index=5 WHERE singleton=true");expect(await isDirectX3Purchase(c,200,5)).toBe(false);await expect(isDirectX3Purchase(c,200,6)).rejects.toMatchObject({code:"X3_CONTRACT_ALIGNMENT_REQUIRED"});await c.query("UPDATE x3_direct_rollout SET mode='CONTRACT_ALIGNED' WHERE singleton=true");expect(await isDirectX3Purchase(c,200,6)).toBe(true)}finally{await c.query("ROLLBACK");c.release()}});
+ it("enforces deployment identity and alignment safety",async()=>{const c=await pool.connect();await c.query("BEGIN");try{const d=smartEarningDeployment();await aligned(c);await c.query("UPDATE x3_direct_deployment_rollouts SET mode='TRANSITIONAL' WHERE chain_id=$1 AND contract_address=$2",[d.chainId,d.address]);await expect(isDirectX3Purchase(c,d.blockNumber,0)).rejects.toMatchObject({code:"X3_CONTRACT_ALIGNMENT_REQUIRED"});await aligned(c);expect(await isDirectX3Purchase(c,d.blockNumber,0)).toBe(true)}finally{await c.query("ROLLBACK");c.release()}});
 
  it("keeps completed snapshots immutable and legacy recovery structurally isolated",async()=>{const c=await pool.connect();await c.query("BEGIN");try{const f=await setup(c);for(let i=0;i<3;i++)await processDirectX3PackagePurchase(c,await purchase(c,f.buyers[i],1,180+i,i));const cycle=(await c.query("SELECT id FROM x3_direct_cycles WHERE owner_user_id=$1 AND cycle_number=1",[f.owner])).rows[0].id,slot=(await c.query("SELECT id FROM x3_direct_cycle_slots WHERE cycle_id=$1 LIMIT 1",[cycle])).rows[0].id;await c.query("SAVEPOINT immutable_cycle");await expect(c.query("UPDATE x3_direct_cycles SET completed_at=now() WHERE id=$1",[cycle])).rejects.toThrow(/immutable/);await c.query("ROLLBACK TO SAVEPOINT immutable_cycle");await c.query("SAVEPOINT immutable_slot");await expect(c.query("DELETE FROM x3_direct_cycle_slots WHERE id=$1",[slot])).rejects.toThrow(/append-only/);await c.query("ROLLBACK TO SAVEPOINT immutable_slot");expect((await c.query(`SELECT count(*)::int n FROM information_schema.columns WHERE table_name='x3_recovery_schedule' AND column_name LIKE '%direct%'`)).rows[0].n).toBe(0)}finally{await c.query("ROLLBACK").catch(()=>{});c.release()}});
 });

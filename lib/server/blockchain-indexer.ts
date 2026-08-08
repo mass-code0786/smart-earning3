@@ -14,6 +14,7 @@ import { bootstrapGenesis } from "./genesis-bootstrap";
 import { verifyAndActivateRegistration } from "./registration-service";
 import { verifyPackagePurchase } from "./package-service";
 import { ApiError } from "./http";
+import { ensureCurrentDirectX3Alignment } from "./x3-direct-service";
 import {
   configuredStartBlock,
   initializeForwardIndexer,
@@ -189,15 +190,9 @@ export async function alignDirectX3Rollout(
   deploymentBlock: number,
   database: { query: typeof query } = { query },
 ) {
-  const boundary = deploymentBlock - 1;
-  const result = await database.query(
-    `UPDATE x3_direct_rollout SET boundary_block_number=$1,boundary_log_index=-1,
-       boundary_contract_event_id=NULL,mode='CONTRACT_ALIGNED',activated_at=now()
-     WHERE singleton=true AND (mode<>'CONTRACT_ALIGNED' OR boundary_block_number<>$1
-       OR boundary_log_index<>-1)`,
-    [boundary],
-  );
-  return Boolean(result.rowCount);
+  const deployment = smartEarningDeployment();
+  if (deploymentBlock !== deployment.blockNumber) throw new Error("Direct X3 deployment block mismatch");
+  return ensureCurrentDirectX3Alignment(database as never);
 }
 
 export function decodedIndexerEventName(log: IndexerLog) {

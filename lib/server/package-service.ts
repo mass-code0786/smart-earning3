@@ -10,8 +10,8 @@ import { processX4PackagePurchase } from "./x4-service";
 import { creditBoosterPackagePurchase } from "./booster-service";
 import { createDividendPackageTracker } from "./dividend-service";
 import { recordConfirmedMagicFunding } from "./earning-split-service";
-import { solidityPackedKeccak256 } from "ethers";
 import { assertModuleActive, isModulePaused } from "./module-control-service";
+import { ensureCurrentDirectX3Alignment } from "./x3-direct-service";
 
 const iface = new Interface(PACKAGE_ABI);
 const TX_HASH = /^0x[a-fA-F0-9]{64}$/;
@@ -134,7 +134,8 @@ export async function verifyPackagePurchase(walletInput: string, txHashInput: st
   if(!Number.isFinite(confirmedBlockAt.getTime())||confirmedBlockAt.getTime()>Date.now()+5*60_000){
     throw new ApiError(422,"Confirmed package block timestamp is invalid","BLOCK_TIMESTAMP_INVALID");
   }
-  const packageLog = receipt.logs.map((log) => {
+  const contractAddress=normalizeWallet(config.SMART_EARNING_CONTRACT_ADDRESS);
+  const packageLog = receipt.logs.filter(log=>normalizeWallet(log.address)===contractAddress).map((log) => {
     try { return { log, event: iface.parseLog(log) }; } catch { return null; }
   }).find((item) => item?.event?.name === "PackagePurchased");
   if (!packageLog?.event) throw new ApiError(422, "PackagePurchased event was not found", "EVENT_NOT_FOUND");
@@ -149,13 +150,25 @@ export async function verifyPackagePurchase(walletInput: string, txHashInput: st
   if (newCap !== totalPackageValue * 5n) {
     throw new ApiError(409, "Package event earning cap includes an invalid principal", "CAP_RECONCILIATION_FAILED");
   }
-  const parsedLogs=receipt.logs.flatMap(log=>{try{const event=iface.parseLog(log);return event?[{log,event}]:[]}catch{return[]}});
+  const parsedLogs=receipt.logs.filter(log=>normalizeWallet(log.address)===contractAddress).flatMap(log=>{try{const event=iface.parseLog(log);return event?[{log,event}]:[]}catch{return[]}});
+  const x3Log=parsedLogs.find(item=>item.event.name==="X3DirectSlotFilled"
+    &&normalizeWallet(String(item.event.args.buyer))===wallet
+    &&Number(item.event.args.packageId)===packageId);
+  if(!x3Log)throw new ApiError(422,"Direct X3 event was not found","X3_EVENT_MISMATCH");
+  const packageMagic=parsedLogs.find(item=>item.event.name==="MagicFundingRecorded"
+    &&normalizeWallet(String(item.event.args.user))===wallet
+    &&String(item.event.args.paymentType)===id("PACKAGE"));
+  if(!packageMagic||BigInt(packageMagic.event.args.accountingAmount)!==amount/8n)
+    throw new ApiError(422,"Package Magic funding evidence is missing","PACKAGE_MAGIC_EVENT_MISMATCH");
   const x4Log=parsedLogs.find(item=>item.event.name==="X4Placed");
   if(!x4Log)throw new ApiError(422,"X4 placement event was not found","X4_EVENT_MISMATCH");
   const x4User=normalizeWallet(String(x4Log.event.args.user));
   const x4Owner=normalizeWallet(String(x4Log.event.args.owner));
   const x4Slot=Number(x4Log.event.args.slot),x4Level=Number(x4Log.event.args.level);
   const x4AccountingAmount=BigInt(x4Log.event.args.accountingAmount);
+  const x4Cycle=Number(x4Log.event.args.cycle);
+  const x4Recycle=parsedLogs.find(item=>item.event.name==="X4Recycled"
+    &&Number(item.event.args.packageId)===packageId);
   const x4Magic=parsedLogs.find(item=>item.event.name==="MagicFundingRecorded"
     &&normalizeWallet(String(item.event.args.user))===x4Owner
     &&[id("X4_A"),id("X4_B")].includes(String(item.event.args.paymentType)));
@@ -167,6 +180,7 @@ export async function verifyPackagePurchase(walletInput: string, txHashInput: st
     await assertModuleActive("PACKAGE_PURCHASE",client);
     await assertModuleActive("X3_PLACEMENT",client);
     await assertModuleActive("X4_PLACEMENT",client);
+    await ensureCurrentDirectX3Alignment(client);
     await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`package:${txHash}`]);
     const duplicate = await client.query<{ id:string;status:string }>(
       "SELECT id,status FROM package_purchases WHERE tx_hash=$1", [txHash],
@@ -235,19 +249,25 @@ export async function verifyPackagePurchase(walletInput: string, txHashInput: st
     await processX3PackagePurchase(client,{
       purchaseId:purchase.rows[0].id,userId,packageId,amount,txHash,
       blockNumber:receipt.blockNumber,sourceEventId:contractEvent.rows[0].id,upgradeTimestamp:confirmedBlockAt,logIndex:packageLog.log.index,
+      onchain:{buyer:normalizeWallet(String(x3Log.event.args.buyer)),owner:normalizeWallet(String(x3Log.event.args.owner)),
+        cycle:Number(x3Log.event.args.cycleNumber),slot:Number(x3Log.event.args.slotNumber),
+        recipient:normalizeWallet(String(x3Log.event.args.recipient)),disposition:Number(x3Log.event.args.disposition),
+        packageAmount:BigInt(x3Log.event.args.packageAmount),gross:BigInt(x3Log.event.args.grossAmount)},
     });
     await processX4PackagePurchase(client,{
       purchaseId:purchase.rows[0].id,userId,packageId,amount,txHash,
       blockNumber:receipt.blockNumber,sourceEventId:contractEvent.rows[0].id,
       onchain:{user:x4User,owner:x4Owner,slot:x4Slot,level:x4Level,
-        accountingAmount:x4AccountingAmount,
+        accountingAmount:x4AccountingAmount,cycle:x4Cycle,
+        recycle:x4Recycle?{owner:normalizeWallet(String(x4Recycle.event.args.owner)),
+          completedCycle:Number(x4Recycle.event.args.completedCycle),newCycle:Number(x4Recycle.event.args.newCycle)}:undefined,
         magicSourceReference:x4Magic?String(x4Magic.event.args.sourceReference):undefined,
         confirmedGrossCredit:x4Split?BigInt(x4Split.event.args.gross):undefined},
     });
     await creditBoosterPackagePurchase(client,{purchaseId:purchase.rows[0].id,userId,
       packageId,amount,txHash});
     await recordConfirmedMagicFunding(client,{userId,sourceType:"PACKAGE_PURCHASE",
-      sourceReference:solidityPackedKeccak256(["string","address","uint8"],["PACKAGE",wallet,packageId]),
+      sourceReference:String(packageMagic.event.args.sourceReference),
       amount:amount/8n,reason:"PACKAGE_MAGIC_12_5_PERCENT",idempotencyKey:`package:magic:${purchase.rows[0].id}`,txHash});
     await createDividendPackageTracker(client,{purchaseId:purchase.rows[0].id,userId,amount});
     return { purchaseId: purchase.rows[0].id, status: "CONFIRMED", duplicate: false, packageId };

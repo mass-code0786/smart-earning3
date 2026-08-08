@@ -28,7 +28,15 @@ describe("latest deployed contract parity", () => {
   it("aligns direct X3 to one block before the authoritative deployment", async () => {
     const query = vi.fn().mockResolvedValue({ rowCount: 1 });
     await expect(alignDirectX3Rollout(123687054, { query } as never)).resolves.toBe(true);
-    expect(query.mock.calls[0][1]).toEqual([123687053]);
+    expect(query.mock.calls[0][1]).toEqual([
+      97, "0xe8849043da1b0105f13cbdade8471d82e1847876", 123687054, 123687053,
+    ]);
+    expect(query.mock.calls[0][0]).toContain("x3_direct_deployment_rollouts");
     expect(query.mock.calls[0][0]).toContain("mode='CONTRACT_ALIGNED'");
+  });
+
+  it("leaves an already-correct deployment alignment unchanged on restart", async () => {
+    const query = vi.fn().mockResolvedValue({ rowCount: 0 });
+    await expect(alignDirectX3Rollout(123687054, { query } as never)).resolves.toBe(false);
   });
 });

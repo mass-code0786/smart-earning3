@@ -53,6 +53,7 @@ describe("sanitized PostgreSQL diagnostics", () => {
     ["28P01", "AUTHENTICATION_FAILED"],
     ["3D000", "DATABASE_MISSING"],
     ["42P01", "SCHEMA_INCOMPATIBLE"],
+    ["23514", "CONSTRAINT_VIOLATION"],
     ["ETIMEDOUT", "CONNECTION_TIMEOUT"],
     ["SELF_SIGNED_CERT_IN_CHAIN", "CERTIFICATE_VERIFICATION_FAILED"],
   ])("maps %s to %s", (code, expected) => {

@@ -9,6 +9,7 @@ export type X4PurchaseInput={
   purchaseId:string;userId:string;packageId:number;amount:bigint;
   txHash:string;blockNumber:number;sourceEventId:string|null;
   onchain:{user:string;owner:string;slot:number;level:number;accountingAmount:bigint;
+    cycle:number;recycle?:{owner:string;completedCycle:number;newCycle:number};
     magicSourceReference?:string;confirmedGrossCredit?:bigint};
 };
 type Cycle={id:string;user_id:string;package_id:number;cycle_number:number};
@@ -127,6 +128,8 @@ export async function processX4PackagePurchase(client:PoolClient,input:X4Purchas
     [input.userId,input.packageId,input.purchaseId],
   );
   let placed=await createCycle(client,input.userId,input.packageId,null);
+  if(placed.cycle_number!==input.onchain.cycle)
+    throw new ApiError(409,"X4 cycle event does not match the indexed queue","X4_EVENT_MISMATCH");
   await audit(client,{event:"PACKAGE_JOINED",packageId:input.packageId,userId:input.userId,
     cycleId:placed.id,key:`x4:join:${input.purchaseId}`,metadata:{purchaseId:input.purchaseId}});
 
@@ -167,6 +170,11 @@ export async function processX4PackagePurchase(client:PoolClient,input:X4Purchas
       cycleId:receiver.id,positionId:position.rows[0].id,key:`x4:audit:placement:${position.rows[0].id}`,
       metadata:{slot,level,placedCycleId:placed.id}});
     if(slot<6)return{membershipId:membership.rows[0].id,cycleId:placed.id,duplicate:false};
+
+    if(!input.onchain.recycle||input.onchain.recycle.owner!==input.onchain.owner
+      ||input.onchain.recycle.completedCycle!==receiver.cycle_number
+      ||input.onchain.recycle.newCycle!==receiver.cycle_number+1)
+      throw new ApiError(409,"X4 recycle event does not match the indexed queue","X4_EVENT_MISMATCH");
 
     await client.query(
       "UPDATE x4_cycles SET status='COMPLETED',completed_at=now(),updated_at=now() WHERE id=$1 AND status='ACTIVE'",

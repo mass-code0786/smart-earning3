@@ -41,7 +41,8 @@ integration("X4 PostgreSQL engine",()=>{
         inputs.push({purchaseId:purchase.id,userId:user.id,packageId:1,amount:8_000_000n,
           txHash:tx,blockNumber:1,sourceEventId:null,onchain:{user:wallet,
             owner:index===0?"0x0000000000000000000000000000000000000000":rootWallet,
-            slot,level,accountingAmount:index===0?0n:level===1?500_000n:1_250_000n,
+            slot,level,cycle:1,accountingAmount:index===0?0n:level===1?500_000n:1_250_000n,
+            recycle:index===6?{owner:rootWallet,completedCycle:1,newCycle:2}:undefined,
             magicSourceReference:level===1?`0x${(700000+index).toString(16).padStart(64,"0")}`:undefined,
             confirmedGrossCredit:level===2?1_250_000n:undefined}});
       }
@@ -91,7 +92,7 @@ integration("X4 PostgreSQL engine",()=>{
       purchaseId=purchase.id;
       await processX4PackagePurchase(client,{purchaseId,userId:user.id,packageId:1,amount:8_000_000n,
         txHash:`0x${"f".repeat(64)}`,blockNumber:1,sourceEventId:null,onchain:{user:marker,
-          owner:"0x0000000000000000000000000000000000000000",slot:0,level:0,accountingAmount:0n}});
+          owner:"0x0000000000000000000000000000000000000000",slot:0,level:0,cycle:1,accountingAmount:0n}});
       throw new Error("simulated downstream failure");
     }catch(error){
       expect((error as Error).message).toBe("simulated downstream failure");

@@ -9,6 +9,7 @@ import { isDirectX3Purchase, processDirectX3PackagePurchase } from "./x3-direct-
 type PurchaseInput = {
   purchaseId:string; userId:string; packageId:number; amount:bigint;
   txHash:string; blockNumber:number;sourceEventId:string|null;upgradeTimestamp:Date;logIndex?:number;
+  onchain?:{buyer:string;owner:string;cycle:number;slot:number;recipient:string;disposition:number;packageAmount:bigint;gross:bigint};
 };
 type Cycle = {id:string;user_id:string;cycle_number:number;sponsor_user_id:string};
 
@@ -35,7 +36,8 @@ export async function processX3PackagePurchase(client:PoolClient,input:PurchaseI
   );
   await releaseHeldX3(client,input.userId,input.packageId,input.purchaseId,input.upgradeTimestamp);
   if(input.sourceEventId&&input.logIndex!==undefined&&await isDirectX3Purchase(client,input.blockNumber,input.logIndex)){
-    const direct=await processDirectX3PackagePurchase(client,{...input,sourceEventId:input.sourceEventId,logIndex:input.logIndex});
+    if(!input.onchain)throw new ApiError(422,"Direct X3 event evidence is missing","X3_EVENT_MISMATCH");
+    const direct=await processDirectX3PackagePurchase(client,{...input,sourceEventId:input.sourceEventId,logIndex:input.logIndex,onchain:input.onchain});
     return{membershipId:membership.rows[0].id,x3Allocation:x3,reserved,...direct};
   }
   const sponsorAnchor=await ensureAnchorCycle(client,sponsor,input.packageId);

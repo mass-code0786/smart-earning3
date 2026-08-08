@@ -59,6 +59,12 @@ export function apiError(error: unknown) {
         { status: 503 },
       );
     }
+    if (error.databaseCode === "CONSTRAINT_VIOLATION") {
+      return NextResponse.json(
+        { error: "Database rejected inconsistent data", code: "DATABASE_CONSTRAINT_VIOLATION" },
+        { status: 409 },
+      );
+    }
     return NextResponse.json(
       { error: "Database service unavailable", code: "DATABASE_UNAVAILABLE" },
       { status: 503 },

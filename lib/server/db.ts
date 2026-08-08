@@ -10,6 +10,7 @@ export type DatabaseErrorCode =
   | "MIGRATION_MISSING"
   | "PERMISSION_DENIED"
   | "SCHEMA_INCOMPATIBLE"
+  | "CONSTRAINT_VIOLATION"
   | "CONNECTION_TIMEOUT"
   | "CERTIFICATE_VERIFICATION_FAILED"
   | "DATABASE_ERROR";
@@ -112,6 +113,11 @@ export function classifyDatabaseError(error: unknown): DatabaseConnectionError {
   if (["42P01", "42703", "42883", "42704"].includes(code || "")) {
     return new DatabaseConnectionError(
       "SCHEMA_INCOMPATIBLE", "PostgreSQL schema is incompatible", { cause: error },
+    );
+  }
+  if (code?.startsWith("23")) {
+    return new DatabaseConnectionError(
+      "CONSTRAINT_VIOLATION", "PostgreSQL rejected data that violates a database constraint", { cause: error },
     );
   }
   if (code === "ETIMEDOUT" || code === "CONNECT_TIMEOUT" || message.includes("timeout")) {
