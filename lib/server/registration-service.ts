@@ -13,6 +13,20 @@ import type { PoolClient } from "pg";
 const hashSchema = z.string().regex(/^0x[a-fA-F0-9]{64}$/);
 const iface = new Interface(SMART_EARNING_ABI);
 
+async function synchronizeMatrixBfsSequence(client: PoolClient) {
+  await client.query("SELECT pg_advisory_xact_lock(hashtext('matrix-placement:bfs-sequence'))");
+  await client.query(`SELECT setval(
+    'matrix_placements_bfs_index_seq',
+    GREATEST(
+      COALESCE((SELECT max(bfs_index) FROM matrix_placements),0)+1,
+      (SELECT CASE WHEN is_called THEN last_value+1 ELSE last_value END
+       FROM matrix_placements_bfs_index_seq),
+      1
+    ),
+    false
+  )`);
+}
+
 type BlockchainDiagnostic = {
   functionName: string;
   contractAddress: string;
@@ -285,6 +299,7 @@ export async function reconcileExistingRegistrationProjection(
     const parentUserId = await ensureConfirmedMatrixParent(
       client, input.matrixParent, input.confirmedAt,
     );
+    await synchronizeMatrixBfsSequence(client);
     const inserted = await client.query<{ id: string }>(
       `INSERT INTO matrix_placements(
          user_id,parent_user_id,position,registration_id,sponsor_user_id,
@@ -582,6 +597,7 @@ export async function verifyAndActivateRegistration(
        VALUES($1,$2,$3)`,
       [userId, sponsorUserId, registrationId],
     );
+    await synchronizeMatrixBfsSequence(client);
     await client.query(
       `INSERT INTO matrix_placements(
         user_id,parent_user_id,position,registration_id,sponsor_user_id,

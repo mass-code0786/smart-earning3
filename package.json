@@ -1,6 +1,6 @@
 {
   "scripts": {
-    "pretest": "node scripts/ensure-local-postgres.cjs",
+    "pretest": "node scripts/prepare-test-database.cjs --prepare-only",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
@@ -8,7 +8,7 @@
     "test": "npm run contract:test && npm run app:test && npm run typecheck",
     "contract:compile": "hardhat compile",
     "contract:test": "hardhat test",
-    "app:test": "vitest run",
+    "app:test": "node scripts/prepare-test-database.cjs",
     "deploy:mock-usdt:testnet": "node --env-file=.env scripts/deploy-mock-usdt.cjs",
     "deploy:unified:testnet": "node --env-file=.env node_modules/hardhat/internal/cli/cli.js run scripts/deploy-contract.cjs --network bscTestnet",
     "configure:roles:testnet": "node --env-file=.env node_modules/hardhat/internal/cli/cli.js run scripts/configure-testnet-roles.cjs --network bscTestnet",

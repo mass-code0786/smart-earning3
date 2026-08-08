@@ -59,6 +59,9 @@ describe("retired aligned genesis cap baseline on real PostgreSQL", () => {
       eligible: "2000000", cap: "10000000", earned: "10000000", remaining: "0", status: "CAPPED",
     });
     expect((await client.query("SELECT count(*)::int count FROM earning_cap_ledger")).rows[0].count).toBe(0);
+    await client.query(`INSERT INTO earning_cap_ledger(
+      user_id,source_type,source_reference,eligible_value,cap_increase,total_cap_after
+    ) VALUES($1,'PACKAGE_PURCHASE','test:append-only',1,5,5)`, [id]);
     await expect(client.query("UPDATE earning_cap_ledger SET total_cap_after=1"))
       .rejects.toThrow(/append-only/);
   }));

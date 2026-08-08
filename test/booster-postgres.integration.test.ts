@@ -10,8 +10,8 @@ integration("Booster PostgreSQL integration",()=>{
    const definition=(await client.query<{id:string}>("SELECT id FROM package_definitions WHERE serial_number=1")).rows[0],inputs=[];
    for(let i=0;i<4;i++){const wallet=`0x${(700000+i).toString(16).padStart(40,"0")}`;
     const user=(await client.query<{id:string}>("INSERT INTO users(wallet_address) VALUES($1) RETURNING id",[wallet])).rows[0];
-    await client.query(`INSERT INTO user_package_states(user_id,registration_value,total_eligible_value,total_earning_cap,remaining_cap)
-      VALUES($1,2000000,10000000,50000000,50000000)`,[user.id]);
+    await client.query(`INSERT INTO user_package_states(user_id,registration_value,total_package_value,total_eligible_value,total_earning_cap,remaining_cap)
+      VALUES($1,2000000,8000000,8000000,40000000,40000000)`,[user.id]);
     const tx=`0x${(800000+i).toString(16).padStart(64,"0")}`;
     const purchase=(await client.query<{id:string}>(`INSERT INTO package_purchases(user_id,wallet_address,package_definition_id,
       package_id,amount_token_units,tx_hash,status) VALUES($1,$2,$3,1,8000000,$4,'CONFIRMED') RETURNING id`,
@@ -62,8 +62,8 @@ integration("Booster PostgreSQL integration",()=>{
   await client.query("BEGIN");try{
    const wallet="0x"+(755555).toString(16).padStart(40,"0");
    const user=(await client.query<{id:string}>("INSERT INTO users(wallet_address) VALUES($1) RETURNING id",[wallet])).rows[0];
-   await client.query(`INSERT INTO user_package_states(user_id,registration_value,total_eligible_value,total_earning_cap,remaining_cap)
-    VALUES($1,2000000,1026000000,5130000000,5130000000)`,[user.id]);
+   await client.query(`INSERT INTO user_package_states(user_id,registration_value,total_package_value,total_eligible_value,total_earning_cap,remaining_cap)
+    VALUES($1,2000000,1024000000,1024000000,5120000000,5120000000)`,[user.id]);
    const definition=(await client.query<{id:string}>("SELECT id FROM package_definitions WHERE serial_number=8")).rows[0];
    const tx="0x"+"b".repeat(64);
    const purchase=(await client.query<{id:string}>(`INSERT INTO package_purchases(user_id,wallet_address,

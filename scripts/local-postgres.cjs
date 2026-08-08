@@ -28,9 +28,12 @@ async function inspectContainer(runDocker = docker) {
 
 async function postgresConnects(url) {
   const admin = new URL(url);
-  admin.pathname = "/postgres";
   const client = new Client({
-    connectionString: admin.toString(),
+    host: admin.hostname,
+    port: Number(admin.port || 5432),
+    user: decodeURIComponent(admin.username),
+    password: decodeURIComponent(admin.password),
+    database: "postgres",
     ssl: false,
     connectionTimeoutMillis: 2_000,
   });

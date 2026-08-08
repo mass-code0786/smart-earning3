@@ -26,7 +26,7 @@ integration("X4 PostgreSQL engine",()=>{
           `INSERT INTO user_package_states(
              user_id,highest_package_id,total_package_value,registration_value,total_eligible_value,
              total_earning_cap,total_earned,remaining_cap
-           ) VALUES($1,1,8000000,2000000,10000000,50000000,0,50000000)`,[user.id],
+           ) VALUES($1,1,8000000,2000000,8000000,40000000,0,40000000)`,[user.id],
         );
         const tx=`0x${(500000+index).toString(16).padStart(64,"0")}`;
         const purchase=(await client.query<{id:string}>(
@@ -81,8 +81,8 @@ integration("X4 PostgreSQL engine",()=>{
     try{
       const user=(await client.query<{id:string}>("INSERT INTO users(wallet_address) VALUES($1) RETURNING id",[marker])).rows[0];
       await client.query(`INSERT INTO user_package_states(
-        user_id,registration_value,total_eligible_value,total_earning_cap,remaining_cap
-      ) VALUES($1,2000000,2000000,10000000,10000000)`,[user.id]);
+        user_id,registration_value,total_package_value,total_eligible_value,total_earning_cap,remaining_cap
+      ) VALUES($1,2000000,8000000,8000000,40000000,40000000)`,[user.id]);
       const definition=(await client.query<{id:string}>("SELECT id FROM package_definitions WHERE serial_number=1")).rows[0];
       const purchase=(await client.query<{id:string}>(`INSERT INTO package_purchases(
         user_id,wallet_address,package_definition_id,package_id,amount_token_units,tx_hash,status
