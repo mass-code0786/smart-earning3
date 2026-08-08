@@ -26,6 +26,7 @@ export const SMART_EARNING_ABI = [
   "function requiredDirects(uint8) pure returns (uint256)",
   "function currentCycle() view returns (uint256)",
   "function totalEligibleValue(address) view returns (uint256)",
+  "function totalPackageValue(address) view returns (uint256)",
   "function totalEarningCap(address) view returns (uint256)",
   "function totalEarned(address) view returns (uint256)",
   "function getRemainingEarningCap(address) view returns (uint256)",
