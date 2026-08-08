@@ -1,13 +1,15 @@
 import type {PoolClient} from"pg";
 import{ApiError}from"./http";
 import{creditGrossEarning}from"./earning-split-service";
-import{queueMagicFunding}from"./earning-split-service";
+import{recordConfirmedMagicFunding}from"./earning-split-service";
 import{X4_PACKAGE_PRICES,x4Income,x4LevelForSlot}from"./x4-math";
 import{assertModuleActive}from"./module-control-service";
 
 export type X4PurchaseInput={
   purchaseId:string;userId:string;packageId:number;amount:bigint;
   txHash:string;blockNumber:number;sourceEventId:string|null;
+  onchain:{user:string;owner:string;slot:number;level:number;accountingAmount:bigint;
+    magicSourceReference?:string;confirmedGrossCredit?:bigint};
 };
 type Cycle={id:string;user_id:string;package_id:number;cycle_number:number};
 
@@ -61,13 +63,18 @@ async function nextReceiver(client:PoolClient,packageId:number,placedCycleId:str
 
 async function creditPosition(client:PoolClient,input:{
   positionId:string;packageId:number;slot:number;ownerCycleId:string;ownerUserId:string;
-  sourceUserId:string;amount:bigint;
+  sourceUserId:string;amount:bigint;txHash:string;magicSourceReference?:string;
+  confirmedGrossCredit?:bigint;
 }){
   const level=x4LevelForSlot(input.slot),gross=x4Income(input.amount,level);
   if(level===1){
-    const key=`x4:magic:${input.positionId}`,funding=await queueMagicFunding(client,{userId:input.ownerUserId,
-      sourceType:input.slot===1?"X4_LEVEL_1_A_MAGIC":"X4_LEVEL_1_B_MAGIC",sourceReference:key,
-      amount:gross,idempotencyKey:key});
+    const key=`x4:magic:${input.positionId}`;
+    if(!input.magicSourceReference)throw new ApiError(409,"X4 on-chain Magic evidence is missing","X4_EVENT_MISMATCH");
+    await recordConfirmedMagicFunding(client,{userId:input.ownerUserId,
+      sourceType:input.slot===1?"X4_LEVEL_1_A_MAGIC":"X4_LEVEL_1_B_MAGIC",
+      sourceReference:input.magicSourceReference,amount:gross,reason:"X4_ONCHAIN_MAGIC",
+      idempotencyKey:key,txHash:input.txHash});
+    const funding=(await client.query<{id:string}>("SELECT id FROM magic_funding_events WHERE source_reference=$1",[input.magicSourceReference])).rows[0];
     await client.query(
       `INSERT INTO x4_income_history(
          package_id,owner_user_id,source_user_id,owner_cycle_id,position_id,level_number,
@@ -75,13 +82,16 @@ async function creditPosition(client:PoolClient,input:{
        ) VALUES($1,$2,$3,$4,$5,1,'MAGIC_LEVEL',$6,$6,$7,$8)
        ON CONFLICT(position_id) DO NOTHING`,
       [input.packageId,input.ownerUserId,input.sourceUserId,input.ownerCycleId,input.positionId,
-        gross.toString(),funding.fundingEventId,`x4:income:${input.positionId}`],
+        gross.toString(),funding.id,`x4:income:${input.positionId}`],
     );
     return;
   }
+  if(input.confirmedGrossCredit===undefined)
+    throw new ApiError(409,"X4 on-chain earning evidence is missing","X4_EVENT_MISMATCH");
   const capped=await creditGrossEarning({
     userId:input.ownerUserId,incomeType:"X4_GLOBAL",sourceReference:input.positionId,
     grossAmount:gross,idempotencyKey:`x4:cap:${input.positionId}`,
+    confirmedOnchainCredit:input.confirmedGrossCredit,magicAlreadyOnchain:true,
   },client);
   await client.query(
     `INSERT INTO x4_income_history(
@@ -100,6 +110,10 @@ export async function processX4PackagePurchase(client:PoolClient,input:X4Purchas
   const expected=X4_PACKAGE_PRICES[input.packageId-1];
   if(!expected||expected.price!==input.amount)
     throw new ApiError(422,"X4 package amount mismatch","X4_AMOUNT_MISMATCH");
+  const buyerWallet=(await client.query<{wallet_address:string}>(
+    "SELECT wallet_address FROM users WHERE id=$1",[input.userId])).rows[0]?.wallet_address;
+  if(!buyerWallet||buyerWallet.toLowerCase()!==input.onchain.user.toLowerCase())
+    throw new ApiError(409,"X4 event buyer does not match the package owner","X4_EVENT_MISMATCH");
 
   await client.query("SELECT pg_advisory_xact_lock(hashtext($1))",[`x4:package:${input.packageId}`]);
   const duplicate=await client.query<{id:string}>(
@@ -116,19 +130,23 @@ export async function processX4PackagePurchase(client:PoolClient,input:X4Purchas
   await audit(client,{event:"PACKAGE_JOINED",packageId:input.packageId,userId:input.userId,
     cycleId:placed.id,key:`x4:join:${input.purchaseId}`,metadata:{purchaseId:input.purchaseId}});
 
-  // A cascade is finite: each iteration consumes one distinct ACTIVE receiver
-  // that already had five positions. A newly recycled cycle starts with zero.
-  // Track identities only to detect corrupt/circular processing in this one
-  // transaction; this is deliberately not a business or recycle counter.
-  const completedInThisTransaction=new Set<string>();
   for(;;){
     const receiver=await nextReceiver(client,input.packageId,placed.id);
     if(!receiver){
+      if(input.onchain.owner!=="0x0000000000000000000000000000000000000000"
+        ||input.onchain.slot!==0||input.onchain.level!==0||input.onchain.accountingAmount!==0n)
+        throw new ApiError(409,"X4 root event does not match the indexed queue","X4_EVENT_MISMATCH");
       await audit(client,{event:"GLOBAL_ROOT_CREATED",packageId:input.packageId,userId:placed.user_id,
         cycleId:placed.id,key:`x4:root:${placed.id}`});
       return{membershipId:membership.rows[0].id,cycleId:placed.id,duplicate:false};
     }
     const slot=receiver.slot_count+1,level=x4LevelForSlot(slot);
+    const ownerWallet=(await client.query<{wallet_address:string}>(
+      "SELECT wallet_address FROM users WHERE id=$1",[receiver.user_id])).rows[0]?.wallet_address;
+    if(!ownerWallet||ownerWallet.toLowerCase()!==input.onchain.owner.toLowerCase()
+      ||slot!==input.onchain.slot||level!==input.onchain.level
+      ||x4Income(input.amount,level)!==input.onchain.accountingAmount)
+      throw new ApiError(409,"X4 event does not match the indexed queue","X4_EVENT_MISMATCH");
     const position=await client.query<{id:string}>(
       `INSERT INTO x4_positions(
          package_id,owner_cycle_id,slot_number,level_number,placed_cycle_id,placed_user_id,
@@ -142,15 +160,14 @@ export async function processX4PackagePurchase(client:PoolClient,input:X4Purchas
       [placed.id,receiver.id,slot],
     );
     await creditPosition(client,{positionId:position.rows[0].id,packageId:input.packageId,slot,
-      ownerCycleId:receiver.id,ownerUserId:receiver.user_id,sourceUserId:input.userId,amount:input.amount});
+      ownerCycleId:receiver.id,ownerUserId:receiver.user_id,sourceUserId:input.userId,amount:input.amount,
+      txHash:input.txHash,magicSourceReference:input.onchain.magicSourceReference,
+      confirmedGrossCredit:input.onchain.confirmedGrossCredit});
     await audit(client,{event:"PLACEMENT",packageId:input.packageId,userId:placed.user_id,
       cycleId:receiver.id,positionId:position.rows[0].id,key:`x4:audit:placement:${position.rows[0].id}`,
       metadata:{slot,level,placedCycleId:placed.id}});
     if(slot<6)return{membershipId:membership.rows[0].id,cycleId:placed.id,duplicate:false};
 
-    if(completedInThisTransaction.has(receiver.id))
-      throw new ApiError(409,"Circular X4 recycle processing detected","X4_CIRCULAR_RECYCLE");
-    completedInThisTransaction.add(receiver.id);
     await client.query(
       "UPDATE x4_cycles SET status='COMPLETED',completed_at=now(),updated_at=now() WHERE id=$1 AND status='ACTIVE'",
       [receiver.id],
@@ -170,6 +187,6 @@ export async function processX4PackagePurchase(client:PoolClient,input:X4Purchas
     await audit(client,{event:"CYCLE_COMPLETED",packageId:input.packageId,userId:receiver.user_id,
       cycleId:receiver.id,positionId:position.rows[0].id,key:`x4:complete:${receiver.id}`,
       metadata:{newCycleId:recycled.id}});
-    placed=recycled;
+    return{membershipId:membership.rows[0].id,cycleId:placed.id,recycledCycleId:recycled.id,duplicate:false};
   }
 }

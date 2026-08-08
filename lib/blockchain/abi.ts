@@ -10,6 +10,9 @@ export const SMART_EARNING_ABI = [
   "function WITHDRAWAL_EXECUTOR_ROLE() view returns(bytes32)",
   "function AUTHORIZER_ROLE() view returns(bytes32)",
   "function KEEPER_ROLE() view returns(bytes32)",
+  "function MAGIC_FUNDING_ROLE() view returns(bytes32)",
+  "function PAUSER_ROLE() view returns(bytes32)",
+  "function TREASURY_ROLE() view returns(bytes32)",
   "function hasRole(bytes32 role,address account) view returns(bool)",
   "function magicBalance(address) view returns (uint256)",
   "function claimableMagicIncome(address) view returns (uint256)",
@@ -46,9 +49,23 @@ export const SMART_EARNING_ABI = [
   "event EarningSplit(address indexed user,bytes32 indexed incomeType,uint256 gross,uint256 magicAmount,uint256 incomeAmount)",
   "event PaymentReceived(address indexed user,bytes32 indexed paymentType,uint256 grossAmount,uint256 treasuryAmount,bytes32 sourceReference,uint256 timestamp)",
   "event TreasuryFunded(address indexed user,bytes32 indexed paymentType,uint256 grossAmount,uint256 treasuryAmount,bytes32 sourceReference,uint256 timestamp)",
+  "event RegistrationCompleted(address indexed user,uint256 grossAmount,uint256 treasuryAmount,bytes32 indexed sourceReference,uint256 timestamp)",
+  "event MagicFundingRecorded(address indexed user,bytes32 indexed paymentType,uint256 grossAmount,uint256 accountingAmount,bytes32 sourceReference,uint256 timestamp)",
+  "event MagicIncomeClaimed(address indexed beneficiary,uint256 amount)",
   "event BoosterTopup(address indexed user,uint256 amount,bytes32 indexed sourceReference)",
   "event WithdrawalLiquidityFunded(bytes32 indexed sourceReference,address indexed treasury,uint256 amount,uint256 contractBalance)",
   "event WithdrawalPaid(bytes32 indexed reservationHash,bytes32 indexed reservationId,address indexed user,address destination,bytes32 payoutType,bytes32 earningSource,uint256 grossReservedAmount,uint256 feeAmount,uint256 netAmount,uint256 nonce,address executor,address authorizer)",
+  "event TreasuryWalletUpdated(address indexed previousTreasury,address indexed newTreasury,address indexed changedBy)",
+  "event PaymentPauseChanged(bool paused)",
+  "event WithdrawalPauseChanged(bool paused)",
+  "event PlacementCursorAdvanced(address indexed sponsor,uint256 previousHead,uint256 newHead,bool availablePositionFound)",
+  "event X4Placed(address indexed user,address indexed owner,uint8 indexed packageId,uint8 slot,uint8 level,uint256 accountingAmount,uint256 cycle)",
+  "event X4Recycled(address indexed owner,uint8 indexed packageId,uint256 completedCycle,uint256 newCycle)",
+  "event RoleGranted(bytes32 indexed role,address indexed account,address indexed sender)",
+  "event RoleRevoked(bytes32 indexed role,address indexed account,address indexed sender)",
+  "event RoleAdminChanged(bytes32 indexed role,bytes32 indexed previousAdminRole,bytes32 indexed newAdminRole)",
+  "event Paused(address account)",
+  "event Unpaused(address account)",
 ] as const;
 
 export const PACKAGE_ABI = [
@@ -67,6 +84,10 @@ export const PACKAGE_ABI = [
   "event PackagePurchased(address indexed user,uint8 indexed packageId,uint256 amount,uint256 totalPackageValue,uint256 newEarningCap,uint256 timestamp)",
   "event X3DirectSlotFilled(address indexed buyer,address indexed owner,uint8 indexed packageId,uint256 cycleNumber,uint8 slotNumber,address recipient,uint8 disposition,uint256 packageAmount,uint256 grossAmount)",
   "event X3DirectCycleCompleted(address indexed owner,uint8 indexed packageId,uint256 completedCycle,uint256 nextCycle)",
+  "event X4Placed(address indexed user,address indexed owner,uint8 indexed packageId,uint8 slot,uint8 level,uint256 accountingAmount,uint256 cycle)",
+  "event X4Recycled(address indexed owner,uint8 indexed packageId,uint256 completedCycle,uint256 newCycle)",
+  "event MagicFundingRecorded(address indexed user,bytes32 indexed paymentType,uint256 grossAmount,uint256 accountingAmount,bytes32 sourceReference,uint256 timestamp)",
+  "event EarningSplit(address indexed user,bytes32 indexed incomeType,uint256 gross,uint256 magicAmount,uint256 incomeAmount)",
 ] as const;
 
 export const ERC20_ABI = [

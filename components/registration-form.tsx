@@ -105,7 +105,7 @@ export function RegistrationForm({
       )}
       {hash && (
         <a className="flex items-center gap-2 break-all text-xs text-gold" target="_blank" rel="noreferrer"
-          href={`https://testnet.bscscan.com/tx/${hash}`}>
+          href={`${process.env.NEXT_PUBLIC_BLOCK_EXPLORER_URL}/tx/${hash}`}>
           <CheckCircle2 size={16}/> View verified registration transaction
         </a>
       )}

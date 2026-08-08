@@ -16,6 +16,9 @@ describe("wallet authentication normalization", () => {
 });
 
 describe("central earning cap",()=>{
+ it("treats a registration-only zero cap as not applicable",()=>{
+  expect(calculateCappedCredit(0n,0n,10n)).toEqual({credited:0n,excess:10n,totalEarned:0n,remainingAfter:0n,status:"NOT_APPLICABLE"});
+ });
  it("preserves historical over-cap earnings and leaves zero remaining capacity",()=>{
   expect(calculateCappedCredit(40n,45n,10n)).toEqual({credited:0n,excess:10n,totalEarned:45n,remainingAfter:0n,status:"CAPPED"});
  });

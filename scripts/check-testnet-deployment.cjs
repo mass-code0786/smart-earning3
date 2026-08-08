@@ -14,6 +14,7 @@ const SMART_ABI = [
   "function totalEarningCap(address) view returns (uint256)",
   "function DEFAULT_ADMIN_ROLE() view returns (bytes32)",
   "function KEEPER_ROLE() view returns (bytes32)",
+  "function MAGIC_FUNDING_ROLE() view returns (bytes32)",
   "function PAUSER_ROLE() view returns (bytes32)",
   "function TREASURY_ROLE() view returns (bytes32)",
   "function WITHDRAWAL_EXECUTOR_ROLE() view returns (bytes32)",
@@ -70,6 +71,8 @@ async function main() {
   if (getAddress(deployment.genesis) !== genesis) throw new Error("Genesis metadata address mismatch");
   if (getAddress(deployment.treasury) !== treasury) throw new Error("Treasury metadata address mismatch");
   if (getAddress(deployment.authorizer) !== authorizer) throw new Error("Authorizer metadata address mismatch");
+  if (getAddress(deployment.keeper) !== keeper) throw new Error("Keeper metadata address mismatch");
+  if (getAddress(deployment.withdrawalExecutor) !== withdrawalExecutor) throw new Error("Withdrawal executor metadata address mismatch");
   if (deployment.policy !== "PACKAGE_ONLY_5X_V1") throw new Error("Deployment metadata cap policy mismatch");
 
   if (await provider.getCode(usdtAddress) === "0x") throw new Error("Mock USDT bytecode is missing");
@@ -100,6 +103,7 @@ async function main() {
   const roles = {
     defaultAdmin: await smart.DEFAULT_ADMIN_ROLE(),
     keeper: await smart.KEEPER_ROLE(),
+    magicFunding: await smart.MAGIC_FUNDING_ROLE(),
     pauser: await smart.PAUSER_ROLE(),
     withdrawalExecutor: await smart.WITHDRAWAL_EXECUTOR_ROLE(),
     treasury: await smart.TREASURY_ROLE(),
@@ -111,6 +115,7 @@ async function main() {
     ["deployer PAUSER_ROLE", await smart.hasRole(roles.pauser, deployer)],
     ["deployer WITHDRAWAL_EXECUTOR_ROLE", await smart.hasRole(roles.withdrawalExecutor, deployer)],
     ["configured keeper KEEPER_ROLE", await smart.hasRole(roles.keeper, keeper)],
+    ["configured keeper MAGIC_FUNDING_ROLE", await smart.hasRole(roles.magicFunding, keeper)],
     ["configured withdrawal executor WITHDRAWAL_EXECUTOR_ROLE", await smart.hasRole(roles.withdrawalExecutor, withdrawalExecutor)],
     ["treasury TREASURY_ROLE", await smart.hasRole(roles.treasury, treasury)],
     ["authorizer AUTHORIZER_ROLE", await smart.hasRole(roles.authorizer, authorizer)],

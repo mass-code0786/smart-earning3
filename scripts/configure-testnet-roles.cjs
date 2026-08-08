@@ -41,11 +41,13 @@ async function main() {
   const defaultAdminRole = await contract.DEFAULT_ADMIN_ROLE();
   if (!await contract.hasRole(defaultAdminRole, admin.address)) throw new Error("Deployer lacks DEFAULT_ADMIN_ROLE");
   const keeperTx = await grantIfMissing(contract, await contract.KEEPER_ROLE(), keeper);
+  const magicFundingTx = await grantIfMissing(contract, await contract.MAGIC_FUNDING_ROLE(), keeper);
   const executorTx = await grantIfMissing(contract, await contract.WITHDRAWAL_EXECUTOR_ROLE(), executor);
   process.stdout.write(`${JSON.stringify({
     status: "PASS", chainId: 97, contract: address, admin: admin.address,
     keeper, withdrawalExecutor: executor,
-    grants: { keeper: keeperTx || "ALREADY_CONFIGURED", withdrawalExecutor: executorTx || "ALREADY_CONFIGURED" },
+    grants: { keeper: keeperTx || "ALREADY_CONFIGURED", magicFunding: magicFundingTx || "ALREADY_CONFIGURED",
+      withdrawalExecutor: executorTx || "ALREADY_CONFIGURED" },
   }, null, 2)}\n`);
 }
 

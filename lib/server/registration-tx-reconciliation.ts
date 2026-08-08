@@ -201,8 +201,8 @@ export async function findRegistrationTransactionForWallet(
     provider.getNetwork(),
     provider.getBlockNumber(),
   ]);
-  if (Number(network.chainId) !== CHAIN_ID || CHAIN_ID !== 97) {
-    throw new ApiError(503, "RPC is not connected to BNB Testnet", "WRONG_RPC_NETWORK");
+  if (Number(network.chainId) !== CHAIN_ID) {
+    throw new ApiError(503, "RPC is connected to the wrong network", "WRONG_RPC_NETWORK");
   }
 
   const event = iface.getEvent("UserRegistered");
@@ -320,8 +320,8 @@ export async function reconcileRegistrationTransaction(
     provider.getTransactionReceipt(txHash),
   ]);
 
-  if (Number(network.chainId) !== CHAIN_ID || CHAIN_ID !== 97) {
-    throw new ApiError(503, "RPC is not connected to BNB Testnet", "WRONG_RPC_NETWORK");
+  if (Number(network.chainId) !== CHAIN_ID) {
+    throw new ApiError(503, "RPC is connected to the wrong network", "WRONG_RPC_NETWORK");
   }
   if (!transaction || !receipt) {
     throw new ApiError(404, "Registration transaction was not found", "TX_NOT_FOUND");

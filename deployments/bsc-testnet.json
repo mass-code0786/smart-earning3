@@ -1,5 +1,9 @@
 {
   "network": "bscTestnet",
+  "networkName": "BNB Smart Chain Testnet",
+  "nativeCurrencyName": "Test BNB",
+  "nativeCurrencySymbol": "tBNB",
+  "blockExplorerUrl": "https://testnet.bscscan.com",
   "chainId": 97,
   "policy": "PACKAGE_ONLY_5X_V1",
   "alignment": "DIRECT_REFERRAL_X3_V1",
@@ -12,5 +16,7 @@
   "genesis": "0xfd314f3A6E47a802A73da6d620ab3114f14d042F",
   "treasury": "0x66cE23966a5374A5cf42B0FF639C0A909836f371",
   "authorizer": "0x36c08FBFDCC8Ec7a9ba406b4889d19bf41282322",
+  "keeper": "0x707252014aE339059832Ed6DA82465f1f8F7C28A",
+  "withdrawalExecutor": "0x44cd697A13D8B5d9585406A6eb380Fcb6973d95A",
   "deployedBytecodeHash": "0xb7c509062c894767b72ff9d875da3fa4810df1edfaad99e0e14b46a7cc1f5418"
 }

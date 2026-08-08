@@ -72,10 +72,10 @@ export async function registrationPreflight(registrantInput: string, sponsorInpu
   const config = getServerConfig();
   const provider = getProvider();
   const network = await atStage("CHECK_RPC", () => provider.getNetwork());
-  if (Number(network.chainId) !== CHAIN_ID || CHAIN_ID !== 97) {
+  if (Number(network.chainId) !== CHAIN_ID) {
     throw new RegistrationStageFailure(
       "CHECK_RPC",
-      new ApiError(422, "Registration network is not BNB Testnet", "WRONG_CHAIN"),
+      new ApiError(422, "Registration RPC is connected to the wrong network", "WRONG_CHAIN"),
     );
   }
   const [contractCode, tokenCode] = await atStage("CHECK_CONTRACTS", () => Promise.all([

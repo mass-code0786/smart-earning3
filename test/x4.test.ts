@@ -50,6 +50,7 @@ describe("global package queue",()=>{
     expect(service).not.toContain("X4_CASCADE_LIMIT");
     expect(service).not.toMatch(/cascade\s*<\s*\d+/);
     expect(service).toContain("for(;;)");
-    expect(service).toContain("completedInThisTransaction");
+    expect(service).toContain("X4_EVENT_MISMATCH");
+    expect(service).toContain("recordConfirmedMagicFunding");
   });
 });

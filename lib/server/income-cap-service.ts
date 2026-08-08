@@ -16,7 +16,9 @@ export function calculateCappedCredit(cap: bigint, earned: bigint, calculated: b
   const excess = calculated - credited;
   const totalEarned = earned + credited;
   const remainingAfter = cap > totalEarned ? cap - totalEarned : 0n;
-  const status = remainingAfter === 0n
+  const status = cap === 0n
+    ? "NOT_APPLICABLE"
+    : remainingAfter === 0n
     ? "CAPPED"
     : totalEarned * 100n >= cap * 90n ? "NEAR_CAP" : "ACTIVE";
   return { credited, excess, totalEarned, remainingAfter, status };

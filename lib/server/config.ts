@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { normalizedEnv, trimmedEnvValue } from "./env";
+import { smartEarningDeployment } from "@/lib/blockchain/deployment-metadata";
 
 const optionalNonEmpty = z.preprocess(
   (value) => typeof value === "string" && value.trim() === "" ? undefined : trimmedEnvValue(value),
@@ -20,7 +21,9 @@ const serverSchema = z.object({
   DATABASE_SSL_CA: optionalNonEmpty,
   SESSION_SECRET: z.string().min(32),
   BSC_TESTNET_RPC_URL: z.string().url(),
-  SMART_EARNING_CHAIN_ID: z.coerce.number().int().positive().default(97),
+  SMART_EARNING_CHAIN_ID: z.coerce.number().int().positive().default(
+    smartEarningDeployment(process.env).chainId,
+  ),
   SMART_EARNING_CONTRACT_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
   BSC_TESTNET_USDT_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
   KEEPER_PRIVATE_KEY: z.preprocess(
@@ -80,18 +83,24 @@ export function getAuthConfig(): AuthConfig {
 }
 
 export function getServerConfig(): ServerConfig {
-  if (!cached) cached = parseConfig(serverSchema, "blockchain service");
+  if (!cached) cached = validateServerEnvironment();
   return cached;
 }
 
-export const CHAIN_ID = Number(process.env.SMART_EARNING_CHAIN_ID||97);
+export const CHAIN_ID = smartEarningDeployment(process.env).chainId;
 
 export function validateAuthEnvironment() {
   return parseConfig(authSchema, "wallet authentication");
 }
 
 export function validateServerEnvironment() {
-  return parseConfig(serverSchema, "blockchain service");
+  const config = parseConfig(serverSchema, "blockchain service");
+  const deployment = smartEarningDeployment(process.env);
+  if (config.SMART_EARNING_CHAIN_ID !== deployment.chainId
+      || config.SMART_EARNING_CONTRACT_ADDRESS.toLowerCase() !== deployment.address) {
+    throw new ServerConfigError(["deployments/bsc-testnet.json conflict"], "blockchain service");
+  }
+  return config;
 }
 
 const registrationKeys = [

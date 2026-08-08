@@ -1,6 +1,7 @@
 import { normalizeWallet } from "./auth";
 import { transaction } from "./db";
 import { diagnoseUserOwnership } from "./user-ownership-diagnostic";
+import { CHAIN_ID } from "./config";
 
 type Diagnostic = Awaited<ReturnType<typeof diagnoseUserOwnership>>;
 
@@ -225,13 +226,13 @@ export async function repairUserOwnership(input: {
     const registration = (await client.query<{ id: string }>(
       `INSERT INTO registrations(
          user_id,sponsor_user_id,tx_hash,chain_id,amount_token_units,status,block_number,confirmed_at
-       ) VALUES($1,$2,$3,97,$4,'CONFIRMED',$5,now())
+       ) VALUES($1,$2,$3,$4,$5,'CONFIRMED',$6,now())
        ON CONFLICT(tx_hash) DO UPDATE SET user_id=EXCLUDED.user_id,
          sponsor_user_id=EXCLUDED.sponsor_user_id,status='CONFIRMED',
          block_number=EXCLUDED.block_number,confirmed_at=COALESCE(registrations.confirmed_at,now())
        RETURNING id`,
       [
-        referralUserId, sponsorUserId, event.transactionHash,
+        referralUserId, sponsorUserId, event.transactionHash, CHAIN_ID,
         (BigInt(event.magicWalletCredit) * 2n).toString(), event.blockNumber,
       ],
     )).rows[0];
@@ -273,12 +274,12 @@ export async function repairUserOwnership(input: {
       `INSERT INTO blockchain_transactions(
          chain_id,tx_hash,block_number,block_hash,from_address,to_address,event_name,
          log_index,status,confirmations,raw_payload,confirmed_at
-       ) VALUES(97,$1,$2,$3,$4,$5,'UserRegistered',$6,'CONFIRMED',3,$7,now())
+       ) VALUES($1,$2,$3,$4,$5,$6,'UserRegistered',$7,'CONFIRMED',3,$8,now())
        ON CONFLICT(chain_id,tx_hash,log_index) DO UPDATE SET
          from_address=EXCLUDED.from_address,to_address=EXCLUDED.to_address,
          event_name='UserRegistered',status='CONFIRMED',raw_payload=EXCLUDED.raw_payload`,
       [
-        event.transactionHash, event.blockNumber, event.blockHash, wallets.referral,
+        CHAIN_ID,event.transactionHash, event.blockNumber, event.blockHash, wallets.referral,
         event.contractAddress, event.logIndex,
         JSON.stringify({ sponsor: wallets.sponsor, matrixParent: event.matrixParent }),
       ],
@@ -374,6 +375,7 @@ export async function repairUserOwnership(input: {
            total_earned=owned.total_earned,
            remaining_cap=GREATEST(ups.total_earning_cap-owned.total_earned,0),
            capping_status=CASE
+             WHEN ups.total_package_value=0 THEN 'NOT_APPLICABLE'
              WHEN owned.total_earned>=ups.total_earning_cap THEN 'CAPPED'
              WHEN owned.total_earned*100>=ups.total_earning_cap*90 THEN 'NEAR_CAP'
              ELSE 'ACTIVE' END,

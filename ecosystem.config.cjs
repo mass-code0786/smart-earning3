@@ -6,12 +6,13 @@ const {
 } = require("./scripts/pm2-environment.cjs");
 const { requireProductionPort } = require("./scripts/production-port.cjs");
 const { assertProductionEnvironment } = require("./scripts/validate-production-environment.cjs");
+const { authoritativeDeploymentEnvironment } = require("./scripts/deployment-environment.cjs");
 
 const projectRoot = "/var/www/smart-earning3";
 const cwd = process.env.SMART_EARNING_RELEASE_CWD || projectRoot;
-const productionEnvironment = loadProductionPm2Environment(
+const productionEnvironment = authoritativeDeploymentEnvironment(loadProductionPm2Environment(
   resolve(projectRoot, ".env"),
-);
+));
 const productionPort = requireProductionPort(productionEnvironment);
 assertProductionEnvironment({ ...productionEnvironment, NODE_ENV: "production", PORT: productionPort });
 const requiredArtifacts = [

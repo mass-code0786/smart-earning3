@@ -180,6 +180,7 @@ export class ReadOnlyIndexerRpc implements IndexerProvider {
       status: string;
       transactionHash: string;
       blockNumber: string;
+      blockHash: string;
       logs: Array<{
         address: string; transactionHash: string; blockNumber: string;
         logIndex: string; transactionIndex?: string; topics: string[]; data: string;
@@ -190,6 +191,7 @@ export class ReadOnlyIndexerRpc implements IndexerProvider {
       status: hexNumber(receipt.status),
       transactionHash: receipt.transactionHash,
       blockNumber: hexNumber(receipt.blockNumber),
+      blockHash: receipt.blockHash,
       logs: receipt.logs.map((log) => ({
         address: log.address,
         transactionHash: log.transactionHash,

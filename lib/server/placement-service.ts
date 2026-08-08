@@ -2,7 +2,7 @@ import { Contract, Interface, Wallet } from "ethers";
 import type { PoolClient } from "pg";
 import { SMART_EARNING_ABI } from "@/lib/blockchain/abi";
 import { getProvider } from "@/lib/blockchain/provider";
-import { getServerConfig } from "./config";
+import { CHAIN_ID, getServerConfig } from "./config";
 import { normalizeWallet } from "./auth";
 import { ApiError } from "./http";
 import { keeperLockName, sponsorLockName, withPgAdvisoryLock } from "./distributed-lock";
@@ -72,7 +72,7 @@ export async function ensureRegistrationPlacement(
   const config = getServerConfig();
   const contractAddress = normalizeWallet(config.SMART_EARNING_CONTRACT_ADDRESS);
   return withPgAdvisoryLock(
-    sponsorLockName(97, contractAddress, sponsor),
+    sponsorLockName(CHAIN_ID, contractAddress, sponsor),
     (client) => prepareUnderSponsorLock(client, wallet, sponsor, requestKey),
   );
 }
@@ -83,8 +83,8 @@ async function prepareUnderSponsorLock(
   const config = getServerConfig();
   const provider = getProvider();
   const network = await provider.getNetwork();
-  if (Number(network.chainId) !== 97) {
-    throw new ApiError(503, "Keeper RPC is not connected to BNB Testnet", "WRONG_RPC_NETWORK");
+  if (Number(network.chainId) !== CHAIN_ID) {
+    throw new ApiError(503, "Keeper RPC is connected to the wrong network", "WRONG_RPC_NETWORK");
   }
   const contractAddress = normalizeWallet(config.SMART_EARNING_CONTRACT_ADDRESS);
   const contract = new Contract(contractAddress, SMART_EARNING_ABI, provider);
@@ -94,10 +94,10 @@ async function prepareUnderSponsorLock(
   const preparation = await client.query<{ id: string; requested_by_user_wallet: string; sponsor_wallet: string }>(
     `INSERT INTO placement_preparation_requests(
        chain_id,registration_contract,sponsor_wallet,requested_by_user_wallet,request_key,status
-     ) VALUES(97,$1,$2,$3,$4,'PREPARING')
+     ) VALUES($1,$2,$3,$4,$5,'PREPARING')
      ON CONFLICT(request_key) DO UPDATE SET updated_at=now()
      RETURNING id,requested_by_user_wallet,sponsor_wallet`,
-    [contractAddress, sponsor, wallet, requestKey],
+    [CHAIN_ID, contractAddress, sponsor, wallet, requestKey],
   );
   const prep = preparation.rows[0];
   if (prep.requested_by_user_wallet !== wallet || prep.sponsor_wallet !== sponsor) {
@@ -109,10 +109,10 @@ async function prepareUnderSponsorLock(
     const active = await client.query<Attempt>(
       `SELECT id,status,transaction_hash,transaction_nonce,submitted_block
        FROM placement_advancement_attempts
-       WHERE chain_id=97 AND registration_contract=$1 AND sponsor_wallet=$2
+       WHERE chain_id=$1 AND registration_contract=$2 AND sponsor_wallet=$3
          AND status IN ('PREPARING','SUBMITTING','SUBMITTED','TIMED_OUT')
        ORDER BY created_at DESC LIMIT 1`,
-      [contractAddress, sponsor],
+      [CHAIN_ID, contractAddress, sponsor],
     );
     if (active.rows[0]) {
       const hash = await reconcileOrSubmit(client, active.rows[0], prep.id, wallet, sponsor);
@@ -147,10 +147,10 @@ async function prepareUnderSponsorLock(
         `INSERT INTO placement_advancement_attempts(
            preparation_id,chain_id,registration_contract,sponsor_wallet,keeper_wallet,
            requested_by_user_wallet,request_key,starting_queue_head,status
-         ) VALUES($1,97,$2,$3,$4,$5,$6,$7,'PREPARING')
+         ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,'PREPARING')
          ON CONFLICT(request_key) DO UPDATE SET updated_at=now()
          RETURNING id,status,transaction_hash,transaction_nonce,submitted_block`,
-        [prep.id, contractAddress, sponsor, keeperAddress(), wallet, `${requestKey}:${sequence}`, head.toString()],
+        [prep.id, CHAIN_ID, contractAddress, sponsor, keeperAddress(), wallet, `${requestKey}:${sequence}`, head.toString()],
       );
       const hash = await reconcileOrSubmit(client, attempt.rows[0], prep.id, wallet, sponsor);
       if (hash) hashes.push(hash);
@@ -236,7 +236,7 @@ async function reconcileOrSubmit(
     }
   }
 
-  const submittedHash = await withPgAdvisoryLock(keeperLockName(97, keeperAddress()), async (nonceClient) => {
+  const submittedHash = await withPgAdvisoryLock(keeperLockName(CHAIN_ID, keeperAddress()), async (nonceClient) => {
     const nonce = attempt.transaction_nonce === null
       ? await provider.getTransactionCount(keeperAddress(), "pending")
       : Number(attempt.transaction_nonce);

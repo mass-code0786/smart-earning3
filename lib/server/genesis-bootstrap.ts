@@ -57,8 +57,9 @@ export async function bootstrapGenesis(
 
   await client.query(
     `INSERT INTO user_package_states(
-       user_id,registration_value,total_eligible_value,total_earning_cap,total_earned,remaining_cap
-     ) VALUES($1,$2,0,0,0,0) ON CONFLICT(user_id) DO NOTHING`,
+       user_id,registration_value,total_eligible_value,total_earning_cap,total_earned,remaining_cap,
+       capping_status
+     ) VALUES($1,$2,0,0,0,0,'NOT_APPLICABLE') ON CONFLICT(user_id) DO NOTHING`,
     [userId, registrationValue],
   );
   const packageState = await client.query<{

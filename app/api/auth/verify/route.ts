@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { verifyNonceSignature } from "@/lib/server/auth";
 import { apiError, assertSameOrigin } from "@/lib/server/http";
+import { CHAIN_ID } from "@/lib/server/config";
 
 const schema = z.object({
   wallet: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
@@ -14,7 +15,7 @@ export async function POST(request: NextRequest) {
     assertSameOrigin(request);
     const body = schema.parse(await request.json());
     const wallet = await verifyNonceSignature(body);
-    return NextResponse.json({ wallet, chainId: 97 });
+    return NextResponse.json({ wallet, chainId: CHAIN_ID });
   } catch (error) {
     return apiError(error);
   }

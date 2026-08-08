@@ -133,8 +133,9 @@ async function ensureConfirmedSponsor(
   await client.query(
     `INSERT INTO user_package_states(
        user_id,total_package_value,registration_value,total_eligible_value,
-       total_earning_cap,total_earned,remaining_cap
-     ) VALUES($1,$2,$3,$2,$4,0,$4) ON CONFLICT(user_id) DO NOTHING`,
+       total_earning_cap,total_earned,remaining_cap,capping_status
+     ) VALUES($1,$2,$3,$2,$4,0,$4,CASE WHEN $2::numeric=0 THEN 'NOT_APPLICABLE' ELSE 'ACTIVE' END)
+       ON CONFLICT(user_id) DO NOTHING`,
     [userId, currentPackageValue.toString(), registrationValue.toString(), currentEarningCap.toString()],
   );
   return userId;
@@ -205,8 +206,9 @@ export async function reconcileExistingRegistrationProjection(
   ) {
     await client.query(
       `INSERT INTO user_package_states(
-         user_id,registration_value,total_eligible_value,total_earning_cap,total_earned,remaining_cap
-       ) VALUES($1,$2,0,0,0,0) ON CONFLICT(user_id) DO NOTHING`,
+         user_id,registration_value,total_eligible_value,total_earning_cap,total_earned,remaining_cap,
+         capping_status
+       ) VALUES($1,$2,0,0,0,0,'NOT_APPLICABLE') ON CONFLICT(user_id) DO NOTHING`,
       [
         input.userId, input.registrationValue.toString(),
       ],
@@ -413,7 +415,7 @@ export async function verifyAndActivateRegistration(
       ]);
 
   if (Number(network.chainId) !== CHAIN_ID) {
-    throw new ApiError(503, "RPC is not connected to BNB Testnet", "WRONG_RPC_NETWORK");
+    throw new ApiError(503, "RPC is connected to the wrong network", "WRONG_RPC_NETWORK");
   }
   if (!receipt) throw new ApiError(409, "Transaction is not mined yet", "TX_PENDING");
   if (receipt.status !== 1) throw new ApiError(422, "Transaction reverted", "TX_REVERTED");
@@ -569,8 +571,9 @@ export async function verifyAndActivateRegistration(
 
     await client.query(
       `INSERT INTO user_package_states(
-        user_id,registration_value,total_eligible_value,total_earning_cap,total_earned,remaining_cap
-       ) VALUES($1,$2,0,0,0,0)`,
+        user_id,registration_value,total_eligible_value,total_earning_cap,total_earned,remaining_cap,
+        capping_status
+       ) VALUES($1,$2,0,0,0,0,'NOT_APPLICABLE')`,
       [userId, registrationValue.toString()],
     );
 

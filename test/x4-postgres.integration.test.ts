@@ -36,8 +36,14 @@ integration("X4 PostgreSQL engine",()=>{
            ) VALUES($1,$2,$3,1,8000000,$4,1,'CONFIRMED',now()) RETURNING id`,
           [user.id,wallet,definition.id,tx],
         )).rows[0];
+        const rootWallet=`0x${(900000).toString(16).padStart(40,"0")}`;
+        const slot=index===0?0:index,level=index===0?0:index<=2?1:2;
         inputs.push({purchaseId:purchase.id,userId:user.id,packageId:1,amount:8_000_000n,
-          txHash:tx,blockNumber:1,sourceEventId:null});
+          txHash:tx,blockNumber:1,sourceEventId:null,onchain:{user:wallet,
+            owner:index===0?"0x0000000000000000000000000000000000000000":rootWallet,
+            slot,level,accountingAmount:index===0?0n:level===1?500_000n:1_250_000n,
+            magicSourceReference:level===1?`0x${(700000+index).toString(16).padStart(64,"0")}`:undefined,
+            confirmedGrossCredit:level===2?1_250_000n:undefined}});
       }
       for(const input of inputs)await processX4PackagePurchase(client,input);
       const duplicate=await processX4PackagePurchase(client,inputs[0]);
@@ -48,7 +54,7 @@ integration("X4 PostgreSQL engine",()=>{
       expect((await client.query("SELECT 1 FROM x4_cycles WHERE user_id=$1 AND cycle_number=2 AND status='ACTIVE'",[root])).rowCount).toBe(1);
       expect(Number((await client.query<{count:string}>("SELECT count(*)::text count FROM x4_positions WHERE owner_cycle_id=(SELECT id FROM x4_cycles WHERE user_id=$1 AND cycle_number=1)",[root])).rows[0].count)).toBe(6);
       expect((await client.query<{amount:string}>(
-        "SELECT COALESCE(sum(amount),0)::text amount FROM magic_funding_events WHERE user_id=$1 AND source_type IN('X4_LEVEL_1_A_MAGIC','X4_LEVEL_1_B_MAGIC') AND status='PENDING'",[root],
+        "SELECT COALESCE(sum(amount),0)::text amount FROM magic_funding_events WHERE user_id=$1 AND source_type IN('X4_LEVEL_1_A_MAGIC','X4_LEVEL_1_B_MAGIC') AND status='CONFIRMED'",[root],
       )).rows[0].amount).toBe("1000000");
       expect((await client.query<{amount:string}>(
         "SELECT COALESCE(sum(credited_amount),0)::text amount FROM income_credit_ledger WHERE user_id=$1 AND income_type='X4_GLOBAL'",[root],
@@ -84,7 +90,8 @@ integration("X4 PostgreSQL engine",()=>{
       [user.id,marker,definition.id,`0x${Date.now().toString(16).padStart(64,"0")}`])).rows[0];
       purchaseId=purchase.id;
       await processX4PackagePurchase(client,{purchaseId,userId:user.id,packageId:1,amount:8_000_000n,
-        txHash:`0x${"f".repeat(64)}`,blockNumber:1,sourceEventId:null});
+        txHash:`0x${"f".repeat(64)}`,blockNumber:1,sourceEventId:null,onchain:{user:marker,
+          owner:"0x0000000000000000000000000000000000000000",slot:0,level:0,accountingAmount:0n}});
       throw new Error("simulated downstream failure");
     }catch(error){
       expect((error as Error).message).toBe("simulated downstream failure");

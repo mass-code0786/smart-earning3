@@ -127,7 +127,7 @@ export function PackagePage({ compact = false }: { compact?: boolean }) {
           </button>
         </article>)}
       </div>
-      {status && <section className="smart-glass-card min-w-0 max-w-full overflow-hidden rounded-[18px] p-4 text-xs"><p role="status" className="max-h-28 overflow-y-auto [overflow-wrap:anywhere] [word-break:break-word]">{status}</p>{hash && <a href={`https://testnet.bscscan.com/tx/${hash}`} target="_blank" rel="noreferrer" className="mt-2 flex min-w-0 max-w-full items-center gap-2 break-all text-[#00f77a]"><ExternalLink className="shrink-0" size={13} /><span className="min-w-0 break-all">{hash}</span></a>}</section>}
+      {status && <section className="smart-glass-card min-w-0 max-w-full overflow-hidden rounded-[18px] p-4 text-xs"><p role="status" className="max-h-28 overflow-y-auto [overflow-wrap:anywhere] [word-break:break-word]">{status}</p>{hash && <a href={`${process.env.NEXT_PUBLIC_BLOCK_EXPLORER_URL}/tx/${hash}`} target="_blank" rel="noreferrer" className="mt-2 flex min-w-0 max-w-full items-center gap-2 break-all text-[#00f77a]"><ExternalLink className="shrink-0" size={13} /><span className="min-w-0 break-all">{hash}</span></a>}</section>}
       <p className="text-[10px] text-[#8b9d94]">The unified contract records the 12.5% Magic accounting allocation and forwards the full package payment to treasury atomically.</p>
     </div>
   );

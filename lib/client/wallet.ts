@@ -2,6 +2,7 @@
 
 import { BrowserProvider, Contract, Eip1193Provider, getAddress, parseUnits, keccak256, toUtf8Bytes } from "ethers";
 import { ERC20_ABI, PACKAGE_ABI, SMART_EARNING_ABI } from "@/lib/blockchain/abi";
+import { publicChainId, publicNetworkName } from "@/lib/blockchain/network";
 
 export type InjectedProvider = Eip1193Provider & {
   providers?: InjectedProvider[];
@@ -37,11 +38,11 @@ export class RegistrationFlowError extends Error {
 }
 
 const TESTNET = {
-  chainId: "0x61",
-  chainName: "BNB Smart Chain Testnet",
-  nativeCurrency: { name: "Test BNB", symbol: "tBNB", decimals: 18 },
-  rpcUrls: ["https://data-seed-prebsc-1-s1.bnbchain.org:8545"],
-  blockExplorerUrls: ["https://testnet.bscscan.com"],
+  chainId: `0x${publicChainId().toString(16)}`,
+  chainName: publicNetworkName(),
+  nativeCurrency: { name: process.env.NEXT_PUBLIC_NATIVE_CURRENCY_NAME || "Native currency", symbol: process.env.NEXT_PUBLIC_NATIVE_CURRENCY_SYMBOL || "NATIVE", decimals: 18 },
+  rpcUrls: [process.env.NEXT_PUBLIC_SMART_EARNING_RPC_URL || ""].filter(Boolean),
+  blockExplorerUrls: [process.env.NEXT_PUBLIC_BLOCK_EXPLORER_URL || ""].filter(Boolean),
 };
 
 export function transactionAddress(value: unknown, fieldName: string) {
@@ -178,7 +179,7 @@ export async function connectTestnet() {
   } catch {
     throw new WalletLoginError("PROVIDER_ERROR", "Wallet provider could not read the current network");
   }
-  const expectedChainId=Number(process.env.NEXT_PUBLIC_SMART_EARNING_CHAIN_ID||97);
+  const expectedChainId=publicChainId();
   if (normalizeChainId(chainId) !== expectedChainId) {
     throw new WalletLoginError("WRONG_NETWORK", process.env.NEXT_PUBLIC_NETWORK_NAME
       ?`Switch to ${process.env.NEXT_PUBLIC_NETWORK_NAME}`:"Switch to BNB Smart Chain Testnet");

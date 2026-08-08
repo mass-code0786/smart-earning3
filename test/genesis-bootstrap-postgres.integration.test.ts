@@ -17,7 +17,8 @@ async function fixture(client: PoolClient) {
   await client.query(`CREATE TABLE user_package_states(
     user_id uuid PRIMARY KEY REFERENCES users(id),registration_value numeric(78,0) NOT NULL,
     total_eligible_value numeric(78,0) NOT NULL,total_earning_cap numeric(78,0) NOT NULL,
-    total_earned numeric(78,0) NOT NULL,remaining_cap numeric(78,0) NOT NULL)`);
+    total_earned numeric(78,0) NOT NULL,remaining_cap numeric(78,0) NOT NULL,
+    capping_status varchar(16) NOT NULL)`);
   await client.query(`CREATE TABLE earning_cap_ledger(
     user_id uuid NOT NULL REFERENCES users(id),source_type varchar(40) NOT NULL,
     source_reference varchar(160) NOT NULL,eligible_value numeric(78,0) NOT NULL,
@@ -60,8 +61,8 @@ describe("Genesis sponsor bootstrap on real PostgreSQL", () => {
       expect(Number((await client.query(`SELECT count(*) count FROM ${table}`)).rows[0].count)).toBe(0);
     }
     expect((await client.query(`SELECT total_eligible_value::text eligible,total_earning_cap::text cap,
-      remaining_cap::text remaining FROM user_package_states`)).rows[0]).toEqual({
-      eligible: "0", cap: "0", remaining: "0",
+      remaining_cap::text remaining,capping_status status FROM user_package_states`)).rows[0]).toEqual({
+      eligible: "0", cap: "0", remaining: "0", status: "NOT_APPLICABLE",
     });
     expect((await client.query(
       "SELECT status,role,activated_at IS NOT NULL activated FROM users WHERE wallet_address=$1",

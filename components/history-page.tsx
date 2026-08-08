@@ -69,7 +69,7 @@ function HistoryCard({item}:{item:Item}){
    {typeof item.metadata.memberId==="string"&&<Field label="Member ID" value={item.metadata.memberId}/>}
    {typeof item.metadata.reference==="string"&&item.metadata.reference&&<Field label="Canonical reference" value={item.metadata.reference}/>}
   </div>
-  {item.txHash&&<a className="history-reference" href={item.txHash.startsWith("0x")?`https://testnet.bscscan.com/tx/${item.txHash}`:"#"} target={item.txHash.startsWith("0x")?"_blank":undefined} rel="noreferrer"><span>Transaction Hash: {item.txHash.startsWith("0x")?short(item.txHash):item.txHash}</span>{item.txHash.startsWith("0x")&&<ExternalLink size={12}/>}</a>}
+  {item.txHash&&<a className="history-reference" href={item.txHash.startsWith("0x")?`${process.env.NEXT_PUBLIC_BLOCK_EXPLORER_URL}/tx/${item.txHash}`:"#"} target={item.txHash.startsWith("0x")?"_blank":undefined} rel="noreferrer"><span>Transaction Hash: {item.txHash.startsWith("0x")?short(item.txHash):item.txHash}</span>{item.txHash.startsWith("0x")&&<ExternalLink size={12}/>}</a>}
  </article>
 }
 function Field({label,value,accent=false}:{label:string;value:string;accent?:boolean}){return <div><small>{label}</small><b className={accent?"positive":""}>{value}</b></div>}

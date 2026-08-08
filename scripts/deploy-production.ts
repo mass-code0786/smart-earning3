@@ -20,9 +20,14 @@ const { loadProductionPm2Environment } = require("./pm2-environment.cjs") as {
 const { requireProductionPort } = require("./production-port.cjs") as {
   requireProductionPort: (environment: Record<string, string | undefined>) => string;
 };
+const { authoritativeDeploymentEnvironment } = require("./deployment-environment.cjs") as {
+  authoritativeDeploymentEnvironment: (
+    environment: Record<string, string | undefined>,
+  ) => Record<string, string | undefined>;
+};
 
 const CONFIRM = "--confirm-production-deploy";
-const PM2_APPS = ["smart-earning","smart-earning-indexer","smart-earning-x3-recovery","smart-earning-x3-hold-expiry","smart-earning-booster","smart-earning-dividend","smart-earning-withdrawal","smart-earning-magic-funding","smart-earning-magic-distribution"];
+const PM2_APPS = ["smart-earning","smart-earning-indexer","smart-earning-x3-hold-expiry","smart-earning-booster","smart-earning-dividend","smart-earning-withdrawal","smart-earning-magic-funding","smart-earning-magic-distribution"];
 type Stage = { name: string; run: () => void | Promise<void> };
 
 function command(
@@ -90,9 +95,9 @@ async function main() {
       process.stdout.write(`[deploy] branch=${branch} commit=${commit}\n`);
     } },
     { name: "production_environment", run: () => {
-      productionEnvironment = loadProductionPm2Environment(
+      productionEnvironment = authoritativeDeploymentEnvironment(loadProductionPm2Environment(
         resolve(PRODUCTION_CWD, ".env"),
-      );
+      ));
       if (!productionEnvironment.DATABASE_URL) throw new Error("DATABASE_URL is missing");
       productionPort = requireProductionPort(productionEnvironment);
       process.stdout.write(

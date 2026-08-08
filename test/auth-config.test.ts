@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { sessionCookieOptions } from "@/lib/server/auth";
 import { ServerConfigError, validateAuthEnvironment, validateServerEnvironment } from "@/lib/server/config";
+import deployment from "@/deployments/bsc-testnet.json";
 
 const original = { ...process.env };
 
@@ -43,14 +44,14 @@ describe("wallet auth environment", () => {
       DATABASE_URL: "postgresql://app:secret@db/live\r", DATABASE_SSL_MODE: "require\r",
       SESSION_SECRET: `${"s".repeat(40)}\r`, APP_ORIGIN: "https://smartearning.io\r",
       BSC_TESTNET_RPC_URL: " https://rpc.example.com\r", SMART_EARNING_CHAIN_ID: "97\r",
-      SMART_EARNING_CONTRACT_ADDRESS: `0x${"1".repeat(40)}\r`,
-      BSC_TESTNET_USDT_ADDRESS: ` 0x${"2".repeat(40)}\n`,
+      SMART_EARNING_CONTRACT_ADDRESS: `${deployment.address}\r`,
+      BSC_TESTNET_USDT_ADDRESS: ` ${deployment.usdt}\n`,
       KEEPER_PRIVATE_KEY: `0x${"3".repeat(64)}\r`, CONFIRMATIONS_REQUIRED: "3\r",
     });
     expect(validateServerEnvironment()).toMatchObject({
       BSC_TESTNET_RPC_URL: "https://rpc.example.com", SMART_EARNING_CHAIN_ID: 97,
-      SMART_EARNING_CONTRACT_ADDRESS: `0x${"1".repeat(40)}`,
-      BSC_TESTNET_USDT_ADDRESS: `0x${"2".repeat(40)}`,
+      SMART_EARNING_CONTRACT_ADDRESS: deployment.address,
+      BSC_TESTNET_USDT_ADDRESS: deployment.usdt,
       KEEPER_PRIVATE_KEY: `0x${"3".repeat(64)}`, CONFIRMATIONS_REQUIRED: 3,
     });
   });

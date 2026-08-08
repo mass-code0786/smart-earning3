@@ -198,7 +198,7 @@ export async function verifyBoosterTopUp(walletInput:string,txHashInput:string,e
   const[receipt,tx,network,head]=await Promise.all([
     provider.getTransactionReceipt(txHash),provider.getTransaction(txHash),provider.getNetwork(),provider.getBlockNumber(),
   ]);
-  if(Number(network.chainId)!==CHAIN_ID)throw new ApiError(503,"RPC is not connected to BNB Testnet","WRONG_RPC_NETWORK");
+  if(Number(network.chainId)!==CHAIN_ID)throw new ApiError(503,"RPC is connected to the wrong network","WRONG_RPC_NETWORK");
   if(!receipt||!tx)throw new ApiError(409,"Transaction is not mined yet","TX_PENDING");
   if(receipt.status!==1)throw new ApiError(422,"Transaction reverted","TX_REVERTED");
   if(normalizeWallet(tx.from)!==wallet)throw new ApiError(403,"Transaction belongs to another wallet","WALLET_MISMATCH");
@@ -269,6 +269,6 @@ export async function prepareBoosterTopUp(walletInput:string,amount:bigint){
   const availableBalance=BigInt(await token.balanceOf(wallet));
   if(amount>availableBalance)throw new ApiError(422,"Top-up amount exceeds available USDT balance","INSUFFICIENT_USDT");
   return{amountTokenUnits:amount.toString(),availableBalanceTokenUnits:availableBalance.toString(),
-    network:CHAIN_ID===97?"BNB Smart Chain Testnet":"BNB Smart Chain Mainnet",chainId:CHAIN_ID,
-    gasCurrency:CHAIN_ID===97?"tBNB":"BNB"};
+    network:process.env.NEXT_PUBLIC_NETWORK_NAME||`Chain ${CHAIN_ID}`,chainId:CHAIN_ID,
+    gasCurrency:process.env.NEXT_PUBLIC_NATIVE_CURRENCY_SYMBOL||"NATIVE"};
 }

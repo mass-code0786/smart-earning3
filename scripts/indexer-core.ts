@@ -23,6 +23,7 @@ export type IndexerReceipt = {
   status: number;
   transactionHash: string;
   blockNumber: number;
+  blockHash?: string;
   logs: IndexerLog[];
 };
 

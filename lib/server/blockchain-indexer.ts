@@ -26,7 +26,7 @@ import {
 } from "@/scripts/indexer-core";
 
 const iface = new Interface([...SMART_EARNING_ABI, ...PACKAGE_ABI]);
-const relevantEvents = ["UserRegistered", "PackagePurchased"] as const;
+const projectedEvents = new Set(["UserRegistered", "PackagePurchased"]);
 export const LIVE_INDEXER_MODE = "block_receipt_indexing" as const;
 export const LIVE_INDEXER_SOURCE = "lib/server/blockchain-indexer.ts";
 type IndexerHealth = {
@@ -131,11 +131,13 @@ export async function reconcileLegacyIndexerCheckpoint(
   chainId: number,
   contractAddress: string,
   historyStartBlock: number,
+  database: { query: typeof query } = { query },
 ) {
-  const result = await query<{ previous_checkpoint: string; last_processed_block: string }>(
+  const result = await database.query<{ previous_checkpoint: string; last_processed_block: string }>(
     `WITH legacy AS (
        SELECT id,last_processed_block FROM blockchain_indexer_state
-       WHERE chain_id=$1 AND contract_address=$2 AND history_start_block IS NULL
+       WHERE chain_id=$1 AND contract_address=$2
+         AND (history_start_block IS NULL OR history_start_block>$3)
        FOR UPDATE
      ), updated AS (
        UPDATE blockchain_indexer_state state
@@ -183,10 +185,24 @@ async function ensureGenesisProjection(genesis: string) {
   await transaction((client) => bootstrapGenesis(client, genesis, registrationPrice));
 }
 
+export async function alignDirectX3Rollout(
+  deploymentBlock: number,
+  database: { query: typeof query } = { query },
+) {
+  const boundary = deploymentBlock - 1;
+  const result = await database.query(
+    `UPDATE x3_direct_rollout SET boundary_block_number=$1,boundary_log_index=-1,
+       boundary_contract_event_id=NULL,mode='CONTRACT_ALIGNED',activated_at=now()
+     WHERE singleton=true AND (mode<>'CONTRACT_ALIGNED' OR boundary_block_number<>$1
+       OR boundary_log_index<>-1)`,
+    [boundary],
+  );
+  return Boolean(result.rowCount);
+}
+
 export function decodedIndexerEventName(log: IndexerLog) {
   try {
-    const name = iface.parseLog(log)?.name;
-    return relevantEvents.includes(name as typeof relevantEvents[number]) ? name : undefined;
+    return iface.parseLog(log)?.name;
   } catch {
     return undefined;
   }
@@ -243,6 +259,22 @@ async function handleLog(log: IndexerLog, eventName: string, _receipt: IndexerRe
     }
   } else if (eventName === "PackagePurchased") {
     await verifyPackagePurchase(String(event.args.user), log.transactionHash);
+  } else if (!projectedEvents.has(eventName)) {
+    const payload = Object.fromEntries(event.fragment.inputs.map((input, index) => {
+      const value = event.args[index];
+      return [input.name || String(index), typeof value === "bigint" ? value.toString() : value];
+    }));
+    await query(
+      `INSERT INTO contract_events(
+         chain_id,contract_address,tx_hash,log_index,block_number,block_hash,event_name,payload
+       ) VALUES($1,$2,$3,$4,$5,$6,$7,$8)
+       ON CONFLICT(chain_id,tx_hash,log_index) DO NOTHING`,
+      [
+        CHAIN_ID, log.address.toLowerCase(), log.transactionHash.toLowerCase(), log.index,
+        log.blockNumber, _receipt.blockHash || `0x${"0".repeat(64)}`, eventName,
+        JSON.stringify(payload),
+      ],
+    );
   }
 }
 
@@ -289,6 +321,7 @@ async function run() {
   });
   const contractAddress = server.SMART_EARNING_CONTRACT_ADDRESS.toLowerCase();
   await ensureGenesisProjection(config.deployment.genesis);
+  await alignDirectX3Rollout(config.deployment.blockNumber);
   const reconciledCheckpoint = await reconcileLegacyIndexerCheckpoint(
     CHAIN_ID, contractAddress, config.startBlock,
   );

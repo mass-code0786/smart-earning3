@@ -1,4 +1,4 @@
-import { Interface } from "ethers";
+import { id, Interface } from "ethers";
 import { PACKAGE_ABI } from "@/lib/blockchain/abi";
 import { getPackageContract, getProvider } from "@/lib/blockchain/provider";
 import { CHAIN_ID, getServerConfig } from "./config";
@@ -149,6 +149,19 @@ export async function verifyPackagePurchase(walletInput: string, txHashInput: st
   if (newCap !== totalPackageValue * 5n) {
     throw new ApiError(409, "Package event earning cap includes an invalid principal", "CAP_RECONCILIATION_FAILED");
   }
+  const parsedLogs=receipt.logs.flatMap(log=>{try{const event=iface.parseLog(log);return event?[{log,event}]:[]}catch{return[]}});
+  const x4Log=parsedLogs.find(item=>item.event.name==="X4Placed");
+  if(!x4Log)throw new ApiError(422,"X4 placement event was not found","X4_EVENT_MISMATCH");
+  const x4User=normalizeWallet(String(x4Log.event.args.user));
+  const x4Owner=normalizeWallet(String(x4Log.event.args.owner));
+  const x4Slot=Number(x4Log.event.args.slot),x4Level=Number(x4Log.event.args.level);
+  const x4AccountingAmount=BigInt(x4Log.event.args.accountingAmount);
+  const x4Magic=parsedLogs.find(item=>item.event.name==="MagicFundingRecorded"
+    &&normalizeWallet(String(item.event.args.user))===x4Owner
+    &&[id("X4_A"),id("X4_B")].includes(String(item.event.args.paymentType)));
+  const x4Split=parsedLogs.find(item=>item.event.name==="EarningSplit"
+    &&normalizeWallet(String(item.event.args.user))===x4Owner
+    &&String(item.event.args.incomeType)===id("X4_GLOBAL"));
 
   return transaction(async (client) => {
     await assertModuleActive("PACKAGE_PURCHASE",client);
@@ -226,6 +239,10 @@ export async function verifyPackagePurchase(walletInput: string, txHashInput: st
     await processX4PackagePurchase(client,{
       purchaseId:purchase.rows[0].id,userId,packageId,amount,txHash,
       blockNumber:receipt.blockNumber,sourceEventId:contractEvent.rows[0].id,
+      onchain:{user:x4User,owner:x4Owner,slot:x4Slot,level:x4Level,
+        accountingAmount:x4AccountingAmount,
+        magicSourceReference:x4Magic?String(x4Magic.event.args.sourceReference):undefined,
+        confirmedGrossCredit:x4Split?BigInt(x4Split.event.args.gross):undefined},
     });
     await creditBoosterPackagePurchase(client,{purchaseId:purchase.rows[0].id,userId,
       packageId,amount,txHash});

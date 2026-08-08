@@ -8,6 +8,7 @@ import {
   logRegistrationFailure, registrationPreflight, RegistrationStageFailure,
   safeRegistrationError,
 } from "@/lib/server/registration-preflight";
+import { CHAIN_ID } from "@/lib/server/config";
 
 const schema = z.object({
   sponsor: z.string(),
@@ -21,8 +22,8 @@ export async function POST(request: NextRequest) {
     assertSameOrigin(request);
     const session = await requireSession();
     registrant = session.wallet;
-    if (session.chainId !== 97) {
-      throw new ApiError(422, "Session is not authenticated for BNB Testnet", "WRONG_CHAIN");
+    if (session.chainId !== CHAIN_ID) {
+      throw new ApiError(422, "Session is authenticated for the wrong network", "WRONG_CHAIN");
     }
     const body = schema.parse(await request.json());
     sponsor = body.sponsor;

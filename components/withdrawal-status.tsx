@@ -28,7 +28,7 @@ export function WithdrawalStatus() {
       <span className="min-w-0">{withdrawal.status}
         <small className="block text-[#8b9d94]">Gross {money(withdrawal.gross_reserved)} · Fee {money(withdrawal.fee_amount)} · Net {money(withdrawal.net_payout)}</small>
         <small className="block break-all text-[#8b9d94]">To {withdrawal.payout_address} · attempts {withdrawal.attempt_count}</small>
-        {withdrawal.tx_hash && <a className="block break-all text-[#00f77a]" target="_blank" rel="noreferrer" href={`https://testnet.bscscan.com/tx/${withdrawal.tx_hash}`}>Transaction {withdrawal.tx_hash}</a>}
+        {withdrawal.tx_hash && <a className="block break-all text-[#00f77a]" target="_blank" rel="noreferrer" href={`${process.env.NEXT_PUBLIC_BLOCK_EXPLORER_URL}/tx/${withdrawal.tx_hash}`}>Transaction {withdrawal.tx_hash}</a>}
       </span>
       <small className="text-right">{new Date(withdrawal.created_at).toLocaleString()}<span className="block text-[#8b9d94]">Updated {new Date(withdrawal.updated_at).toLocaleString()}</span></small>
     </div>)}{!data.withdrawals.length && <p className="py-3 text-xs text-[#8b9d94]">No automatic withdrawal records yet.</p>}</div>
